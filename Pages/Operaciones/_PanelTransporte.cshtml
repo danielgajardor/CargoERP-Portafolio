@@ -1,0 +1,379 @@
+﻿@model AtilsonCargoSpa.Models.TransportePanelVm
+@{
+    var op = Model.Op;
+    var t = Model.Terr;
+
+    string? numeroContenedorActual = Model.IdUnidadTecnica.HasValue
+        ? op.Unidadestecnicas.FirstOrDefault(u => u.Id == Model.IdUnidadTecnica)?.NroContenedor
+        : op.NumeroContenedor;
+    string? numeroSelloActual = Model.IdUnidadTecnica.HasValue
+        ? op.Unidadestecnicas.FirstOrDefault(u => u.Id == Model.IdUnidadTecnica)?.NumeroSello
+        : op.NumeroSello;
+    string? fotoContenedorActual = Model.IdUnidadTecnica.HasValue
+        ? op.Unidadestecnicas.FirstOrDefault(u => u.Id == Model.IdUnidadTecnica)?.FotoContenedor
+        : op.FotoContenedor;
+    string? fotoSelloActual = Model.IdUnidadTecnica.HasValue
+        ? op.Unidadestecnicas.FirstOrDefault(u => u.Id == Model.IdUnidadTecnica)?.FotoSello
+        : op.FotoSello;
+
+    var estRespTer = Model.PageModel.ObtenerEstadoConcepto(op, "Flete Terrestre");
+}
+<form method="post" action="/Operaciones/Index?handler=QuickEditTransporte" enctype="multipart/form-data">
+    <input type="hidden" name="__RequestVerificationToken" value="" class="anti-forgery-token-input" />
+    <input type="hidden" name="IdOperacion" value="@op.Id" />
+    @if (Model.IdUnidadTecnica.HasValue)
+    {
+        <input type="hidden" name="IdUnidadTecnica" value="@Model.IdUnidadTecnica" />
+    }
+
+    <div class="form-section shadow-sm" id="ter-form-@Model.IdSuffix">
+        <div class="section-title-sm">
+            <span><i class="bi bi-truck me-1"></i> Servicio Terrestre@(Model.Label != null ? $" — {Model.Label}" : "")</span>
+            <a class="btn-edit-inline" onclick="toggleEditMode('ter-form-@Model.IdSuffix', this)"><i class="bi bi-pencil me-1"></i> Editar</a>
+        </div>
+
+        <div class="row g-3 mb-4">
+            <div class="col-md-6">
+                <div class="p-3 border rounded bg-light h-100">
+                    <div class="row g-2">
+                        <div class="col-12">
+                            <div class="row g-2">
+                                <div class="col-6">
+                                    <label class="mod-label text-success">Depósito Retiro Vacío</label>
+                                    <input type="text" class="form-control inline-field text-uppercase view-only-depositoretiro" value="@(t?.DepositoRetiro ?? "-")" readonly style="pointer-events:none;" />
+                                    <select name="DepositoRetiro" class="form-select inline-field text-uppercase edit-only-depositoretiro select2-enable" style="display:none;" disabled>
+                                        <option value="">-- Seleccionar Depósito --</option>
+                                        @if (ViewData["DepositosList"] != null)
+                                        {
+                                            foreach (var dep in (IEnumerable<AtilsonCargoSpa.Models.Deposito>)ViewData["DepositosList"])
+                                            {
+                                                <option value="@dep.NombreDeposito" selected="@(t?.DepositoRetiro == dep.NombreDeposito ? "selected" : null)">@dep.NombreDeposito</option>
+                                            }
+                                        }
+                                    </select>
+                                </div>
+                                <div class="col-6">
+                                    <label class="mod-label text-success">Folio Retiro</label>
+                                    <div class="input-group input-group-sm shadow-sm">
+                                        <input type="text" name="FolioRetiro" class="form-control inline-field text-uppercase fw-bold border-end-0" value="@t?.FolioRetiro" placeholder="N° Folio..." readonly />
+                                        @if (!string.IsNullOrEmpty(t?.RutaFolioRetiro))
+                                        {
+                                            <a href="@t.RutaFolioRetiro" target="_blank" class="input-group-text bg-light text-primary border-start-0" title="Ver Folio"><i class="bi bi-eye"></i></a>
+                                        }
+                                        <label class="input-group-text bg-white edit-only-inline border-start-0 m-0" style="display:none; cursor:pointer;" title="Adjuntar Folio">
+                                            <i class="bi bi-paperclip text-muted"></i>
+                                            <input type="file" name="UploadFolioRetiro" accept=".pdf,.jpg,.png" class="d-none edit-only-file" disabled onchange="this.parentElement.querySelector('i').classList.replace('text-muted', 'text-success')" />
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="col-12 mt-2">
+                            <label class="mod-label text-success"><i class="bi bi-calendar-event me-1"></i> Fecha de Retiro</label>
+                            <input type="datetime-local" name="FechaRetiroVacio" class="form-control inline-field" value="@(t?.FechaRetiroVacio?.ToString("yyyy-MM-ddTHH:mm"))" readonly />
+                        </div>
+
+                        <div class="col-12 mt-2">
+                            <div class="row g-2">
+                                <div class="col-6">
+                                    <label class="mod-label text-success">Puerto de Origen (POL)</label>
+                                    <input type="text" class="form-control inline-field text-uppercase view-only-puertoentrega" value="@(string.IsNullOrEmpty(t?.PuertoEntrega) ? "-" : t.PuertoEntrega)" readonly style="pointer-events:none;" />
+                                    <select name="PuertoEntrega" class="form-select inline-field text-uppercase edit-only-puertoentrega" style="display:none;" disabled onchange="actualizarTerminalTerrestreIndex(this, '@Model.IdSuffix')">
+                                        <option value="">-- Puerto --</option>
+                                        @if (ViewData["PuertosList"] != null)
+                                        {
+                                            foreach (var pto in ((IEnumerable<AtilsonCargoSpa.Models.Puerto>)ViewData["PuertosList"]).GroupBy(p => p.NombrePuerto).Select(g => g.First()))
+                                            {
+                                                <option value="@pto.NombrePuerto" selected="@(t?.PuertoEntrega?.ToUpper() == pto.NombrePuerto.ToUpper() ? "selected" : null)">@pto.NombrePuerto.ToUpper()</option>
+                                            }
+                                        }
+                                    </select>
+                                </div>
+                                <div class="col-6">
+                                    <label class="mod-label text-success">Terminal</label>
+                                    <input type="text" class="form-control inline-field text-uppercase view-only-terminalterrestre" value="@(!string.IsNullOrEmpty(t?.TerminalTerrestreStr) ? t.TerminalTerrestreStr : "-")" readonly style="pointer-events:none;" />
+                                    <div class="edit-only-terminalterrestre" style="display:none;">
+                                        <select name="TerminalTerrestreStr" class="form-select inline-field text-uppercase" id="selTermTer-@Model.IdSuffix" disabled style="display:none;">
+                                            <option value="">-- Terminal --</option>
+                                            <option value="STI" selected="@(t?.TerminalTerrestreStr == "STI" ? "selected" : null)">STI</option>
+                                            <option value="DPW" selected="@(t?.TerminalTerrestreStr == "DPW" ? "selected" : null)">DPW</option>
+                                        </select>
+                                        <input type="text" name="TerminalTerrestreStr" class="form-control inline-field text-uppercase" id="inpTermTer-@Model.IdSuffix" value="@(t?.TerminalTerrestreStr)" placeholder="Ej: TPS..." disabled style="display:none; background:#fff;" />
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="p-3 border rounded bg-light h-100">
+                    <div class="row g-2">
+                        <div class="col-12">
+                            <label class="mod-label">Planta de Cliente</label>
+                            <input type="text" class="form-control inline-field text-uppercase view-only-planta" value="@(t?.PlantaCarga ?? "-")" readonly style="pointer-events:none;" />
+                            <select name="PlantaCarga" class="form-select inline-field text-uppercase edit-only-planta select2-enable" style="display:none;" disabled onchange="autoCompletarPlanta(this)">
+                                <option value="">-- Seleccionar Planta --</option>
+                                @if (ViewData["PlantasList"] != null)
+                                {
+                                    foreach (var planta in (IEnumerable<AtilsonCargoSpa.Models.Planta>)ViewData["PlantasList"])
+                                    {
+                                        <option value="@planta.Nombre" data-ciudad="@planta.Ciudad?.Nombre" selected="@(t?.PlantaCarga == planta.Nombre ? "selected" : null)">@planta.Nombre</option>
+                                    }
+                                }
+                            </select>
+                        </div>
+                        <div class="col-12 mt-2">
+                            <div class="row g-2">
+                                <div class="col-6">
+                                    <label class="mod-label">Ciudad</label>
+                                    <input type="text" class="form-control inline-field text-uppercase view-only-zonacarga" value="@(t?.ZonaCarga ?? "-")" readonly style="pointer-events:none;" />
+                                    <input type="text" name="ZonaCarga" class="form-control inline-field text-uppercase edit-only-zonacarga" value="@t?.ZonaCarga" style="display:none; background:#fff;" disabled />
+                                </div>
+                                <div class="col-6">
+                                    <label class="mod-label"><i class="bi bi-calendar-event me-1"></i> Fecha de Presentación en Planta</label>
+                                    <input type="datetime-local" name="FechaCarga" class="form-control inline-field" value="@(t?.FechaCarga?.ToString("yyyy-MM-ddTHH:mm"))" readonly />
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-12 mt-2">
+                            <label class="mod-label"><i class="bi bi-map me-1 text-danger"></i> Link Google Maps</label>
+                            <div class="d-flex gap-2 align-items-center">
+                                <input type="url" class="form-control inline-field view-only-link" value="@t?.LinkTracking" readonly style="pointer-events:none;" />
+                                <input type="url" name="LinkTracking" class="form-control inline-field edit-only-link" value="@t?.LinkTracking" placeholder="URL Google Maps..." style="display:none; background:#fff;" disabled />
+                                @if (!string.IsNullOrEmpty(t?.LinkTracking))
+                                {
+                                    <a href="@t.LinkTracking" target="_blank" class="btn btn-sm btn-outline-danger py-1 px-2 view-only-maps-btn" title="Abrir en Maps"><i class="bi bi-map"></i></a>
+                                }
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-12 mt-2 pt-2 border-top">
+            <div class="form-check form-switch edit-only-block" style="display:none;">
+                <input class="form-check-input inline-field" type="checkbox" id="chkInterplanta-@Model.IdSuffix" name="AplicaInterplanta" value="true" @(t?.AplicaInterplanta == true ? "checked" : "") disabled onchange="document.getElementById('interplanta-box-@Model.IdSuffix').style.display = this.checked ? 'block' : 'none';">
+                <label class="form-check-label mod-label text-warning fw-bold ms-2" for="chkInterplanta-@Model.IdSuffix" style="color: #d97706 !important;">
+                    <i class="bi bi-signpost-split-fill me-1"></i> REQUERIMIENTO INTERPLANTA (Múltiples cargas)
+                </label>
+            </div>
+
+            <div id="interplanta-box-@Model.IdSuffix" style="display: @(t?.AplicaInterplanta == true ? "block" : "none"); background: #fffbeb; border: 1px dashed #fde68a; padding: 15px; border-radius: 8px; margin-top: 10px;">
+                <p class="text-muted mb-3" style="font-size: 10px;"><i class="bi bi-info-circle me-1"></i> Si la distancia entre plantas supera los <strong>20 kilómetros</strong>, el ERP calculará automáticamente dos tarifas terrestres independientes en Finanzas. Para distancias cortas, aplicará la tarifa plana de porteo.</p>
+                <div class="row g-3 align-items-end">
+                    <div class="col-md-6">
+                        <label class="mod-label">Segunda Planta de Carga</label>
+                        <select name="PlantaCarga2" class="form-select inline-field text-uppercase" disabled onchange="procesarCambioInterplanta(this, '@Model.IdSuffix', 2)">
+                            <option value="">-- Seleccionar Planta 2 --</option>
+                            @if (ViewData["PlantasList"] != null)
+                            {
+                                foreach (var planta in (IEnumerable<AtilsonCargoSpa.Models.Planta>)ViewData["PlantasList"])
+                                {
+                                    <option value="@planta.Nombre" data-ciudad="@planta.Ciudad?.Nombre" data-url="@planta.UrlGoogleMaps" selected="@(t?.PlantaCarga2 == planta.Nombre ? "selected" : null)">@planta.Nombre</option>
+                                }
+                            }
+                        </select>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="mod-label text-danger"><i class="bi bi-geo-alt me-1"></i> Coordenadas Maps (Planta 2)</label>
+                        <input type="url" name="LinkMaps2" class="form-control inline-field" value="@t?.LinkMaps2" placeholder="https://maps.google.com/..." readonly />
+                    </div>
+                    <div class="col-12 edit-only-block @(!string.IsNullOrEmpty(t?.PlantaCarga3) ? "hide-if-has-p3" : "")" id="btn-add-p3-@Model.IdSuffix" style="display: none; margin-top: 10px;">
+                        <button type="button" class="btn btn-sm btn-outline-warning fw-bold w-100" style="font-size: 10px; border-style: dashed; color: #d97706;" onclick="document.getElementById('planta3-box-@Model.IdSuffix').style.display='flex'; this.classList.add('hide-if-has-p3');">
+                            <i class="bi bi-plus-circle me-1"></i> Añadir 3ra Planta (Opcional)
+                        </button>
+                    </div>
+                </div>
+                <div class="row g-3 mt-1" id="planta3-box-@Model.IdSuffix" style="display: @(!string.IsNullOrEmpty(t?.PlantaCarga3) ? "flex" : "none");">
+                    <div class="col-md-6 mt-2">
+                        <label class="mod-label">Tercera Planta de Carga</label>
+                        <select name="PlantaCarga3" class="form-select inline-field text-uppercase" disabled onchange="procesarCambioInterplanta(this, '@Model.IdSuffix', 3)">
+                            <option value="">-- Seleccionar Planta 3 --</option>
+                            @if (ViewData["PlantasList"] != null)
+                            {
+                                foreach (var planta in (IEnumerable<AtilsonCargoSpa.Models.Planta>)ViewData["PlantasList"])
+                                {
+                                    <option value="@planta.Nombre" data-ciudad="@planta.Ciudad?.Nombre" data-url="@planta.UrlGoogleMaps" selected="@(t?.PlantaCarga3 == planta.Nombre ? "selected" : null)">@planta.Nombre</option>
+                                }
+                            }
+                        </select>
+                    </div>
+                    <div class="col-md-6 mt-2">
+                        <label class="mod-label text-danger"><i class="bi bi-geo-alt me-1"></i> Coordenadas Maps (Planta 3)</label>
+                        <input type="url" name="LinkMaps3" class="form-control inline-field" value="@t?.LinkMaps3" placeholder="https://maps.google.com/..." readonly />
+                    </div>
+                </div>
+                @if (t?.AplicaInterplanta != true)
+                {
+                    <div class="mt-3 text-end edit-only-block">
+                        <button type="button" class="btn btn-sm btn-outline-danger fw-bold shadow-sm" onclick="cancelarInterplanta('@Model.IdSuffix')">
+                            <i class="bi bi-x-circle me-1"></i> Cancelar Despliegue
+                        </button>
+                    </div>
+                }
+            </div>
+        </div>
+
+        <ul class="nav nav-pills mb-3 border-top pt-3" role="tablist">
+            <li class="nav-item"><button class="nav-link active py-1 px-3" data-bs-toggle="pill" data-bs-target="#sol-serv-@Model.IdSuffix" type="button" style="font-size:11px; font-weight:700; border: 1px solid #cbd5e1; color: #475569; background: #f1f5f9;"><i class="bi bi-send me-1"></i> Solicitud Servicio</button></li>
+            <li class="nav-item"><button class="nav-link py-1 px-3" data-bs-toggle="pill" data-bs-target="#asig-pre-@Model.IdSuffix" type="button" style="font-size:11px; font-weight:700; border: 1px solid #cbd5e1; color: #475569; background: #f1f5f9;"><i class="bi bi-person-check me-1"></i> Asig. Preliminar</button></li>
+            <li class="nav-item"><button class="nav-link py-1 px-3" data-bs-toggle="pill" data-bs-target="#asig-fin-@Model.IdSuffix" type="button" style="font-size:11px; font-weight:700; border: 1px solid #cbd5e1; color: #475569; background: #f1f5f9;"><i class="bi bi-check2-all me-1"></i> Asig. Final</button></li>
+        </ul>
+
+        <div class="tab-content p-0" style="min-height: auto;">
+            <div class="tab-pane fade show active" id="sol-serv-@Model.IdSuffix">
+                <div class="p-3 bg-white rounded border">
+                    <div class="section-title-sm mb-3" style="font-size:10px;"><span><i class="bi bi-send me-1 text-dark"></i> Datos del Proveedor de Transporte</span></div>
+                    <div class="row g-3 mb-3">
+                                                                        <div class="col-md-4">
+                            <label class="mod-label">Empresa Transporte</label>
+                            <input type="text" class="form-control inline-field text-uppercase view-only-empresatransporte" value="@(t?.EmpresaTransporte ?? "-")" readonly style="pointer-events:none;" />
+                            <input type="text" name="EmpresaTransporte" list="listaEmpresasTransporte-@Model.IdSuffix" class="form-control inline-field text-uppercase edit-only-empresatransporte" value="@t?.EmpresaTransporte" placeholder="Escriba el nombre de la empresa..." style="display:none;" disabled />
+                            <datalist id="listaEmpresasTransporte-@Model.IdSuffix">
+                                @if (ViewData["ProveedoresTransporteList"] != null)
+                                {
+                                    foreach (var prov in (IEnumerable<AtilsonCargoSpa.Models.Proveedore>)ViewData["ProveedoresTransporteList"])
+                                    {
+                                        <option value="@prov.NombreProveedor"></option>
+                                    }
+                                }
+                            </datalist>
+                        </div>
+                        <div class="col-md-4"><label class="mod-label">RUT Empresa</label><input type="text" name="RutTransporte" class="form-control inline-field text-uppercase" value="@t?.RutTransporte" readonly /></div>
+                        <div class="col-md-4">
+                            <label class="mod-label">Correos Proveedor (separados por ;)</label>
+                            <input type="text" name="CorreoTransporte" class="form-control inline-field" value="@t?.CorreoTransporte" placeholder="proveedor@empresa.cl; ..." readonly />
+                        </div>
+                    </div>
+                    <div class="p-2 rounded border border-dashed bg-light mb-3" style="border-style: dashed !important;"><p class="text-muted mb-1" style="font-size:10px;"><i class="bi bi-info-circle me-1"></i> El correo de solicitud incluirá: Booking, Depósito Retiro, Fecha Presentación y Planta. El proveedor deberá responder con datos del conductor.</p></div>
+                    <div class="d-flex justify-content-between align-items-center gap-2 flex-wrap">
+                        <div class="d-flex align-items-center gap-2">
+                            <label class="mb-0 d-flex align-items-center gap-2 fw-bold" style="cursor:pointer; background:#f8fafc; border:1px solid #e2e8f0; border-radius:6px; font-size:11px; color:#475569; padding:8px 12px;" title="Adjuntar Booking">
+                                <i class="bi bi-paperclip" style="font-size:14px;"></i><span>Adjuntar Booking</span>
+                                <input type="file" name="UploadBookingTransporte" accept=".pdf,image/*" class="edit-only-file" style="display:none;" onchange="mostrarNombreArchivo(this, 'nombre-bkg-sol-@Model.IdSuffix')" disabled />
+                            </label>
+                            <span id="nombre-bkg-sol-@Model.IdSuffix" class="text-muted text-truncate file-status-txt" style="font-size:10px; max-width:160px;">@(!string.IsNullOrEmpty(t?.RutaBookingTransporte) ? "Archivo guardado" : "Sin archivo")</span>
+                            @if (!string.IsNullOrEmpty(t?.RutaBookingTransporte))
+                            {
+                                <a href="@t.RutaBookingTransporte" target="_blank" class="btn btn-sm btn-outline-info py-0 px-2" style="font-size:10px;"><i class="bi bi-eye me-1"></i>Ver</a>
+                            }
+                        </div>
+                        <div class="d-flex gap-2">
+                            <button type="button" class="btn btn-sm btn-outline-dark fw-bold px-4" onclick="guardarTransporteYEnviar(event, '@Model.IdSuffix', 'solicitud')" style="font-size:11px;"><i class="bi bi-envelope me-1"></i> Previsualizar Borrador</button>
+                            <button type="button" class="btn btn-sm btn-dark fw-bold px-4" onclick="guardarTransporteYEnviar(event, '@Model.IdSuffix', 'solicitud')" style="font-size:11px;"><i class="bi bi-send-fill me-1"></i> Generar Solicitud</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="tab-pane fade" id="asig-pre-@Model.IdSuffix">
+                <div class="p-3 bg-white rounded border">
+                    <div class="section-title-sm mb-3" style="font-size:10px;"><span><i class="bi bi-person-check me-1 text-primary"></i> Datos del Conductor Asignado</span></div>
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-4"><label class="mod-label">Nombre Conductor</label><input type="text" name="NombreConductor" class="form-control inline-field text-uppercase" value="@t?.NombreConductor" readonly /></div>
+                        <div class="col-md-4"><label class="mod-label">RUT Conductor</label><input type="text" name="RutConductor" class="form-control inline-field text-uppercase" value="@t?.RutConductor" readonly /></div>
+                        <div class="col-md-4"><label class="mod-label">Teléfono</label><input type="text" name="TelefonoConductor" class="form-control inline-field text-uppercase" value="@t?.TelefonoConductor" readonly /></div>
+                        <div class="col-md-4"><label class="mod-label">Patente Tracto</label><input type="text" name="Patente" class="form-control inline-field text-uppercase" value="@t?.Patente" readonly /></div>
+                        <div class="col-md-4"><label class="mod-label">Patente Rampla</label><input type="text" name="PatenteRampla" class="form-control inline-field text-uppercase" value="@t?.PatenteRampla" readonly /></div>
+                        <div class="col-md-4">
+                            <label class="mod-label">Correos Cliente (Separados por ;)</label>
+                            <input type="text" name="CorreosCliente" class="form-control inline-field text-primary fw-bold" value="@(op.IdClienteNavigation?.Correo ?? "")" readonly />
+                        </div>
+                    </div>
+                    <div class="p-2 rounded border border-dashed bg-light mb-3" style="border-style: dashed !important;"><p class="text-muted mb-0" style="font-size:10px;"><i class="bi bi-info-circle me-1"></i> Esta notificación enviará los datos del conductor sin número de contenedor. El número de equipo se informará en la Asignación Final.</p></div>
+                    <div class="d-flex justify-content-end gap-2">
+                        <button type="button" class="btn btn-sm btn-outline-primary fw-bold px-4" onclick="guardarTransporteYEnviar(event, '@Model.IdSuffix', 'preliminar')" style="font-size:11px;"><i class="bi bi-envelope me-1"></i> Previsualizar Borrador</button>
+                        <button type="button" class="btn btn-sm btn-primary fw-bold px-4" onclick="guardarTransporteYEnviar(event, '@Model.IdSuffix', 'preliminar')" style="font-size:11px;"><i class="bi bi-send-fill me-1"></i> Enviar Asig. Preliminar</button>
+                    </div>
+                </div>
+            </div>
+            <div class="tab-pane fade" id="asig-fin-@Model.IdSuffix">
+                <div class="p-3 bg-white rounded border">
+                    <div class="d-flex justify-content-end gap-2">
+                        <button type="button" class="btn btn-sm btn-outline-success fw-bold px-4" onclick="guardarTransporteYEnviar(event, '@Model.IdSuffix', 'completa')" style="font-size:11px;"><i class="bi bi-envelope me-1"></i> Previsualizar Borrador</button>
+                        <button type="button" class="btn btn-sm btn-success fw-bold px-4" onclick="guardarTransporteYEnviar(event, '@Model.IdSuffix', 'completa')" style="font-size:11px;"><i class="bi bi-check2-all me-1"></i> Generar Asignación Completa</button>
+                    </div>
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-6">
+                            <label class="mod-label text-primary">N° Contenedor <span class="text-danger fw-bold">*</span></label>
+                            <div class="d-flex gap-2 align-items-stretch">
+                                <input type="text" name="NumeroContenedor" class="form-control inline-field text-uppercase fw-bold" value="@numeroContenedorActual" placeholder="N° CONTENEDOR" readonly style="flex: 1;" />
+                                <label class="mb-0 d-flex align-items-center justify-content-center gap-2 fw-bold" style="flex: 1; cursor:pointer; background:#f8fafc; border: 1px solid #e2e8f0; border-radius:6px; font-size:11px; color:#475569; padding: 8px 12px;" title="Adjuntar respaldo">
+                                    <i class="bi bi-paperclip" style="font-size:15px;"></i><span>Adjuntar respaldo</span>
+                                    <input type="file" name="FotoContenedor" accept="image/*,.pdf" class="edit-only-file" style="display:none;" onchange="mostrarNombreArchivo(this, 'nombre-cont-@Model.IdSuffix')" disabled />
+                                </label>
+                            </div>
+                            <div class="d-flex align-items-center gap-2 mt-1">
+                                <span id="nombre-cont-@Model.IdSuffix" class="text-muted text-truncate file-status-txt" style="font-size:10px; max-width:180px;">@(!string.IsNullOrEmpty(fotoContenedorActual) ? "Archivo guardado" : "Sin archivo")</span>
+                                @if (!string.IsNullOrEmpty(fotoContenedorActual))
+                                {
+                                    <a href="@fotoContenedorActual" target="_blank" class="btn btn-sm btn-outline-info py-0 px-2 view-only-foto" style="font-size:10px;"><i class="bi bi-eye me-1"></i>Ver</a>
+                                }
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="mod-label text-primary">N° Sello <span class="text-danger fw-bold">*</span></label>
+                            <div class="d-flex gap-2 align-items-stretch">
+                                <input type="text" name="NumeroSello" class="form-control inline-field text-uppercase fw-bold" value="@numeroSelloActual" placeholder="N° SELLO" readonly style="flex: 1;" />
+                                <label class="mb-0 d-flex align-items-center justify-content-center gap-2 fw-bold" style="flex: 1; cursor:pointer; background:#f8fafc; border: 1px solid #e2e8f0; border-radius:6px; font-size:11px; color:#475569; padding: 8px 12px;" title="Adjuntar respaldo">
+                                    <i class="bi bi-paperclip" style="font-size:15px;"></i><span>Adjuntar respaldo</span>
+                                    <input type="file" name="FotoSello" accept="image/*,.pdf" class="edit-only-file" style="display:none;" onchange="mostrarNombreArchivo(this, 'nombre-sello-@Model.IdSuffix')" disabled />
+                                </label>
+                            </div>
+                            <div class="d-flex align-items-center gap-2 mt-1">
+                                <span id="nombre-sello-@Model.IdSuffix" class="text-muted text-truncate file-status-txt" style="font-size:10px; max-width:180px;">@(!string.IsNullOrEmpty(fotoSelloActual) ? "Archivo guardado" : "Sin archivo")</span>
+                                @if (!string.IsNullOrEmpty(fotoSelloActual))
+                                {
+                                    <a href="@fotoSelloActual" target="_blank" class="btn btn-sm btn-outline-info py-0 px-2 view-only-foto" style="font-size:10px;"><i class="bi bi-eye me-1"></i>Ver</a>
+                                }
+                            </div>
+                        </div>
+                    </div>
+                    <div class="p-2 rounded bg-success bg-opacity-10 border border-success border-opacity-25 mb-3"><p class="text-success mb-0" style="font-size:10px;"><i class="bi bi-check-circle me-1"></i> Esta notificación enviará la asignación completa con N° de contenedor y sello al cliente. Requiere que ambos campos estén ingresados en Asignación Final.</p></div>
+                </div>
+            </div>
+        </div>
+
+        @if (estRespTer.PendienteTarifa)
+        {
+            <div class="alert alert-danger d-flex align-items-center gap-2 py-2 px-3 mt-3 mb-0" style="font-size:11px; font-weight:700; border-radius:8px;">
+                <i class="bi bi-lock-fill"></i>
+                <div><strong>Pendiente de asignación de tarifa.</strong> Comercial debe agregar el valor de este tramo (Flete Terrestre) en Acuerdos Operativos.</div>
+            </div>
+        }
+        @if (!Model.IdUnidadTecnica.HasValue)
+        {
+            <div class="d-flex align-items-center gap-1 mt-2 pt-2 border-top" style="font-size:10px;">
+                <span class="text-muted fw-bold"><i class="bi bi-cash-coin"></i></span>
+                <select class="form-select form-select-sm resp-pagado border-0 bg-light" style="width:auto; font-size:10px; font-weight:700; padding:2px 6px; color:#475569;" data-concepto="Flete Terrestre" onchange="guardarResponsabilidad(@op.Id, this.getAttribute('data-concepto'), this, this.closest('.d-flex').querySelector('.resp-responsable'))">
+                    <option value="ATILSON" selected="@(estRespTer.PagadoPor == "ATILSON" || estRespTer.PagadoPor == null ? "selected" : null)">Paga: Atilson</option>
+                    <option value="AGENCIA" selected="@(estRespTer.PagadoPor == "AGENCIA" ? "selected" : null)">Paga: Agencia</option>
+                    <option value="PROVEEDOR" selected="@(estRespTer.PagadoPor == "PROVEEDOR" ? "selected" : null)">Paga: Proveedor</option>
+                </select>
+                <span class="text-muted">→</span>
+                <select class="form-select form-select-sm resp-responsable border-0 bg-light" style="width:auto; font-size:10px; font-weight:700; color:#b91c1c;" data-concepto="Flete Terrestre" onchange="guardarResponsabilidad(@op.Id, this.getAttribute('data-concepto'), this.closest('.d-flex').querySelector('.resp-pagado'), this)">
+                    <option value="CLIENTE" selected="@(estRespTer.Responsable == "CLIENTE" || estRespTer.Responsable == null ? "selected" : null)">Resp: Cliente</option>
+                    <option value="ATILSON" selected="@(estRespTer.Responsable == "ATILSON" ? "selected" : null)">Resp: Atilson</option>
+                    <option value="PROVEEDOR" selected="@(estRespTer.Responsable == "PROVEEDOR" ? "selected" : null)">Resp: Proveedor (Transportista)</option>
+                    <option value="AGENCIA" selected="@(estRespTer.Responsable == "AGENCIA" ? "selected" : null)">Resp: Agencia</option>
+                </select>
+                <span class="text-muted ms-1" style="font-size:9px;">(Aplica al Booking completo)</span>
+            </div>
+        }
+        else
+        {
+            <div class="mt-2 pt-2 border-top text-muted" style="font-size:9px;">
+                <i class="bi bi-info-circle me-1"></i>El costo de Flete Terrestre y su responsable de pago se gestionan a nivel de Booking, en la pestaña "Contenedor Principal".
+            </div>
+        }
+
+        <div class="col-12 text-end mt-3 pt-3 border-top btn-save-wrapper d-none">
+            <div class="d-flex justify-content-end gap-2">
+                <button type="button" class="btn btn-sm btn-outline-secondary fw-bold" onclick="cancelEditMode('ter-form-@Model.IdSuffix')">Cancelar</button>
+                <button type="button" class="btn btn-sm btn-dark fw-bold" onclick="guardarTransporteAjax(this, '@Model.IdSuffix')"><i class="bi bi-save me-1"></i> Guardar Transporte</button>
+            </div>
+        </div>
+    </div>
+</form>

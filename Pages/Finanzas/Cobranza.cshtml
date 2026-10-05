@@ -1,0 +1,172 @@
+﻿@page
+@model AtilsonCargoSpa.Pages.Finanzas.CobranzaModel
+@{
+    ViewData["Title"] = "Cobranza";
+}
+
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+<div class="container-fluid py-4">
+    <form id="antiForgeryFormCobranza">@Html.AntiForgeryToken()</form>
+
+    <div class="d-flex justify-content-between align-items-center mb-4 pb-2 border-bottom">
+        <div>
+            <h1 style="font-size: 22px; font-weight: 900; color: #0f172a; margin: 0;">COBRANZA — CONSOLIDADO CLIENTE</h1>
+            <p class="text-muted small m-0 fw-medium mt-1">Cuenta corriente por cliente: facturado, pagado, saldo neto y suscripción de recordatorio semanal.</p>
+        </div>
+    </div>
+
+    @if (!Model.ClientesConMovimiento.Any())
+    {
+        <div class="text-center text-muted py-5 bg-white rounded border">
+            <i class="bi bi-inbox fs-1 opacity-25"></i>
+            <p class="mt-2 fw-bold">No hay clientes con movimientos financieros registrados.</p>
+        </div>
+    }
+    else
+    {
+        <div class="row g-3">
+            @foreach (var c in Model.ClientesConMovimiento)
+            {
+                bool tieneSaldoAFavor = c.SaldoUsd < 0 || c.SaldoClp < 0;
+                bool tieneDeuda = c.SaldoUsd > 0 || c.SaldoClp > 0;
+                <div class="col-md-6 col-lg-4">
+                    <div class="p-3 bg-white rounded border shadow-sm h-100 d-flex flex-column" id="card-cliente-@c.IdCliente">
+                        <div class="d-flex justify-content-between align-items-start mb-2">
+                            <div>
+                                <span class="fw-bold text-dark d-block" style="font-size:13px;">@c.NombreCliente</span>
+                                <span class="text-muted" style="font-size:10px;">@c.CantidadOperaciones operación(es) con movimiento</span>
+                            </div>
+                            @if (c.SuscripcionActiva)
+                            {
+                                <span class="badge bg-success bg-opacity-10 text-success border border-success" style="font-size:9px;"><i class="bi bi-check-circle-fill me-1"></i>SUSCRITO</span>
+                            }
+                        </div>
+
+                        <div class="p-2 rounded mb-2" style="background:#f8fafc;">
+                            <div class="d-flex justify-content-between" style="font-size:10px;">
+                                <span class="text-muted">Facturado</span>
+                                <span class="fw-bold text-dark">@(c.TotalFacturadoUsd > 0 ? $"USD {c.TotalFacturadoUsd:N0}" : "")@(c.TotalFacturadoClp > 0 ? $" · CLP {c.TotalFacturadoClp:N0}" : "")</span>
+                            </div>
+                            <div class="d-flex justify-content-between" style="font-size:10px;">
+                                <span class="text-muted">Pagado</span>
+                                <span class="fw-bold text-success">@(c.TotalPagadoUsd > 0 ? $"USD {c.TotalPagadoUsd:N0}" : "")@(c.TotalPagadoClp > 0 ? $" · CLP {c.TotalPagadoClp:N0}" : "")</span>
+                            </div>
+                        </div>
+
+                        <div class="mb-2">
+                            @if (tieneDeuda)
+                            {
+                                <span class="fw-bold d-block" style="font-size:9px; color:#dc2626; text-transform:uppercase;">Saldo pendiente</span>
+                                @if (c.SaldoUsd > 0)
+                                {
+                                    <span class="fw-bold d-block" style="font-size:18px; color:#dc2626;">USD $@c.SaldoUsd.ToString("N0")</span>
+                                }
+                                @if (c.SaldoClp > 0)
+                                {
+                                    <span class="fw-bold d-block" style="font-size:14px; color:#dc2626;">CLP $@c.SaldoClp.ToString("N0")</span>
+                                }
+                            }
+                            else if (tieneSaldoAFavor)
+                            {
+                                <span class="fw-bold d-block" style="font-size:9px; color:#16a34a; text-transform:uppercase;">Saldo a favor del cliente</span>
+                                @if (c.SaldoUsd < 0)
+                                {
+                                    <span class="fw-bold d-block" style="font-size:18px; color:#16a34a;">USD $@Math.Abs(c.SaldoUsd).ToString("N0")</span>
+                                }
+                                @if (c.SaldoClp < 0)
+                                {
+                                    <span class="fw-bold d-block" style="font-size:14px; color:#16a34a;">CLP $@Math.Abs(c.SaldoClp).ToString("N0")</span>
+                                }
+                            }
+                            else
+                            {
+                                <span class="badge bg-secondary bg-opacity-10 text-secondary border" style="font-size:9px;">CUENTA AL DÍA</span>
+                            }
+                        </div>
+
+                        <div class="text-muted mb-3" style="font-size:10px;">
+                            @if (c.UltimoRecordatorio.HasValue)
+                            {
+                                <span>Último recordatorio: @c.UltimoRecordatorio.Value.ToString("dd/MM/yyyy")</span>
+                            }
+                            else
+                            {
+                                <span>Sin recordatorios enviados aún</span>
+                            }
+                        </div>
+
+                        <div class="mt-auto d-flex flex-column gap-2">
+                            @if (string.IsNullOrWhiteSpace(c.Correo))
+                            {
+                                <span class="badge bg-secondary bg-opacity-10 text-secondary border" style="font-size:9px;">Sin correo registrado</span>
+                            }
+                            else
+                            {
+                                @if (tieneDeuda)
+                                {
+                                    <button type="button" class="btn btn-sm btn-dark fw-bold" style="font-size:10px;" onclick="enviarRecordatorio(@c.IdCliente, this)">
+                                        <i class="bi bi-envelope-paper me-1"></i> Enviar Ahora (PDF/Excel)
+                                    </button>
+                                }
+                                <button type="button" class="btn btn-sm @(c.SuscripcionActiva ? "btn-outline-danger" : "btn-outline-success") fw-bold" style="font-size:10px;" onclick="toggleSuscripcion(@c.IdCliente, this)">
+                                    @if (c.SuscripcionActiva)
+                                    {
+                                        <span><i class="bi bi-bell-slash-fill me-1"></i> Desactivar Recordatorio Semanal</span>
+                                    }
+                                    else
+                                    {
+                                        <span><i class="bi bi-bell-fill me-1"></i> Activar Recordatorio Semanal</span>
+                                    }
+                                </button>
+                            }
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+    }
+</div>
+
+@section Scripts {
+    <script>
+        function enviarRecordatorio(idCliente, btn) {
+            const original = btn.innerHTML;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Enviando...';
+            btn.disabled = true;
+            const token = document.querySelector('#antiForgeryFormCobranza input[name="__RequestVerificationToken"]').value;
+            const formData = new FormData();
+            formData.append('idCliente', idCliente);
+
+            fetch('?handler=EnviarRecordatorio', { method: 'POST', headers: { 'RequestVerificationToken': token }, body: formData })
+            .then(res => res.json()).then(data => {
+                btn.innerHTML = original; btn.disabled = false;
+                if (data.success) {
+                    Swal.fire({ icon: 'success', title: 'Recordatorio enviado con adjuntos', toast: true, position: 'top-end', timer: 1800, showConfirmButton: false });
+                    setTimeout(() => window.location.reload(), 1200);
+                } else {
+                    Swal.fire('Error', data.message || 'No se pudo enviar.', 'error');
+                }
+            }).catch(() => { btn.innerHTML = original; btn.disabled = false; Swal.fire('Error', 'Fallo de conexión.', 'error'); });
+        }
+
+        function toggleSuscripcion(idCliente, btn) {
+            const original = btn.innerHTML;
+            btn.disabled = true;
+            const token = document.querySelector('#antiForgeryFormCobranza input[name="__RequestVerificationToken"]').value;
+            const formData = new FormData();
+            formData.append('idCliente', idCliente);
+
+            fetch('?handler=ToggleSuscripcion', { method: 'POST', headers: { 'RequestVerificationToken': token }, body: formData })
+            .then(res => res.json()).then(data => {
+                if (data.success) {
+                    Swal.fire({ icon: 'success', title: data.activa ? 'Suscripción activada' : 'Suscripción desactivada', toast: true, position: 'top-end', timer: 1500, showConfirmButton: false });
+                    setTimeout(() => window.location.reload(), 800);
+                } else {
+                    btn.disabled = false;
+                    Swal.fire('Error', data.message || 'No se pudo actualizar.', 'error');
+                }
+            }).catch(() => { btn.disabled = false; Swal.fire('Error', 'Fallo de conexión.', 'error'); });
+        }
+    </script>
+}

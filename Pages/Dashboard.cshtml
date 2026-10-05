@@ -1,0 +1,392 @@
+﻿@page
+@model AtilsonCargoSpa.Pages.DashboardModel
+@{
+    ViewData["Title"] = "Centro de Mando ATILSON";
+}
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<style>
+    :root {
+        --atilson-dark: #0f172a;
+        --atilson-dark-2: #1e2338;
+        --atilson-purple: #6d2d9e;
+        --atilson-purple-deep: #4c1d7a;
+        --atilson-purple-soft: #a78bfa;
+        --txt-main: #1e293b;
+        --txt-muted: #64748b;
+        --border-soft: #e7e6ee;
+        --bg-body: #f6f6fa;
+        --bg-panel: #ffffff;
+        --shadow-sm: 0 1px 2px rgb(15 23 42 / 0.04);
+        --shadow-md: 0 10px 24px -8px rgb(31 20 54 / 0.10);
+        --shadow-lg: 0 24px 48px -16px rgb(31 20 54 / 0.20);
+    }
+
+    body { background-color: var(--bg-body); color: var(--txt-main); font-family: 'Inter', system-ui, sans-serif; }
+    footer { display: none !important; }
+    .tabular { font-variant-numeric: tabular-nums; }
+
+    .fade-in { opacity: 0; transform: translateY(14px); animation: fadeIn 0.55s cubic-bezier(0.16,1,0.3,1) forwards; }
+    .d-1 { animation-delay: .05s; } .d-2 { animation-delay: .12s; }
+    .d-3 { animation-delay: .19s; } .d-4 { animation-delay: .26s; }
+    .d-5 { animation-delay: .33s; } .d-6 { animation-delay: .40s; }
+    @@keyframes fadeIn { to { opacity: 1; transform: translateY(0); } }
+    @@media (prefers-reduced-motion: reduce) { .fade-in { animation: none !important; opacity: 1 !important; transform: none !important; } }
+
+    /* CABECERA */
+    .cmd-header {
+        background: linear-gradient(125deg, var(--atilson-dark) 0%, #241a3d 60%, var(--atilson-purple-deep) 120%);
+        border-radius: 18px; padding: 28px 32px; position: relative; overflow: hidden;
+        box-shadow: var(--shadow-lg); margin-bottom: 28px;
+    }
+    .cmd-header::before {
+        content: ''; position: absolute; inset: 0;
+        background-image: radial-gradient(circle at 88% -15%, rgba(167,139,250,0.16), transparent 45%);
+        pointer-events: none;
+    }
+    .cmd-route { position: absolute; right: -40px; top: 50%; transform: translateY(-50%); width: 340px; height: 90px; opacity: 0.28; pointer-events: none; }
+    .cmd-greeting { font-size: 24px; font-weight: 800; color: #fff; margin: 0; letter-spacing: -0.5px; }
+    .cmd-sub { font-size: 12.5px; font-weight: 600; color: #a3a0c2; margin-top: 4px; }
+    .cmd-clock-wrap { text-align: right; position: relative; z-index: 1; }
+    .cmd-clock { font-family: 'SFMono-Regular', Consolas, monospace; font-size: 26px; font-weight: 700; color: #fff; letter-spacing: 1px; }
+    .cmd-date { font-size: 10.5px; font-weight: 700; color: #7c7a99; text-transform: uppercase; letter-spacing: 0.6px; margin-top: 2px; }
+    .cmd-pulse-row { display: flex; align-items: center; gap: 8px; justify-content: flex-end; margin-top: 10px; }
+    .cmd-pulse-dot { width: 7px; height: 7px; border-radius: 50%; background: #a78bfa; box-shadow: 0 0 0 0 rgba(167,139,250,0.5); animation: pulseDot 2.2s infinite; }
+    .cmd-pulse-dot.alert { background: #ef4444; box-shadow: 0 0 0 0 rgba(239,68,68,0.6); animation: pulseDotAlert 1.4s infinite; }
+    @@keyframes pulseDot { 0% { box-shadow: 0 0 0 0 rgba(167,139,250,0.45); } 70% { box-shadow: 0 0 0 7px rgba(167,139,250,0); } 100% { box-shadow: 0 0 0 0 rgba(167,139,250,0); } }
+    @@keyframes pulseDotAlert { 0% { box-shadow: 0 0 0 0 rgba(239,68,68,0.55); } 70% { box-shadow: 0 0 0 9px rgba(239,68,68,0); } 100% { box-shadow: 0 0 0 0 rgba(239,68,68,0); } }
+    .cmd-pulse-label { font-size: 10.5px; font-weight: 700; color: #b3b1cc; text-transform: uppercase; letter-spacing: 0.4px; }
+
+    /* ACCESOS RÁPIDOS — monocromo, sin arcoíris de íconos */
+    .qa-rail { display: flex; gap: 14px; margin-bottom: 30px; }
+    .qa-item {
+        flex: 1; display: flex; align-items: center; gap: 16px;
+        background: var(--bg-panel); border: 1px solid var(--border-soft);
+        border-radius: 14px; padding: 18px 20px; text-decoration: none;
+        box-shadow: var(--shadow-sm); transition: border-color .2s ease, box-shadow .2s ease, transform .2s ease;
+    }
+    .qa-item:hover { box-shadow: var(--shadow-md); transform: translateY(-2px); border-color: #d6d3e8; }
+    .qa-ico { width: 44px; height: 44px; border-radius: 11px; display: flex; align-items: center; justify-content: center; font-size: 20px; flex-shrink: 0; background: #f4f2fb; color: var(--atilson-purple); }
+    .qa-item.ops .qa-ico { background: var(--atilson-dark); color: #fff; }
+    .qa-txt-title { font-size: 14px; font-weight: 800; color: var(--txt-main); margin: 0; letter-spacing: -0.2px; }
+    .qa-txt-sub { font-size: 11px; color: var(--txt-muted); font-weight: 600; margin-top: 1px; }
+    .qa-arrow { margin-left: auto; color: #d6d3e8; font-size: 16px; transition: transform .2s ease, color .2s ease; }
+    .qa-item:hover .qa-arrow { transform: translateX(3px); color: var(--atilson-purple); }
+
+    /* KPI CARDS */
+    .data-panel {
+        background: var(--bg-panel); border: 1px solid var(--border-soft); border-radius: 16px;
+        padding: 22px; height: 100%; display: flex; flex-direction: column;
+        box-shadow: var(--shadow-sm); transition: box-shadow .2s ease, border-color .2s ease;
+    }
+    .data-panel:hover { box-shadow: var(--shadow-md); }
+    .kpi-title { font-size: 10.5px; color: var(--txt-muted); text-transform: uppercase; font-weight: 800; letter-spacing: 0.5px; margin-bottom: 10px; }
+    .kpi-value { font-size: 38px; color: var(--atilson-dark); font-weight: 900; line-height: 1; letter-spacing: -1.5px; }
+    .kpi-bar-track { height: 5px; border-radius: 3px; background: #f1f0f7; margin-top: 14px; overflow: hidden; }
+    .kpi-bar-fill { height: 100%; border-radius: 3px; width: 0%; transition: width 1s cubic-bezier(0.16,1,0.3,1); }
+    .kpi-foot { font-size: 10.5px; font-weight: 700; color: var(--txt-muted); margin-top: 8px; display: flex; justify-content: space-between; }
+
+    .panel-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+    .panel-title { font-size: 12.5px; font-weight: 800; color: var(--txt-main); text-transform: uppercase; letter-spacing: 0.4px; margin: 0; display: flex; align-items: center; gap: 8px; }
+    .panel-icon-box { width: 30px; height: 30px; border-radius: 8px; background: #f4f2fb; color: var(--atilson-purple); display: flex; align-items: center; justify-content: center; font-size: 14px; flex-shrink: 0; }
+    .chart-box { position: relative; min-height: 230px; }
+
+    /* TABLA */
+    .table-erp { width: 100%; border-collapse: separate; border-spacing: 0; }
+    .table-erp th { font-size: 10px; text-transform: uppercase; color: var(--txt-muted); font-weight: 800; letter-spacing: 0.4px; padding: 14px 20px; border-bottom: 1px solid var(--border-soft); background-color: #fafafc; }
+    .table-erp td { font-size: 12.5px; padding: 14px 20px; border-bottom: 1px solid #f2f1f7; color: var(--txt-main); font-weight: 600; vertical-align: middle; }
+    .table-erp tr.data-row { cursor: pointer; transition: background-color .15s ease; }
+    .table-erp tr.data-row:hover td { background-color: #faf9fd; }
+    .bkg-ref { color: var(--atilson-purple); font-family: 'SFMono-Regular', Consolas, monospace; font-weight: 800; font-size: 12px; }
+    .status-badge { font-size: 9.5px; font-weight: 800; padding: 5px 10px; border-radius: 6px; text-transform: uppercase; letter-spacing: 0.3px; border: 1px solid transparent; display: inline-block; }
+    .empty-state { text-align: center; padding: 48px 20px; color: var(--txt-muted); }
+    .empty-state i { font-size: 30px; opacity: .25; display: block; margin-bottom: 10px; }
+</style>
+
+<div class="container-fluid pt-4 pb-5 px-4" style="max-width: 1700px;">
+
+    <div class="cmd-header fade-in">
+        <svg class="cmd-route" viewBox="0 0 340 90" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M0 70 Q 80 10, 160 45 T 340 20" stroke="#a78bfa" stroke-width="1.5" stroke-dasharray="4 6" />
+            <circle cx="0" cy="70" r="3" fill="#a78bfa" />
+            <circle cx="340" cy="20" r="3" fill="#a78bfa" />
+        </svg>
+        <div class="d-flex justify-content-between align-items-start position-relative">
+            <div>
+                <h1 class="cmd-greeting">Hola, @(User.Identity?.Name ?? "Equipo Atilson")</h1>
+                <p class="cmd-sub">Centro de mando logístico y financiero — visión operativa en tiempo real.</p>
+            </div>
+            <div class="cmd-clock-wrap">
+                <div class="cmd-clock tabular" id="systemClock">--:--:--</div>
+                <div class="cmd-date">@DateTime.Now.ToString("dd MMM yyyy", new System.Globalization.CultureInfo("es-ES"))</div>
+                <div class="cmd-pulse-row">
+                    <span class="cmd-pulse-dot @(Model.CantidadCriticos > 0 ? "alert" : "")"></span>
+                    <span class="cmd-pulse-label">@(Model.CantidadCriticos > 0 ? $"{Model.CantidadCriticos} alerta(s) activa(s)" : "Sin vencimientos críticos")</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="qa-rail fade-in d-1">
+        <a href="/Operaciones/Index" class="qa-item ops">
+            <div class="qa-ico"><i class="bi bi-gear-wide-connected"></i></div>
+            <div><p class="qa-txt-title">Operaciones</p><p class="qa-txt-sub">Bookings, stacking y matriz</p></div>
+            <i class="bi bi-arrow-right qa-arrow"></i>
+        </a>
+        <a href="/Finanzas/ControlFinanciero" class="qa-item fin">
+            <div class="qa-ico"><i class="bi bi-wallet2"></i></div>
+            <div><p class="qa-txt-title">Control Financiero</p><p class="qa-txt-sub">Ingresos, egresos y profit</p></div>
+            <i class="bi bi-arrow-right qa-arrow"></i>
+        </a>
+        <a href="/Comercial/Index" class="qa-item com">
+            <div class="qa-ico"><i class="bi bi-briefcase-fill"></i></div>
+            <div><p class="qa-txt-title">Módulo Comercial</p><p class="qa-txt-sub">Tarifario y proveedores</p></div>
+            <i class="bi bi-arrow-right qa-arrow"></i>
+        </a>
+    </div>
+
+    <!-- KPIs — barra neutra en púrpura de marca salvo estados realmente de alerta/éxito -->
+    <div class="row g-4 mb-4">
+        <div class="col-md-3 fade-in d-2">
+            <div class="data-panel">
+                <div class="kpi-title">Volumen Operativo</div>
+                <div class="kpi-value tabular">@Model.TotalBookings</div>
+                <div class="kpi-bar-track"><div class="kpi-bar-fill" data-pct="100" style="background: var(--atilson-purple);"></div></div>
+                <div class="kpi-foot"><span>Operaciones activas</span><span>100%</span></div>
+            </div>
+        </div>
+        <div class="col-md-3 fade-in d-3">
+            @{ int pctMatPend = Model.TotalBookings > 0 ? (int)Math.Round(Model.CountMatricesPendientes * 100.0 / Model.TotalBookings) : 0; }
+            <div class="data-panel">
+                <div class="kpi-title">Gestión Documental</div>
+                <div class="kpi-value tabular" style="color:#b45309;">@Model.CountMatricesPendientes</div>
+                <div class="kpi-bar-track"><div class="kpi-bar-fill" data-pct="@pctMatPend" style="background:#d97706;"></div></div>
+                <div class="kpi-foot"><span>Matrices pendientes</span><span>@pctMatPend% del total</span></div>
+            </div>
+        </div>
+        <div class="col-md-3 fade-in d-4">
+            @{ int pctCancel = Model.TotalBookings > 0 ? (int)Math.Round(Model.CountCanceladas * 100.0 / Model.TotalBookings) : 0; }
+            <div class="data-panel">
+                <div class="kpi-title">Bookings Cancelados</div>
+                <div class="kpi-value tabular" style="color:#dc2626;">@Model.CountCanceladas</div>
+                <div class="kpi-bar-track"><div class="kpi-bar-fill" data-pct="@pctCancel" style="background:#dc2626;"></div></div>
+                <div class="kpi-foot"><span>No efectuados</span><span>@pctCancel% del total</span></div>
+            </div>
+        </div>
+        <div class="col-md-3 fade-in d-5">
+            <div class="data-panel" style="border-color: @(Model.CantidadCriticos > 0 ? "#f3c9c9" : "var(--border-soft)");">
+                <div class="kpi-title">Alertas Críticas (Cut-Off)</div>
+                <div class="kpi-value tabular" style="color: @(Model.CantidadCriticos > 0 ? "#dc2626" : "var(--txt-main)");">@Model.CantidadCriticos</div>
+                @if (Model.CantidadCriticos > 0)
+                {
+                    <div class="kpi-bar-track"><div class="kpi-bar-fill" data-pct="100" style="background:#dc2626;"></div></div>
+                    <div class="kpi-foot"><span>Acción inmediata</span><span><i class="bi bi-cone-striped"></i></span></div>
+                }
+                else
+                {
+                    <div class="kpi-bar-track"><div class="kpi-bar-fill" data-pct="100" style="background:#059669;"></div></div>
+                    <div class="kpi-foot"><span>Sin vencimientos</span><span><i class="bi bi-check2-all"></i></span></div>
+                }
+            </div>
+        </div>
+    </div>
+
+    <!-- GRÁFICOS — tortas llenas (sin hueco), paleta tonal, detalle al hover -->
+    <div class="row g-4 mb-4">
+        <div class="col-lg-4 fade-in d-3">
+            <div class="data-panel">
+                <div class="panel-header"><h6 class="panel-title"><div class="panel-icon-box"><i class="bi bi-pie-chart-fill"></i></div> Mix de Servicios</h6></div>
+                <div class="chart-box"><canvas id="serviceChart"></canvas></div>
+            </div>
+        </div>
+        <div class="col-lg-4 fade-in d-4">
+            <div class="data-panel">
+                <div class="panel-header"><h6 class="panel-title"><div class="panel-icon-box"><i class="bi bi-water"></i></div> Control Marítimo (LAR)</h6></div>
+                <div class="chart-box"><canvas id="maritimeChart"></canvas></div>
+            </div>
+        </div>
+        <div class="col-lg-4 fade-in d-5">
+            <div class="data-panel">
+                <div class="panel-header"><h6 class="panel-title"><div class="panel-icon-box"><i class="bi bi-bar-chart-steps"></i></div> Workflow General</h6></div>
+                <div class="chart-box"><canvas id="bookingStatusChart"></canvas></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-4 fade-in d-6 mb-5">
+        <div class="col-lg-4">
+            <div class="data-panel">
+                <div class="panel-header border-bottom pb-3 mb-4"><h6 class="panel-title"><div class="panel-icon-box"><i class="bi bi-folder-check"></i></div> Desempeño Documental</h6></div>
+                <div class="d-flex justify-content-between mb-2">
+                    <span style="font-size:11px; color:var(--txt-muted); font-weight:800; text-transform:uppercase;">Matrices Confirmadas</span>
+                    <span class="tabular" style="font-size:12px; color:var(--txt-main); font-weight:900;">@Model.CountMatricesConfirmadas de @Model.TotalMatrices</span>
+                </div>
+                <div class="kpi-bar-track" style="height:14px; border-radius:7px;">
+                    <div class="kpi-bar-fill" data-pct="@Model.PctConfirmadas" style="height:100%; border-radius:7px; background: linear-gradient(90deg, var(--atilson-purple-deep), var(--atilson-purple));"></div>
+                </div>
+                <p class="text-end fw-bold m-0 mt-2 tabular" style="font-size:12px; color:var(--atilson-purple);">@Model.PctConfirmadas% completado</p>
+                <div class="mt-auto pt-4">
+                    <div class="d-flex align-items-center gap-3 p-3 rounded" style="background:#faf9fd; border:1px dashed #ddd9ee;">
+                        <i class="bi bi-info-circle text-muted fs-4"></i>
+                        <span style="font-size:11px; color:var(--txt-muted); font-weight:600;">Porcentaje de matrices enviadas y confirmadas por naviera respecto al total de operaciones activas.</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-8">
+            <div class="data-panel p-0">
+                <div class="panel-header border-bottom p-4 m-0" style="background-color:#fafafc; border-radius:16px 16px 0 0;">
+                    <h6 class="panel-title m-0"><div class="panel-icon-box"><i class="bi bi-list-nested"></i></div> Operaciones Recientes</h6>
+                    <a asp-page="/Operaciones/Index" class="btn btn-sm fw-bold px-4 shadow-sm" style="background-color:var(--atilson-dark); color:white; font-size:11px; border-radius:8px;">Ver tabla completa</a>
+                </div>
+                <div class="table-responsive">
+                    <table class="table-erp m-0">
+                        <thead>
+                            <tr><th class="ps-4">N° Booking</th><th>Cliente Exportador</th><th>Destino (POD)</th><th>Fase Operativa</th><th class="text-end pe-4">Acción</th></tr>
+                        </thead>
+                        <tbody>
+                            @if (Model.UltimasOperaciones != null && Model.UltimasOperaciones.Any())
+                            {
+                                @foreach (var op in Model.UltimasOperaciones)
+                                {
+                                    var estadoFlow = (op.EstadoWorkflow ?? "SOLICITADO").ToUpper();
+                                    var estBg = "#faf9fd"; var estTxt = "#6d2d9e"; var estBorder = "#e5deF7";
+
+                                    if (estadoFlow.Contains("SOLICITADO") || estadoFlow.Contains("CONFIRMADO") || estadoFlow.Contains("ENVIO"))
+                                    { estBg = "#fefaef"; estTxt = "#b45309"; estBorder = "#f6e2b8"; }
+                                    else if (estadoFlow.Contains("EN RUTA") || estadoFlow.Contains("ENTREGADO") || estadoFlow.Contains("EMBARCADO") || estadoFlow.Contains("ZARPE") || estadoFlow.Contains("PROXIMO"))
+                                    { estBg = "#faf9fd"; estTxt = "#6d2d9e"; estBorder = "#e5deF7"; }
+                                    else if (estadoFlow.Contains("ARRIBADO") || estadoFlow.Contains("FINALIZADO") || estadoFlow.Contains("RETIRADO"))
+                                    { estBg = "#f0fdf6"; estTxt = "#059669"; estBorder = "#bfeed9"; }
+                                    else if (estadoFlow.Contains("CANCELADO"))
+                                    { estBg = "#fef2f2"; estTxt = "#dc2626"; estBorder = "#fecaca"; }
+
+                                    <tr class="data-row" onclick="window.location.href='/Operaciones/Edit?id=@op.Id'">
+                                        <td class="bkg-ref ps-4">@op.NumeroBooking</td>
+                                        <td>@(op.IdClienteNavigation?.RazonSocial ?? op.IdClienteNavigation?.NombreCliente ?? "S/N")</td>
+                                        <td><i class="bi bi-geo-alt-fill text-muted opacity-50 me-1"></i> @(op.IdPuertoDestinoNavigation?.NombrePuerto ?? "TBA")</td>
+                                        <td><span class="status-badge" style="background-color:@estBg; color:@estTxt; border:1px solid @estBorder;">@estadoFlow</span></td>
+                                        <td class="text-end pe-4"><i class="bi bi-arrow-right-circle text-muted fs-5"></i></td>
+                                    </tr>
+                                }
+                            }
+                            else
+                            {
+                                <tr><td colspan="5" class="p-0"><div class="empty-state"><i class="bi bi-inbox"></i><span class="fw-bold" style="font-size:12px;">Aún no hay operaciones registradas.</span></div></td></tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        document.addEventListener("DOMContentLoaded", function () {
+            function updateClock() {
+                const now = new Date();
+                const h = now.getHours().toString().padStart(2, '0');
+                const m = now.getMinutes().toString().padStart(2, '0');
+                const s = now.getSeconds().toString().padStart(2, '0');
+                const el = document.getElementById('systemClock');
+                if (el) el.textContent = `${h}:${m}:${s}`;
+            }
+            setInterval(updateClock, 1000);
+            updateClock();
+
+            document.querySelectorAll('.kpi-bar-fill').forEach(bar => {
+                const pct = bar.getAttribute('data-pct') || '0';
+                requestAnimationFrame(() => { setTimeout(() => { bar.style.width = pct + '%'; }, 150); });
+            });
+
+            Chart.defaults.font.family = "'Inter', system-ui, sans-serif";
+            Chart.defaults.color = '#64748b';
+            Chart.defaults.plugins.tooltip.backgroundColor = '#0f172a';
+            Chart.defaults.plugins.tooltip.padding = 12;
+            Chart.defaults.plugins.tooltip.cornerRadius = 8;
+            Chart.defaults.plugins.tooltip.titleFont = { size: 12, weight: '700' };
+            Chart.defaults.plugins.tooltip.bodyFont = { size: 11.5 };
+            Chart.defaults.animation = { duration: 900, easing: 'easeOutQuart' };
+
+            // Tooltip con valor + porcentaje, para "pasar el cursor y ver la info"
+            function pctTooltip(ctx) {
+                const ds = ctx.dataset.data;
+                const total = ds.reduce((a, b) => a + b, 0);
+                const val = ctx.parsed;
+                const pct = total > 0 ? Math.round((val / total) * 100) : 0;
+                return `${ctx.label}: ${val} (${pct}%)`;
+            }
+
+            // 1. MIX DE SERVICIOS — escala tonal de un solo color de marca
+            const ctxServ = document.getElementById('serviceChart');
+            if (ctxServ) {
+                new Chart(ctxServ, {
+                    type: 'pie',
+                    data: {
+                        labels: ['Integral', 'Marítimo', 'Transporte', 'Documental'],
+                        datasets: [{
+                            data: [@Model.CountIntegral, @Model.CountMaritimo, @Model.CountTerrestre, @Model.CountDocumental],
+                            backgroundColor: ['#2e1065', '#4c1d7a', '#6d2d9e', '#a78bfa'],
+                            borderWidth: 2, borderColor: '#ffffff', hoverOffset: 10
+                        }]
+                    },
+                    options: {
+                        responsive: true, maintainAspectRatio: false,
+                        plugins: {
+                            legend: { position: 'bottom', labels: { usePointStyle: true, padding: 16, font: { size: 10.5, weight: '700' } } },
+                            tooltip: { callbacks: { label: pctTooltip } }
+                        }
+                    }
+                });
+            }
+
+            // 2. CONTROL MARÍTIMO — binario, mantiene semántica verde/ámbar
+            const ctxMar = document.getElementById('maritimeChart');
+            if (ctxMar) {
+                new Chart(ctxMar, {
+                    type: 'pie',
+                    data: {
+                        labels: ['A Tiempo (Sin LAR)', 'Con Late Arrival'],
+                        datasets: [{ data: [@Model.CountMaritimoATiempo, @Model.CountMaritimoConLAR], backgroundColor: ['#059669', '#d97706'], borderWidth: 2, borderColor: '#ffffff', hoverOffset: 10 }]
+                    },
+                    options: {
+                        responsive: true, maintainAspectRatio: false,
+                        plugins: {
+                            legend: { position: 'bottom', labels: { usePointStyle: true, padding: 16, font: { size: 10.5, weight: '700' } } },
+                            tooltip: { callbacks: { label: pctTooltip } }
+                        }
+                    }
+                });
+            }
+
+            // 3. WORKFLOW — cada color mantiene un significado real (espera / progreso / problema) MISMA PALETA DE COLORES
+            const ctxBkg = document.getElementById('bookingStatusChart');
+            if (ctxBkg) {
+                new Chart(ctxBkg, {
+                    type: 'bar',
+                    data: {
+                        labels: ['Sol. Naviera', 'Conf. Cliente', 'Canceladas'],
+                        datasets: [{
+                            label: 'Operaciones',
+                            data: [@Model.CountPendienteNaviera, @Model.CountConfirmadoCliente, @Model.CountCanceladas],
+                            backgroundColor: ['#d97706', '#6d2d9e', '#dc2626'],
+                            borderRadius: 8, barPercentage: 0.55
+                        }]
+                    },
+                    options: {
+                        responsive: true, maintainAspectRatio: false,
+                        plugins: { legend: { display: false } },
+                        scales: {
+                            x: { grid: { display: false }, border: { display: false }, ticks: { font: { size: 10.5, weight: '700' } } },
+                            y: { beginAtZero: true, grid: { borderDash: [4, 4] }, border: { display: false }, ticks: { stepSize: 1, font: { size: 10.5 } } }
+                        }
+                    }
+                });
+            }
+        });
+    </script>
+}

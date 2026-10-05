@@ -1,0 +1,244 @@
+﻿@page "{id:int}"
+@model AtilsonCargoSpa.Pages.Finanzas.EditModel
+@{
+    ViewData["Title"] = "Liquidación Financiera";
+    bool isLocked = Model.OperacionBase.LockFinanzas;
+    string pointerEvents = isLocked ? "pointer-events: none; opacity: 0.7;" : "";
+}
+
+<style>
+    :root {
+        --atilson-dark: #0f172a;
+        --txt-muted: #64748b;
+        --border-soft: #e2e8f0;
+    }
+
+    body {
+        background-color: #f8fafc;
+        font-family: 'Inter', sans-serif;
+    }
+
+    .fin-ribbon {
+        background: linear-gradient(90deg, var(--atilson-dark) 0%, #1e293b 100%);
+        border-radius: 8px;
+        padding: 15px 25px;
+        color: white;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+        margin-bottom: 20px;
+    }
+
+    .ribbon-label {
+        font-size: 10px;
+        font-weight: 800;
+        color: #94a3b8;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+
+    .ribbon-val {
+        font-size: 18px;
+        font-weight: 800;
+        font-family: 'SFMono-Regular', Consolas, monospace;
+    }
+
+    .ribbon-divider {
+        width: 1px;
+        height: 35px;
+        background: rgba(255,255,255,0.15);
+    }
+
+    .card-fin {
+        background: white;
+        border: 1px solid var(--border-soft);
+        border-radius: 8px;
+        overflow: hidden;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+        height: 100%;
+    }
+
+    .card-fin-header {
+        font-size: 12px;
+        font-weight: 900;
+        text-transform: uppercase;
+        padding: 15px 20px;
+        border-bottom: 1px solid var(--border-soft);
+    }
+
+        .card-fin-header.ing {
+            background-color: #f0fdf4;
+            color: #16a34a;
+            border-top: 4px solid #10b981;
+        }
+
+        .card-fin-header.egr {
+            background-color: #fef2f2;
+            color: #dc2626;
+            border-top: 4px solid #ef4444;
+        }
+
+    .table-fin {
+        margin: 0;
+        width: 100%;
+        font-size: 11px;
+    }
+
+        .table-fin th {
+            background: #f8fafc;
+            color: #64748b;
+            font-weight: 800;
+            text-transform: uppercase;
+            padding: 10px 15px;
+            border-bottom: 1px solid var(--border-soft);
+        }
+
+        .table-fin td {
+            padding: 10px 15px;
+            vertical-align: middle;
+            border-bottom: 1px solid #f1f5f9;
+        }
+
+    .inp-fin {
+        font-size: 12px;
+        font-weight: 800;
+        text-align: right;
+        border: 1px solid var(--border-soft);
+        border-radius: 4px;
+        padding: 4px 8px;
+        width: 100%;
+        font-family: 'SFMono-Regular', Consolas, monospace;
+        transition: 0.2s;
+    }
+
+        .inp-fin:focus {
+            border-color: var(--atilson-dark);
+            outline: none;
+            box-shadow: 0 0 0 2px rgba(15,23,42,0.1);
+        }
+
+    .celda-resp {
+        font-size: 9px;
+        font-weight: 800;
+        padding: 3px 6px;
+        border-radius: 4px;
+        display: inline-block;
+        background: #f1f5f9;
+        border: 1px solid var(--border-soft);
+    }
+</style>
+
+<div class="container-fluid py-4" style="max-width: 1400px;">
+    <div class="d-flex justify-content-between align-items-end mb-4">
+        <div>
+            <h1 style="font-size: 20px; font-weight: 900; color: var(--atilson-dark); margin: 0;">LIQUIDACIÓN DE OPERACIÓN</h1>
+            <div class="d-flex gap-2 mt-2 align-items-center">
+                <span class="badge bg-white text-dark border px-2 py-1"><i class="bi bi-bookmark-fill text-primary me-1"></i> BKG: @Model.OperacionBase.NumeroBooking</span>
+                <span class="badge bg-white text-dark border px-2 py-1"><i class="bi bi-building me-1"></i> @(Model.OperacionBase.IdClienteNavigation?.RazonSocial ?? "Sin Cliente")</span>
+                @if (isLocked)
+                {
+                    <span class="badge bg-danger px-2 py-1 shadow-sm"><i class="bi bi-lock-fill me-1"></i> LIQUIDADA Y BLOQUEADA</span>
+                }
+            </div>
+        </div>
+        <a href="/Finanzas/Index" class="btn btn-white border fw-bold text-muted shadow-sm"><i class="bi bi-arrow-left me-1"></i> Volver</a>
+    </div>
+
+    <div class="fin-ribbon">
+        <div>
+            <div class="ribbon-label text-success">Total Ingresos (Ventas)</div>
+            <div class="ribbon-val text-success">USD $@Model.IngresosUSD.ToString("N0") <span class="text-muted fw-normal mx-1" style="font-size:12px;">|</span> CLP $@Model.IngresosCLP.ToString("N0")</div>
+        </div>
+        <div class="ribbon-divider"></div>
+        <div>
+            <div class="ribbon-label text-danger">Total Egresos (Costos)</div>
+            <div class="ribbon-val text-danger">USD $@Model.EgresosUSD.ToString("N0") <span class="text-muted fw-normal mx-1" style="font-size:12px;">|</span> CLP $@Model.EgresosCLP.ToString("N0")</div>
+        </div>
+    </div>
+
+    <form method="post">
+        <input type="hidden" name="id" value="@Model.OperacionBase.Id" />
+
+        <div class="row g-4 mb-4">
+            <div class="col-lg-6">
+                <div class="card-fin">
+                    <div class="card-fin-header ing"><i class="bi bi-arrow-down-left-circle me-1"></i> Ingresos / Ventas al Cliente</div>
+                    <table class="table-fin">
+                        <thead><tr><th>Concepto</th><th style="width: 80px;">N° Doc</th><th style="width: 70px;">Moneda</th><th style="width: 120px;" class="text-end">Valor Neto</th></tr></thead>
+                        <tbody style="@pointerEvents">
+                            @foreach (var tx in Model.Ingresos.OrderBy(t => t.GrupoCobro))
+                            {
+                                <tr>
+                                    <td><span class="fw-bold d-block" style="font-size:11px; color:#1e293b;">@tx.Concepto</span><span class="text-muted" style="font-size:9px; text-transform:uppercase;">@tx.GrupoCobro</span></td>
+                                    <td><input type="text" name="numdoc_@tx.Id" class="inp-fin text-start" style="font-family: inherit;" value="@tx.NumeroDocumento" placeholder="S/N" /></td>
+                                    <td>
+                                        <select name="moneda_@tx.Id" class="form-select form-select-sm fw-bold" style="font-size:10px; height:28px;">
+                                            <option value="USD" selected="@(tx.Moneda == "USD")">USD</option>
+                                            <option value="CLP" selected="@(tx.Moneda == "CLP")">CLP</option>
+                                        </select>
+                                    </td>
+                                    <td><input type="text" name="monto_@tx.Id" class="inp-fin text-success" value="@(tx.MontoNeto > 0 ? tx.MontoNeto.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture) : "")" placeholder="0.00" /></td>
+                                </tr>
+                            }
+                            @if (!Model.Ingresos.Any())
+                            {
+                                <tr><td colspan="4" class="text-center text-muted py-4">No hay ingresos registrados.</td></tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="col-lg-6">
+                <div class="card-fin">
+                    <div class="card-fin-header egr"><i class="bi bi-arrow-up-right-circle me-1"></i> Egresos / Costos Logísticos</div>
+                    <table class="table-fin">
+                        <thead><tr><th>Concepto y Proveedor</th><th style="width: 70px;">Moneda</th><th style="width: 120px;" class="text-end">Valor Neto</th></tr></thead>
+                        <tbody style="@pointerEvents">
+                            @foreach (var tx in Model.Egresos.OrderBy(t => t.GrupoCobro))
+                            {
+                                <tr>
+                                    <td>
+                                        <span class="fw-bold d-block" style="font-size:11px; color:#1e293b;">@tx.Concepto</span>
+                                        <div class="d-flex align-items-center gap-2 mt-1">
+                                            <span class="celda-resp" title="Proveedor"><i class="bi bi-building me-1"></i> @(tx.IdProveedorNavigation?.NombreProveedor ?? "Por Asignar")</span>
+                                            <span class="celda-resp" title="Responsable de Pago"><i class="bi bi-person-badge me-1"></i> @(tx.ResponsablePago ?? "ATILSON")</span>
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <select name="moneda_@tx.Id" class="form-select form-select-sm fw-bold" style="font-size:10px; height:28px;">
+                                            <option value="USD" selected="@(tx.Moneda == "USD")">USD</option>
+                                            <option value="CLP" selected="@(tx.Moneda == "CLP")">CLP</option>
+                                        </select>
+                                    </td>
+                                    <td>
+                                        <input type="text" name="monto_@tx.Id" class="inp-fin text-danger" value="@(tx.MontoNeto > 0 ? tx.MontoNeto.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture) : "")" placeholder="0.00" />
+                                        <input type="hidden" name="numdoc_@tx.Id" value="@tx.NumeroDocumento" />
+                                    </td>
+                                </tr>
+                            }
+                            @if (!Model.Egresos.Any())
+                            {
+                                <tr><td colspan="3" class="text-center text-muted py-4">No hay egresos registrados.</td></tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div class="d-flex justify-content-end gap-3 pb-4 pt-3 border-top">
+            @if (isLocked)
+            {
+                <button type="submit" name="AccionFinanzas" value="Desbloquear" class="btn btn-warning fw-bold px-4 shadow-sm" onclick="return confirm('¿Desbloquear operación?');"><i class="bi bi-unlock-fill me-1"></i> Desbloquear Operación</button>
+                <a href="/Finanzas/SetCobro/@Model.OperacionBase.Id" target="_blank" class="btn fw-bold px-4 text-white shadow" style="background-color: var(--atilson-dark);"><i class="bi bi-file-earmark-pdf me-1 text-danger"></i> Generar Set de Cobro PDF</a>
+            }
+            else
+            {
+                <button type="submit" name="AccionFinanzas" value="Guardar" class="btn btn-white border fw-bold px-4 shadow-sm"><i class="bi bi-save me-1"></i> Guardar Borrador</button>
+                <button type="submit" name="AccionFinanzas" value="Liquidar" class="btn btn-success fw-bold px-5 shadow" onclick="return confirm('¿Liquidar y cerrar financieramente?');"><i class="bi bi-shield-lock-fill me-1"></i> Liquidar Operación</button>
+            }
+        </div>
+    </form>
+</div>

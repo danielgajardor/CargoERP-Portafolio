@@ -1,0 +1,252 @@
+﻿@page "{id:int?}"
+@model AtilsonCargoSpa.Pages.App.Clientes.EditModel
+@{
+    ViewData["Title"] = "Ficha Maestra del Cliente";
+}
+
+<style>
+    :root {
+        --txt-main: #0f172a;
+        --txt-muted: #64748b;
+        --border-soft: #e2e8f0;
+        --bg-main: #ffffff;
+        --bg-soft: #f8fafc;
+        --atilson-dark: #2c1b4d;
+    }
+
+    body {
+        background-color: #f1f5f9;
+    }
+
+    .dossier-header {
+        background: var(--bg-main);
+        padding: 20px 30px;
+        border-bottom: 1px solid var(--border-soft);
+        border-radius: 8px 8px 0 0;
+    }
+
+    .dossier-body {
+        background: var(--bg-main);
+        padding: 30px;
+        border-radius: 0 0 8px 8px;
+        box-shadow: 0 4px 6px -1px rgba(0,0,0,0.03);
+        margin-bottom: 24px;
+    }
+
+    .section-title {
+        font-size: 11px;
+        font-weight: 800;
+        color: var(--txt-muted);
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        border-bottom: 2px solid var(--border-soft);
+        padding-bottom: 8px;
+        margin-bottom: 20px;
+    }
+
+    .input-label {
+        font-size: 10px;
+        font-weight: 800;
+        color: var(--txt-muted);
+        text-transform: uppercase;
+        margin-bottom: 6px;
+        display: block;
+    }
+
+    .input-modern {
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--txt-main);
+        background-color: var(--bg-soft);
+        border: 1px solid #cbd5e1;
+        border-radius: 6px;
+        padding: 10px 14px;
+        width: 100%;
+        transition: all 0.2s;
+    }
+
+        .input-modern:focus {
+            outline: none;
+            border-color: var(--atilson-dark);
+            background-color: var(--bg-main);
+            box-shadow: 0 0 0 3px rgba(44, 27, 77, 0.1);
+        }
+
+    .status-select {
+        background-color: #f0fdf4;
+        color: #166534;
+        border-color: #bbf7d0;
+        font-weight: 800;
+    }
+
+    /* TABLA ERP PARA TARIFAS */
+    .table-erp {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 0;
+    }
+
+        .table-erp th {
+            background: var(--bg-soft);
+            color: var(--txt-muted);
+            font-size: 10px;
+            font-weight: 800;
+            text-transform: uppercase;
+            padding: 12px 16px;
+            border-bottom: 2px solid var(--border-soft);
+            white-space: nowrap;
+        }
+
+        .table-erp td {
+            padding: 12px 16px;
+            font-size: 12px;
+            font-weight: 500;
+            border-bottom: 1px solid #f1f5f9;
+            vertical-align: middle;
+        }
+
+        .table-erp tbody tr:hover {
+            background-color: #f8fafc;
+        }
+
+    .badge-area {
+        font-size: 9px;
+        font-weight: 800;
+        padding: 4px 8px;
+        border-radius: 4px;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+</style>
+
+<div class="container-fluid py-4" style="max-width: 1400px;">
+    <form method="post">
+        <input type="hidden" asp-for="Cliente.Id" />
+        <input type="hidden" asp-for="Cliente.FechaCreacion" />
+        <input type="hidden" asp-for="Cliente.UsuarioCreador" />
+
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <div>
+                <h1 style="font-size: 22px; font-weight: 800; color: var(--txt-main); margin: 0; text-transform: uppercase;">FICHA COMERCIAL: @Model.Cliente.RazonSocial</h1>
+                <p class="text-muted small m-0 fw-medium">Configuración de empresa y tarifario asociado</p>
+            </div>
+            <div class="d-flex gap-2">
+                <a asp-page="Index" class="btn btn-light border fw-bold text-muted px-4 shadow-sm" style="font-size: 12px;">CANCELAR</a>
+                <button type="submit" class="btn btn-dark fw-bold px-4 shadow-sm" style="background-color: var(--atilson-dark); border: none; font-size: 12px;"><i class="bi bi-save me-2"></i>GUARDAR CAMBIOS</button>
+            </div>
+        </div>
+
+        <div class="dossier-body">
+            <div class="row">
+                <div class="col-md-6 border-end pe-4">
+                    <div class="section-title"><i class="bi bi-building me-2"></i>1. Identificación y Estado</div>
+                    <div class="row g-3">
+                        <div class="col-md-4">
+                            <label class="input-label">RUT / Tax ID</label>
+                            <input asp-for="Cliente.Rut" class="input-modern" required />
+                        </div>
+                        <div class="col-md-8">
+                            <label class="input-label">Razón Social</label>
+                            <input asp-for="Cliente.RazonSocial" class="input-modern" required />
+                        </div>
+                        <div class="col-md-8">
+                            <label class="input-label">Nombre de Fantasía</label>
+                            <input asp-for="Cliente.NombreCliente" class="input-modern" />
+                        </div>
+                        <div class="col-md-4">
+                            <label class="input-label">Estado Comercial</label>
+                            <select asp-for="Cliente.Activo" class="input-modern status-select">
+                                <option value="1">🟢 ACTIVO</option>
+                                <option value="0">❌ INACTIVO</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-md-6 ps-4">
+                    <div class="section-title"><i class="bi bi-geo-alt-fill me-2"></i>2. Contacto y Ubicación</div>
+                    <div class="row g-3">
+                        <div class="col-md-12">
+                            <label class="input-label">Dirección Comercial</label>
+                            <input asp-for="Cliente.Direccion" class="input-modern" />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="input-label">Ciudad / Región</label>
+                            <select asp-for="Cliente.IdCiudad" class="input-modern" asp-items="ViewBag.IdCiudad">
+                                <option value="">-- Seleccionar Ciudad --</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="input-label">Persona de Contacto</label>
+                            <input asp-for="Cliente.Contacto" class="input-modern text-uppercase" placeholder="Nombre completo" />
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="dossier-body p-0 overflow-hidden">
+            <div class="dossier-header d-flex justify-content-between align-items-center">
+                <h6 class="m-0 fw-bold" style="color: var(--atilson-dark);"><i class="bi bi-briefcase-fill me-2"></i>3. Cierres de Negocio Asociados (Tarifario)</h6>
+                <span class="badge bg-light text-muted border">Modificable desde el Módulo Comercial</span>
+            </div>
+
+            <table class="table-erp">
+                <thead>
+                    <tr>
+                        <th class="ps-4">Área</th>
+                        <th>Concepto / Tramo</th>
+                        <th>Ruta (Origen ➔ Destino)</th>
+                        <th>Equipo</th>
+                        <th class="text-end">Tarifa Pactada</th>
+                        <th class="text-center">Vigencia</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (Model.Cliente.TarifasClientes != null && Model.Cliente.TarifasClientes.Any(t => t.EsActiva == true))
+                    {
+                        @foreach (var tarifa in Model.Cliente.TarifasClientes.Where(t => t.EsActiva == true).OrderBy(t => t.GrupoCobro))
+                        {
+                            <tr>
+                                <td class="ps-4">
+                                    <span class="badge-area @(tarifa.GrupoCobro == "Marítimo" ? "bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25" : tarifa.GrupoCobro == "Terrestre" ? "bg-warning bg-opacity-10 text-dark border border-warning border-opacity-50" : "bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25")">
+                                        @tarifa.GrupoCobro
+                                    </span>
+                                </td>
+                                <td class="fw-bold text-dark text-uppercase">@tarifa.Concepto</td>
+                                <td>
+                                    @if (!string.IsNullOrEmpty(tarifa.Pol))
+                                    {
+                                        <span class="text-muted text-uppercase" style="font-size: 11px;">@tarifa.Pol <i class="bi bi-arrow-right mx-1"></i> @tarifa.Pod</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-muted">-</span>
+                                    }
+                                </td>
+                                <td><span class="text-muted text-uppercase" style="font-size: 11px;">@(tarifa.TipoContenedor ?? "ALL")</span></td>
+                                <td class="text-end fw-bold" style="color: var(--atilson-dark);">
+                                    @tarifa.Moneda $@tarifa.PrecioPactado.ToString("N2")
+                                </td>
+                                <td class="text-center">
+                                    <span class="fw-bold @(tarifa.FechaFinVigencia < DateTime.Now ? "text-danger" : "text-success")">
+                                        @tarifa.FechaFinVigencia.ToString("dd/MM/yyyy")
+                                    </span>
+                                </td>
+                            </tr>
+                        }
+                    }
+                    else
+                    {
+                        <tr>
+                            <td colspan="6" class="text-center py-5 text-muted">
+                                <i class="bi bi-inbox fs-3 d-block mb-2 opacity-50"></i>
+                                No existen tarifas o acuerdos vigentes para este cliente.
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </form>
+</div>

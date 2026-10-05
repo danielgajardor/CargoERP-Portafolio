@@ -1,0 +1,1986 @@
+﻿@model AtilsonCargoSpa.Models.DocumentalPanelVm
+@using AtilsonCargoSpa.Helpers
+@{
+    var op = Model.Op;
+    var d = Model.Doc;
+
+    // Enruta al overload correcto de IndexModel según si este panel representa
+    // el contenedor principal (Grupal, IdUnidadTecnica == null) o un contenedor
+    // específico (Individual, IdUnidadTecnica con valor).
+                (string? PagadoPor, string? Responsable, bool PendienteTarifa, string ConceptoReal) EstadoConcepto(string concepto)
+        => Model.IdUnidadTecnica.HasValue
+            ? Model.PageModel.ObtenerEstadoConcepto(op, concepto, Model.IdUnidadTecnica.Value)
+            : Model.PageModel.ObtenerEstadoConcepto(op, concepto);
+
+        // Concepto EXACTO por slot de reemisión (1=Principal, 2="R1", 3="R2", 4="R3"),
+        // con el mismo sufijo "(Uxx)" que ya usa el resto del panel cuando el booking
+        // gestiona el certificado por contenedor individual.
+        (string? PagadoPor, string? Responsable, bool PendienteTarifa, string ConceptoReal) EstadoConceptoSlot(string conceptoBase, int slot)
+        {
+            string sufijoReemision = slot switch { 2 => " R1", 3 => " R2", 4 => " R3", _ => "" };
+            string sufijoUnidad = Model.IdUnidadTecnica.HasValue ? $" (U{Model.IdUnidadTecnica.Value})" : "";
+            return Model.PageModel.ObtenerEstadoConceptoExacto(op, $"{conceptoBase}{sufijoReemision}{sufijoUnidad}");
+        }
+
+        bool TarifaPendiente(params string[] conceptos)
+        => Model.IdUnidadTecnica.HasValue
+            ? Model.PageModel.HayTarifaPendiente(op, Model.IdUnidadTecnica.Value, conceptos)
+            : Model.PageModel.HayTarifaPendiente(op, conceptos);
+
+    bool TieneSolicitudPendiente(string certKey)
+        => op.SolicitudesDesbloqueos != null && op.SolicitudesDesbloqueos.Any(s => s.CertKey == certKey && s.IdUnidadTecnica == Model.IdUnidadTecnica && s.Estado == "PENDIENTE");
+}
+<form id="doc-global-form-v3-@Model.IdSuffix" method="post" action="/Operaciones/Index?handler=QuickEditDocumental" enctype="multipart/form-data">
+    <input type="hidden" name="__RequestVerificationToken" value="" class="anti-forgery-token-input" />
+    <input type="hidden" name="IdOperacion" value="@op.Id" />
+    @if (Model.IdUnidadTecnica.HasValue)
+    {
+        <input type="hidden" name="IdUnidadTecnica" value="@Model.IdUnidadTecnica" />
+    }
+
+    <div class="d-flex justify-content-between align-items-center mb-4 pb-2" style="border-bottom: 1px solid #e5e7eb;">
+        <div>
+            <h5 class="fw-black text-dark m-0" style="font-size: 18px; letter-spacing: -0.5px;">Gestor Documental Pro@(Model.Label != null ? $" — {Model.Label}" : "")</h5>
+            <p class="text-muted m-0 mt-1" style="font-size: 12px;">Arquitectura limpia para gestión de certificados.</p>
+        </div>
+        <div class="d-flex gap-2 align-items-center">
+            <span class="text-muted" style="font-size:10px; font-weight:700;">Cada certificado guarda y notifica a Finanzas de forma independiente.</span>
+        </div>
+    </div>
+
+    @{
+        string dAd = (!string.IsNullOrEmpty(d?.DusDin) || !string.IsNullOrEmpty(d?.Din)) ? "bg-success" : "bg-warning";
+        string dOr = DocumentalHelpers.GetProDot(true, d?.LogOrigen ?? "");
+        string dFi = DocumentalHelpers.GetProDot(d?.AplicaSag, d?.LogFitosanitario ?? "");
+        string dSa = DocumentalHelpers.GetProDot(d?.AplicaSernapesca, d?.LogSanitario ?? "");
+        string dCa = DocumentalHelpers.GetProDot(d?.AplicaSernapesca, d?.LogCaptura ?? "");
+        string dBa = (!string.IsNullOrEmpty(d?.LogFactura) || !string.IsNullOrEmpty(d?.LogGuia)) ? "bg-success" : "bg-warning";
+    }
+
+    <div class="pro-wrapper">
+
+        <div class="pro-sidebar d-flex flex-column">
+        <div class="mb-4 pb-3 border-bottom" style="border-color: #e5e7eb;">
+            <label class="pro-label text-dark mb-3"><i class="bi bi-gear-fill me-1 text-muted"></i> Requerimientos</label>
+            <div class="d-flex flex-column gap-2 px-1">
+                <label class="d-flex align-items-center gap-2 m-0 cursor-pointer p-1 rounded" style="transition: background 0.2s;" onmouseover="this.style.background='#f1f5f9'" onmouseout="this.style.background='transparent'">
+                    <input class="pro-check inline-field" type="checkbox" id="chkSag-v3-@Model.IdSuffix" name="docUpdates.AplicaSag" value="true" @(d?.AplicaSag == true ? "checked" : "") onchange="handleTipoTramite('v3-@Model.IdSuffix', 'sag')">
+                    <span class="fw-bold text-success" style="font-size:10px; text-transform:uppercase; margin-top:1px;">Aplica SAG</span>
+                </label>
+                <label class="d-flex align-items-center gap-2 m-0 cursor-pointer p-1 rounded" style="transition: background 0.2s;" onmouseover="this.style.background='#f1f5f9'" onmouseout="this.style.background='transparent'">
+                    <input class="pro-check inline-field" type="checkbox" id="chkSerna-v3-@Model.IdSuffix" name="docUpdates.AplicaSernapesca" value="true" @(d?.AplicaSernapesca == true ? "checked" : "") onchange="handleTipoTramite('v3-@Model.IdSuffix', 'sernapesca')">
+                    <span class="fw-bold text-info" style="font-size:10px; text-transform:uppercase; margin-top:1px;">Aplica Sernapesca</span>
+                </label>
+                <label class="d-flex align-items-center gap-2 m-0 cursor-pointer p-1 rounded" style="transition: background 0.2s;" onmouseover="this.style.background='#f1f5f9'" onmouseout="this.style.background='transparent'">
+                    <input class="pro-check inline-field" type="checkbox" id="chkTerr-v3-@Model.IdSuffix" value="true" @(Model.ReqTerrestre ? "checked" : "") onchange="handleTipoTramite('v3-@Model.IdSuffix', 'terrestre')">
+                    <span class="fw-bold text-secondary" style="font-size:10px; text-transform:uppercase; margin-top:1px;">Servicio Terrestre</span>
+                </label>
+            </div>
+        </div>
+
+        <label class="pro-label text-dark mb-2"><i class="bi bi-file-earmark-check me-1 text-muted"></i> Certificados</label>
+        <button type="button" class="pro-nav-btn pro-nav-btn-@Model.IdSuffix active" id="btn-aduana-@Model.IdSuffix" onclick="openProTab('@Model.IdSuffix', 'aduana')"><div class="pro-dot @dAd"></div> Aduana y Trámites</button>
+        <button type="button" class="pro-nav-btn pro-nav-btn-@Model.IdSuffix" id="btn-origen-@Model.IdSuffix" onclick="openProTab('@Model.IdSuffix', 'origen')"><div class="pro-dot @dOr"></div> Origen / TLC</button>
+        <button type="button" class="pro-nav-btn pro-nav-btn-@Model.IdSuffix" id="sidebar-btn-fito-@Model.IdSuffix" onclick="openProTab('@Model.IdSuffix', 'fito')" style="display: @(d?.AplicaSag == true ? "flex" : "none");">
+            <div class="pro-dot @dFi"></div> Fitosanitario (SAG)
+        </button>
+        <button type="button" class="pro-nav-btn pro-nav-btn-@Model.IdSuffix" id="sidebar-btn-sani-@Model.IdSuffix" onclick="openProTab('@Model.IdSuffix', 'sani')" style="display: @(d?.AplicaSernapesca == true ? "flex" : "none");">
+            <div class="pro-dot @dSa"></div> Sanitario (Sernap.)
+        </button>
+        <button type="button" class="pro-nav-btn pro-nav-btn-@Model.IdSuffix" id="sidebar-btn-cap-@Model.IdSuffix" onclick="openProTab('@Model.IdSuffix', 'cap')" style="display: @(d?.AplicaSernapesca == true ? "flex" : "none");">
+            <div class="pro-dot @dCa"></div> Cert. Captura
+        </button>
+        <button type="button" class="pro-nav-btn pro-nav-btn-@Model.IdSuffix" id="btn-sub-@Model.IdSuffix" onclick="openProTab('@Model.IdSuffix', 'sub')"><div class="pro-dot bg-secondary opacity-50"></div> Otros Subcerts</button>
+        <button type="button" class="pro-nav-btn pro-nav-btn-@Model.IdSuffix" id="btn-base-@Model.IdSuffix" onclick="openProTab('@Model.IdSuffix', 'base')"><div class="pro-dot @dBa"></div> Documentos Base</button>
+    </div>
+
+    <div class="pro-content-area" style="overflow-y: auto; height: 750px; transition: none;">
+
+        @{ bool aduanaPendiente = TarifaPendiente("Honorarios Agencia", "Legalización / Emisión DUS"); }
+        <div class="pro-pane-@Model.IdSuffix" id="pane-aduana-@Model.IdSuffix" style="display: block;" data-tarifa-pendiente="@(aduanaPendiente ? "true" : "false")">
+            <div class="d-flex justify-content-between align-items-center mb-4 pb-3 border-bottom border-light">
+                <div>
+                    <h3 class="pro-title"><i class="bi bi-bank me-2 text-primary"></i>Aduana y Trámites</h3>
+                    <p class="pro-subtitle m-0">Gestión de declaraciones y extracostos aduaneros.</p>
+                </div>
+                <div class="text-end">
+                    <a class="btn-edit-inline" style="font-size:11px;" onclick="toggleEditCert('aduana', 'v3-@Model.IdSuffix', this)"><i class="bi bi-pencil me-1"></i> Editar</a>
+                    <div class="btn-save-wrapper d-none d-flex gap-1 mt-1">
+                        <button type="button" class="btn btn-sm btn-outline-secondary py-1 px-2" style="font-size:10px;" onclick="descartarCert('aduana', 'v3-@Model.IdSuffix')">Descartar</button>
+                        <button type="button" class="btn btn-sm btn-success py-1 px-2" style="font-size:10px;" onclick="guardarCertificadoAjax('aduana', 'v3-@Model.IdSuffix', false, this)"><i class="bi bi-save me-1"></i> Guardar</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="row g-4 mb-4">
+                <div class="col-md-5">
+                    <label class="pro-label">Agencia de Aduanas</label>
+                    <select name="docUpdates.IdAgenciaAduana" class="pro-input fw-bold mb-4 select2-enable" disabled onchange="validarBloqueoAgencia('v3-@Model.IdSuffix')">
+    <option value="">-- Seleccionar Agencia --</option>
+                        @if (ViewBag.IdAgenciaAduana != null) {
+                            foreach (var item in (Microsoft.AspNetCore.Mvc.Rendering.SelectList)ViewBag.IdAgenciaAduana) {
+                                if (d != null && d.IdAgenciaAduana?.ToString() == item.Value) { <option value="@item.Value" selected>@item.Text</option> }
+                                else { <option value="@item.Value">@item.Text</option> }
+                            }
+                        }
+                    </select>
+
+                    <label class="pro-label">Estado Documental General</label>
+                    <input type="text" name="docUpdates.EstadoDocumental" class="pro-input text-uppercase fw-bold" value="@d?.EstadoDocumental" placeholder="Ej: Autorizado..." readonly />
+                </div>
+                <div class="col-md-7">
+                    <div class="pro-card-gray m-0 h-100">
+                        <div class="d-flex gap-4 mb-3">
+                            <label class="d-flex align-items-center gap-2 m-0 cursor-pointer">
+                                <input class="pro-check inline-field" type="radio" name="TipoDec_v3_@Model.IdSuffix" id="radioDus_v3-@Model.IdSuffix" value="DUS" @(string.IsNullOrEmpty(d?.Din) ? "checked" : "") onchange="toggleDeclaracion('v3-@Model.IdSuffix')" disabled>
+                                <span class="fw-bold text-primary" style="font-size:12px;">DUS (Exportación)</span>
+                            </label>
+                            <label class="d-flex align-items-center gap-2 m-0 cursor-pointer">
+                                <input class="pro-check inline-field" type="radio" name="TipoDec_v3_@Model.IdSuffix" id="radioDin_v3-@Model.IdSuffix" value="DIN" @(!string.IsNullOrEmpty(d?.Din) ? "checked" : "") onchange="toggleDeclaracion('v3-@Model.IdSuffix')" disabled>
+                                <span class="fw-bold text-primary" style="font-size:12px;">DIN (Importación)</span>
+                            </label>
+                        </div>
+                        <div class="row g-3" id="container-dus-v3-@Model.IdSuffix" style="display: @(string.IsNullOrEmpty(d?.Din) ? "flex" : "none");">
+                            <div class="col-7"><label class="pro-label text-primary">N° DUS</label><input type="text" name="docUpdates.Dus" class="pro-input text-uppercase fw-bold text-primary" value="@d?.DusDin" placeholder="Número..." readonly /></div>
+                            <div class="col-5"><label class="pro-label text-success">Valor Trámite ($)</label><input type="text" inputmode="decimal" name="docUpdates.ValorDus" class="pro-input doc-val-input text-success fw-bold" value="@d?.ValorDus" placeholder="0" readonly /></div>
+                        </div>
+                        <div class="row g-3" id="container-din-v3-@Model.IdSuffix" style="display: @(!string.IsNullOrEmpty(d?.Din) ? "flex" : "none");">
+                            <div class="col-7"><label class="pro-label text-primary">N° DIN</label><input type="text" name="docUpdates.Din" class="pro-input text-uppercase fw-bold text-primary" value="@d?.Din" placeholder="Número..." readonly /></div>
+                            <div class="col-5"><label class="pro-label text-success">Valor Trámite ($)</label><input type="text" inputmode="decimal" name="docUpdates.ValorDin" class="pro-input doc-val-input text-success fw-bold" value="@d?.ValorDin" placeholder="0" readonly /></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="pro-card-red m-0">
+    <label class="pro-label text-danger mb-3"><i class="bi bi-exclamation-triangle-fill me-1"></i> Trámites de Corrección / Extracostos</label>
+    <div class="row g-3">
+        <div class="col-md-4">
+            <label class="d-flex align-items-center gap-2 m-0 cursor-pointer">
+                <input class="pro-check inline-field" type="checkbox" id="chkAcl-v3-@Model.IdSuffix" name="docUpdates.ExtensionDocumental" value="true" @(d?.ExtensionDocumental == true ? "checked" : "") onchange="toggleExclusionTramites('v3-@Model.IdSuffix');">
+                <span class="fw-bold" style="font-size:12px; color:#991b1b;">Aclaración</span>
+            </label>
+        </div>
+        <div class="col-md-4">
+            <label class="d-flex align-items-center gap-2 m-0 cursor-pointer">
+                <input class="pro-check inline-field" type="checkbox" id="chkCan-v3-@Model.IdSuffix" name="docUpdates.GuiaVisado" value="true" @(d?.GuiaVisado == true ? "checked" : "") onchange="toggleExclusionTramites('v3-@Model.IdSuffix');">
+                <span class="fw-bold" style="font-size:12px; color:#991b1b;">Cancelación</span>
+            </label>
+        </div>
+        <div class="col-md-4">
+            <label class="d-flex align-items-center gap-2 m-0 cursor-pointer">
+                <input class="pro-check inline-field" type="checkbox" id="chkRol-v3-@Model.IdSuffix" name="docUpdates.Roleo" value="true" @(d?.Roleo == true ? "checked" : "")>
+                <span class="fw-bold" style="font-size:12px; color:#991b1b;">Roleo</span>
+            </label>
+        </div>
+    </div>
+</div>
+
+    <div class="pro-card m-0 mt-3 p-3" id="ivv-container-v3-@Model.IdSuffix" style="background-color: #f8fafc; border-color: #cbd5e1; opacity: @(d?.GeneracionIvv == true ? "1" : "0.5"); transition: opacity 0.3s;">
+        <div class="d-flex align-items-center gap-2">
+            <input class="pro-check inline-field" type="checkbox" id="chkIvv-v3-@Model.IdSuffix" name="docUpdates.GeneracionIvv" value="true" @(d?.GeneracionIvv == true ? "checked" : "") disabled onchange="document.getElementById('ivv-container-v3-@Model.IdSuffix').style.opacity = this.checked ? '1' : '0.5';">
+            <label class="form-check-label fw-bold text-dark" style="font-size:12px; text-transform:uppercase; cursor: pointer;" for="chkIvv-v3-@Model.IdSuffix">
+                <i class="bi bi-file-earmark-check text-primary me-1"></i> Generación IVV
+            </label>
+        </div>
+    </div>
+
+    @if (aduanaPendiente)
+    {
+        <div class="alert alert-danger d-flex align-items-center gap-2 py-2 px-3 mt-3 mb-0" style="font-size:11px; font-weight:700; border-radius:8px;">
+            <i class="bi bi-lock-fill"></i>
+            <div><strong>Pendiente de asignación de tarifa.</strong> Comercial debe agregar el valor de Honorarios Agencia / Legalización en Acuerdos Operativos.</div>
+        </div>
+    }
+    @{ var estRespAduana = EstadoConcepto("Honorarios Agencia"); }
+    <div class="d-flex align-items-center gap-1 mt-2 pt-2 border-top" style="font-size:10px;">
+        <span class="text-muted fw-bold"><i class="bi bi-cash-coin"></i></span>
+        <select class="form-select form-select-sm resp-pagado border-0 bg-light" style="width:auto; font-size:10px; font-weight:700; padding:2px 6px; color:#475569;" data-concepto="@estRespAduana.ConceptoReal" onchange="guardarResponsabilidad(@op.Id, this.getAttribute('data-concepto'), this, this.closest('.d-flex').querySelector('.resp-responsable'))">
+            <option value="ATILSON" selected="@(estRespAduana.PagadoPor == "ATILSON" || estRespAduana.PagadoPor == null ? "selected" : null)">Paga: Atilson</option>
+            <option value="AGENCIA" selected="@(estRespAduana.PagadoPor == "AGENCIA" ? "selected" : null)">Paga: Agencia</option>
+            <option value="PROVEEDOR" selected="@(estRespAduana.PagadoPor == "PROVEEDOR" ? "selected" : null)">Paga: Proveedor</option>
+        </select>
+        <span class="text-muted">→</span>
+        <select class="form-select form-select-sm resp-responsable border-0 bg-light" style="width:auto; font-size:10px; font-weight:700; color:#b91c1c;" data-concepto="@estRespAduana.ConceptoReal" onchange="guardarResponsabilidad(@op.Id, this.getAttribute('data-concepto'), this.closest('.d-flex').querySelector('.resp-pagado'), this)">
+            <option value="CLIENTE" selected="@(estRespAduana.Responsable == "CLIENTE" || estRespAduana.Responsable == null ? "selected" : null)">Resp: Cliente</option>
+            <option value="ATILSON" selected="@(estRespAduana.Responsable == "ATILSON" ? "selected" : null)">Resp: Atilson</option>
+            <option value="PROVEEDOR" selected="@(estRespAduana.Responsable == "PROVEEDOR" ? "selected" : null)">Resp: Proveedor</option>
+            <option value="AGENCIA" selected="@(estRespAduana.Responsable == "AGENCIA" ? "selected" : null)">Resp: Agencia</option>
+        </select>
+        <span class="text-muted ms-1" style="font-size:9px;">(Honorarios Agencia)</span>
+    </div>
+        </div>
+
+                                @{
+            var estRespOrigen = EstadoConcepto("Certificado de Origen");
+            string modalidadOri = Model.Op.ModalidadCertOrigen ?? "GRUPAL";
+            bool oriBloqueadaModalidad = Model.PageModel.ModalidadCertBloqueada(Model.Op, "ori");
+            bool oriEsIndividual = modalidadOri == "INDIVIDUAL" && Model.Contenedores.Any(c => c.IdUnidad.HasValue);
+            bool bloqueadoOri = (d?.CertsBloqueados ?? "").Split(',').Contains("ori");
+            bool activoOri1 = DocumentalHelpers.SlotBloqueado(d, "ori", 1);
+            bool activoOri2 = DocumentalHelpers.SlotBloqueado(d, "ori", 2);
+            bool activoOri3 = DocumentalHelpers.SlotBloqueado(d, "ori", 3);
+            bool activoOri4 = DocumentalHelpers.SlotBloqueado(d, "ori", 4);
+            int siguienteSlotOri = DocumentalHelpers.SiguienteSlotEditable(d, "ori");
+            var slotsEnviadosOri = new List<(int Slot, string Label)>();
+            for (int s = 1; s <= 4; s++)
+                if (DocumentalHelpers.SlotBloqueado(d, "ori", s))
+                    slotsEnviadosOri.Add((s, s == 1 ? "Principal" : $"Reemisión {s - 1}"));
+        }
+<div class="pro-pane-@Model.IdSuffix" id="pane-origen-@Model.IdSuffix" style="display: none;" data-tarifa-pendiente="@(estRespOrigen.PendienteTarifa ? "true" : "false")">
+    @if (Model.Contenedores.Any(c => c.IdUnidad.HasValue))
+    {
+        <div class="d-flex align-items-center gap-3 p-2 px-3 mb-3 rounded" style="background:#f8fafc; border:1px solid #e5e7eb;">
+            <span class="mod-label m-0" style="font-size:10px;"><i class="bi bi-boxes me-1"></i> Modalidad</span>
+            <div class="btn-group" role="group">
+                                <input type="radio" class="btn-check modalidad-cert-radio" name="modCertOri-@Model.IdSuffix" id="modOriGrupal-@Model.IdSuffix" value="GRUPAL" @(modalidadOri == "GRUPAL" ? "checked" : "") @(oriBloqueadaModalidad ? "disabled" : "") onchange="cambiarModalidadCertPorCertificado(@Model.Op.Id, 'ori', this.value)">
+                <label class="btn btn-outline-secondary btn-sm fw-bold" for="modOriGrupal-@Model.IdSuffix" style="font-size:10px;">GRUPAL</label>
+                                <input type="radio" class="btn-check modalidad-cert-radio" name="modCertOri-@Model.IdSuffix" id="modOriIndividual-@Model.IdSuffix" value="INDIVIDUAL" @(modalidadOri == "INDIVIDUAL" ? "checked" : "") @(oriBloqueadaModalidad ? "disabled" : "") onchange="cambiarModalidadCertPorCertificado(@Model.Op.Id, 'ori', this.value)">
+                <label class="btn btn-outline-secondary btn-sm fw-bold" for="modOriIndividual-@Model.IdSuffix" style="font-size:10px;">INDIVIDUAL</label>
+            </div>
+            @if (oriBloqueadaModalidad)
+            {
+                <span class="text-muted ms-auto" style="font-size:9px;"><i class="bi bi-lock-fill me-1"></i> Bloqueado — ya hay datos guardados</span>
+            }
+        </div>
+    }
+    @if (!oriEsIndividual)
+    {
+            <div class="d-flex justify-content-between align-items-center mb-4 pb-3 border-bottom border-light">
+                <div>
+                    <h3 class="pro-title">
+                        <i class="bi bi-globe me-2 text-purple"></i>Certificado Origen / TLC
+                                                @if (bloqueadoOri)
+                        {
+                            <span class="badge bg-success bg-opacity-10 text-success border border-success ms-2" style="font-size:9px;"><i class="bi bi-check-circle-fill me-1"></i>ENVIADO A FINANZAS</span>
+                            @if (TieneSolicitudPendiente("ori"))
+                            {
+                                <span class="badge bg-warning bg-opacity-10 text-warning border border-warning ms-2" style="font-size:9px;"><i class="bi bi-hourglass-split me-1"></i>DESBLOQUEO SOLICITADO</span>
+                                                        }
+                            else
+                            {
+                                <button type="button" class="btn btn-link p-0 ms-2" style="font-size:10px; text-decoration:none; color:#0ea5e9;" onclick="solicitarDesbloqueo(@op.Id, @(Model.IdUnidadTecnica.HasValue ? Model.IdUnidadTecnica.Value.ToString() : "null"), 'ori')"><i class="bi bi-unlock-fill me-1"></i>Solicitar Desbloqueo</button>
+                            }
+                        }
+                    </h3>
+                    <p class="pro-subtitle m-0">Documentación y reemisiones de origen.</p>
+                </div>
+                <div class="d-flex align-items-center gap-3">
+                    <input type="hidden" name="aplica_ori_v3_@Model.IdSuffix" value="si" />
+                    <div class="text-end">
+    <a class="btn-edit-inline" style="font-size:11px;" onclick="toggleEditCert('ori', 'v3-@Model.IdSuffix', this)"><i class="bi bi-pencil me-1"></i> Editar</a>
+    <div class="btn-save-wrapper d-none d-flex gap-1 mt-1">
+        <button type="button" class="btn btn-sm btn-outline-secondary py-1 px-2" style="font-size:10px;" onclick="descartarCert('ori', 'v3-@Model.IdSuffix')">Descartar</button>
+        <button type="button" class="btn btn-sm btn-success py-1 px-2" style="font-size:10px;" onclick="guardarCertificadoAjax('ori', 'v3-@Model.IdSuffix', true, this)"><i class="bi bi-send me-1"></i> Guardar</button>
+    </div>
+</div>
+                </div>
+            </div>
+
+            <div id="v3-ori-wrapper-@Model.IdSuffix">
+                <div class="row g-5">
+                    <div class="col-md-7">
+                        <h6 class="pro-label text-purple mt-2 mb-2">Acuerdo Comercial (Destino)</h6>
+<select name="docUpdates.AcuerdoOrigen" class="pro-input fw-bold mb-4" disabled style="max-width: 350px;">
+    <option value="">Seleccione Acuerdo...</option>
+    <option value="ALIANZA DEL PACÍFICO" selected="@(d?.AcuerdoOrigen == "ALIANZA DEL PACÍFICO")">ALIANZA DEL PACÍFICO ($11.183 + IVA)</option>
+    <option value="BOLIVIA" selected="@(d?.AcuerdoOrigen == "BOLIVIA")">BOLIVIA ($11.183 + IVA)</option>
+    <option value="CHINA" selected="@(d?.AcuerdoOrigen == "CHINA")">CHINA ($10.000 SIN IVA)</option>
+    <option value="COLOMBIA" selected="@(d?.AcuerdoOrigen == "COLOMBIA")">COLOMBIA ($11.183 + IVA)</option>
+    <option value="CUBA" selected="@(d?.AcuerdoOrigen == "CUBA")">CUBA ($11.183 + IVA)</option>
+    <option value="ECUADOR" selected="@(d?.AcuerdoOrigen == "ECUADOR")">ECUADOR ($11.183 + IVA)</option>
+    <option value="EFTA" selected="@(d?.AcuerdoOrigen == "EFTA")">EFTA ($10.000 SIN IVA)</option>
+    <option value="EMIRATOS ARABES" selected="@(d?.AcuerdoOrigen == "EMIRATOS ARABES")">EMIRATOS ARABES ($11.183 + IVA)</option>
+    <option value="INDIA" selected="@(d?.AcuerdoOrigen == "INDIA")">INDIA ($11.183 + IVA)</option>
+    <option value="INDONESIA" selected="@(d?.AcuerdoOrigen == "INDONESIA")">INDONESIA ($11.183 + IVA)</option>
+    <option value="JAPON" selected="@(d?.AcuerdoOrigen == "JAPON")">JAPON ($11.183 + IVA)</option>
+    <option value="MALASIA" selected="@(d?.AcuerdoOrigen == "MALASIA")">MALASIA ($11.183 + IVA)</option>
+    <option value="MERCOSUR" selected="@(d?.AcuerdoOrigen == "MERCOSUR")">MERCOSUR ($11.183 + IVA)</option>
+    <option value="PERU" selected="@(d?.AcuerdoOrigen == "PERU")">PERU ($11.183 + IVA)</option>
+    <option value="REINO UNIDO" selected="@(d?.AcuerdoOrigen == "REINO UNIDO")">REINO UNIDO ($10.000 SIN IVA)</option>
+    <option value="TURQUIA" selected="@(d?.AcuerdoOrigen == "TURQUIA")">TURQUIA ($11.183 + IVA)</option>
+    <option value="TAILANDIA" selected="@(d?.AcuerdoOrigen == "TAILANDIA")">TAILANDIA ($11.183 + IVA)</option>
+    <option value="URUGUAY" selected="@(d?.AcuerdoOrigen == "URUGUAY")">URUGUAY ($11.183 + IVA)</option>
+    <option value="VENEZUELA" selected="@(d?.AcuerdoOrigen == "VENEZUELA")">VENEZUELA ($11.183 + IVA)</option>
+    <option value="VIETNAM" selected="@(d?.AcuerdoOrigen == "VIETNAM")">VIETNAM ($11.183 + IVA)</option>
+    <option value="MERCANCIAS PRODUCIDAS (FGN)" selected="@(d?.AcuerdoOrigen == "MERCANCIAS PRODUCIDAS (FGN)")">MERCANCIAS PRODUCIDAS (FGN) ($15.500 + IVA)</option>
+    <option value="REEXPORTACION" selected="@(d?.AcuerdoOrigen == "REEXPORTACION")">REEXPORTACION ($15.500 + IVA)</option>
+    <option value="TLC USA" selected="@(d?.AcuerdoOrigen == "TLC USA")">TLC USA (NO SE COBRA)</option>
+</select>
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+    <h6 class="pro-label m-0">Documentos Físicos</h6>
+    <label class="d-flex align-items-center gap-1 mb-0" style="font-size:9px; font-weight:800; color:#94a3b8; cursor:pointer;" title="Permite guardar y enviar el certificado aunque no tenga N° de documento">
+        <input type="checkbox" id="chkSinNum-ori-v3-@Model.IdSuffix" style="width:13px;height:13px;"> SIN N°
+    </label>
+</div>
+<table class="pro-table" style="table-layout: fixed;">
+    <thead>
+        <tr>
+            <th style="width:6%;"></th>
+            <th style="width: 20%;">Versión</th>
+            <th style="width: 44%;">N° Referencia</th>
+            <th style="width: 30%; text-align:right;">Archivo</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td class="text-center align-middle">
+                @if (activoOri1)
+                { <i class="bi bi-lock-fill text-success" title="Bloqueado por Finanzas" style="font-size:16px;"></i>
+                  <input type="hidden" name="docUpdates.ActivoOri1" value="true" /> }
+                else
+                { <input type="checkbox" class="pro-check inline-field" style="width:16px;height:16px;" name="docUpdates.ActivoOri1" value="true" disabled @(activoOri1 || !string.IsNullOrEmpty(d?.RemisionOrigen1) ? "checked" : "") onchange="toggleInputsRow(this)"> }
+            </td>
+            <td style="font-size: 12px; font-weight: 700; color: #111827;">Principal</td>
+            <td>
+                                <div class="row-inputs" style="display: @(activoOri1 || !string.IsNullOrEmpty(d?.RemisionOrigen1) ? "block" : "none");">
+                    <input type="text" name="docUpdates.NumOri1" class="pro-input @(activoOri1 ? "locked-finanzas" : "")" value="@d?.RemisionOrigen1" placeholder="@(activoOri1 && (d?.CertsSinNumero ?? "").Split(',').Contains("ori1") ? "SIN N°" : "Pendiente...")" readonly />
+                </div>
+            </td>
+            <td class="text-end">
+                <div class="row-inputs" style="display: @(activoOri1 || !string.IsNullOrEmpty(d?.RemisionOrigen1) || !string.IsNullOrEmpty(d?.EvidenciaOrigen1) ? "block" : "none");">
+                    @if (!string.IsNullOrEmpty(d?.EvidenciaOrigen1)) { <a href="@d.EvidenciaOrigen1" target="_blank" class="pro-btn" style="background:#f0f9ff; color:#0284c7;"><i class="bi bi-eye"></i> Ver</a> }
+                    <input type="file" name="UploadOri1" class="pro-file-input edit-only-file" style="display:none;" onchange="registrarActividadSubcert('ori', 'v3-@Model.IdSuffix', this)" disabled />
+                </div>
+                <input type="hidden" name="docUpdates.ValOri1" value="@d?.ValOri1" />
+            </td>
+        </tr>
+                @if (siguienteSlotOri >= 2)
+        {
+        <tr>
+            <td class="text-center align-middle">
+                @if (activoOri2)
+                { <i class="bi bi-lock-fill text-success" title="Bloqueado por Finanzas" style="font-size:16px;"></i>
+                  <input type="hidden" name="docUpdates.ActivoOri2" value="true" /> }
+                else
+                { <input type="checkbox" class="pro-check inline-field" style="width:16px;height:16px;" name="docUpdates.ActivoOri2" value="true" disabled @(activoOri2 || !string.IsNullOrEmpty(d?.RemisionOrigen2) ? "checked" : "") onchange="toggleInputsRow(this)"> }
+            </td>
+            <td style="font-size: 11px; font-weight: 600; color: #6b7280;">Reemisión 1</td>
+            <td>
+                <div class="row-inputs" style="display: @(activoOri2 || !string.IsNullOrEmpty(d?.RemisionOrigen2) ? "block" : "none");">
+                    <input type="text" name="docUpdates.NumOri2" class="pro-input @(activoOri2 ? "locked-finanzas" : "")" value="@d?.RemisionOrigen2" placeholder="@(activoOri2 && (d?.CertsSinNumero ?? "").Split(',').Contains("ori2") ? "SIN N°" : "Pendiente...")" readonly />
+                </div>
+            </td>
+            <td class="text-end">
+                <div class="row-inputs" style="display: @(activoOri2 || !string.IsNullOrEmpty(d?.RemisionOrigen2) || !string.IsNullOrEmpty(d?.EvidenciaOrigen2) ? "block" : "none");">
+                    @if (!string.IsNullOrEmpty(d?.EvidenciaOrigen2)) { <a href="@d.EvidenciaOrigen2" target="_blank" class="pro-btn" style="background:#f0f9ff; color:#0284c7;"><i class="bi bi-eye"></i> Ver</a> }
+                    <input type="file" name="UploadOri2" class="pro-file-input edit-only-file" style="display:none;" onchange="registrarActividadSubcert('ori', 'v3-@Model.IdSuffix', this)" disabled />
+                </div>
+                <input type="hidden" name="docUpdates.ValOri2" value="@d?.ValOri2" />
+            </td>
+        </tr>
+        }
+                @if (siguienteSlotOri >= 3)
+        {
+        <tr>
+            <td class="text-center align-middle">
+                @if (activoOri3)
+                { <i class="bi bi-lock-fill text-success" title="Bloqueado por Finanzas" style="font-size:16px;"></i>
+                  <input type="hidden" name="docUpdates.ActivoOri3" value="true" /> }
+                else
+                { <input type="checkbox" class="pro-check inline-field" style="width:16px;height:16px;" name="docUpdates.ActivoOri3" value="true" disabled @(activoOri3 || !string.IsNullOrEmpty(d?.NumOri3) ? "checked" : "") onchange="toggleInputsRow(this)"> }
+            </td>
+            <td style="font-size: 11px; font-weight: 600; color: #6b7280;">Reemisión 2</td>
+            <td>
+                <div class="row-inputs" style="display: @(activoOri3 || !string.IsNullOrEmpty(d?.NumOri3) ? "block" : "none");">
+                    <input type="text" name="docUpdates.NumOri3" class="pro-input @(activoOri3 ? "locked-finanzas" : "")" value="@d?.NumOri3" placeholder="@(activoOri3 && (d?.CertsSinNumero ?? "").Split(',').Contains("ori3") ? "SIN N°" : "Pendiente...")" readonly />
+                </div>
+            </td>
+            <td class="text-end">
+                <div class="row-inputs" style="display: @(activoOri3 || !string.IsNullOrEmpty(d?.NumOri3) || !string.IsNullOrEmpty(d?.EvidenciaOrigen3) ? "block" : "none");">
+                    @if (!string.IsNullOrEmpty(d?.EvidenciaOrigen3)) { <a href="@d.EvidenciaOrigen3" target="_blank" class="pro-btn" style="background:#f0f9ff; color:#0284c7;"><i class="bi bi-eye"></i> Ver</a> }
+                    <input type="file" name="UploadOri3" class="pro-file-input edit-only-file" style="display:none;" onchange="registrarActividadSubcert('ori', 'v3-@Model.IdSuffix', this)" disabled />
+                </div>
+                <input type="hidden" name="docUpdates.ValOri3" value="@d?.ValOri3" />
+            </td>
+        </tr>
+        }
+                @if (siguienteSlotOri >= 4)
+        {
+        <tr>
+            <td class="text-center align-middle">
+                @if (activoOri4)
+                { <i class="bi bi-lock-fill text-success" title="Bloqueado por Finanzas" style="font-size:16px;"></i>
+                  <input type="hidden" name="docUpdates.ActivoOri4" value="true" /> }
+                else
+                { <input type="checkbox" class="pro-check inline-field" style="width:16px;height:16px;" name="docUpdates.ActivoOri4" value="true" disabled @(activoOri4 || !string.IsNullOrEmpty(d?.NumOri4) ? "checked" : "") onchange="toggleInputsRow(this)"> }
+            </td>
+            <td style="font-size: 11px; font-weight: 600; color: #6b7280;">Reemisión 3</td>
+            <td>
+                <div class="row-inputs" style="display: @(activoOri4 || !string.IsNullOrEmpty(d?.NumOri4) ? "block" : "none");">
+                    <input type="text" name="docUpdates.NumOri4" class="pro-input @(activoOri4 ? "locked-finanzas" : "")" value="@d?.NumOri4" placeholder="@(activoOri4 && (d?.CertsSinNumero ?? "").Split(',').Contains("ori4") ? "SIN N°" : "Pendiente...")" readonly />
+                </div>
+            </td>
+            <td class="text-end">
+                <div class="row-inputs" style="display: @(activoOri4 || !string.IsNullOrEmpty(d?.NumOri4) || !string.IsNullOrEmpty(d?.EvidenciaOrigen4) ? "block" : "none");">
+                    @if (!string.IsNullOrEmpty(d?.EvidenciaOrigen4)) { <a href="@d.EvidenciaOrigen4" target="_blank" class="pro-btn" style="background:#f0f9ff; color:#0284c7;"><i class="bi bi-eye"></i> Ver</a> }
+                    <input type="file" name="UploadOri4" class="pro-file-input edit-only-file" style="display:none;" onchange="registrarActividadSubcert('ori', 'v3-@Model.IdSuffix', this)" disabled />
+                </div>
+                <input type="hidden" name="docUpdates.ValOri4" value="@d?.ValOri4" />
+            </td>
+        </tr>
+        }
+    </tbody>
+</table>
+                        <label class="pro-label mt-4">Observaciones Adicionales</label>
+                        <textarea class="pro-input" name="docUpdates.ObsOrigen" rows="3" placeholder="Detalles..." style="resize:none;" readonly>@(d?.ObsOrigen)</textarea>
+                    </div>
+                    <div class="col-md-5">
+                        <h6 class="pro-label">Registro de Actividad</h6>
+                        <input type="hidden" name="docUpdates.LogOrigen" value="@d?.LogOrigen" />
+                        <div class="pro-card-gray log-incidencias-wrap" id="log-ori-txt-v3-@Model.IdSuffix" style="height: 100%; min-height: 420px; overflow-y: auto;">
+                            @Html.Raw(!string.IsNullOrEmpty(d?.LogOrigen) ? d.LogOrigen : "<span style='font-size:12px; color:#9ca3af;'>Sin actividad.</span>")
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+                        @if (estRespOrigen.PendienteTarifa)
+            {
+                <div class="alert alert-danger d-flex align-items-center gap-2 py-2 px-3 mt-3 mb-0" style="font-size:11px; font-weight:700; border-radius:8px;">
+                    <i class="bi bi-lock-fill"></i>
+                    <div><strong>Pendiente de asignación de tarifa.</strong> Comercial debe agregar el valor de Certificado de Origen en Acuerdos Operativos.</div>
+                </div>
+                                    }
+            @foreach (var slotInfo in slotsEnviadosOri)
+            {
+                var estRespSlot = EstadoConceptoSlot("Certificado de Origen", slotInfo.Slot);
+                <div class="d-flex align-items-center gap-1 mt-2 pt-2 border-top" style="font-size:10px;">
+                    <span class="text-muted fw-bold" style="min-width:68px;">@slotInfo.Label:</span>
+                    <span class="text-muted fw-bold"><i class="bi bi-cash-coin"></i></span>
+                    <select class="form-select form-select-sm resp-pagado border-0 bg-light" style="width:auto; font-size:10px; font-weight:700; padding:2px 6px; color:#475569;" data-concepto="@estRespSlot.ConceptoReal" onchange="guardarResponsabilidad(@op.Id, this.getAttribute('data-concepto'), this, this.closest('.d-flex').querySelector('.resp-responsable'))">
+                        <option value="ATILSON" selected="@(estRespSlot.PagadoPor == "ATILSON" || estRespSlot.PagadoPor == null ? "selected" : null)">Paga: Atilson</option>
+                        <option value="AGENCIA" selected="@(estRespSlot.PagadoPor == "AGENCIA" ? "selected" : null)">Paga: Agencia</option>
+                        <option value="PROVEEDOR" selected="@(estRespSlot.PagadoPor == "PROVEEDOR" ? "selected" : null)">Paga: Proveedor</option>
+                    </select>
+                    <span class="text-muted">→</span>
+                                        <select class="form-select form-select-sm resp-responsable border-0 bg-light" style="width:auto; font-size:10px; font-weight:700; color:#b91c1c;" data-concepto="@estRespSlot.ConceptoReal" onchange="guardarResponsabilidad(@op.Id, this.getAttribute('data-concepto'), this.closest('.d-flex').querySelector('.resp-pagado'), this)">
+                        <option value="CLIENTE" selected="@(estRespSlot.Responsable == "CLIENTE" || estRespSlot.Responsable == null ? "selected" : null)">Resp: Cliente</option>
+                        <option value="ATILSON" selected="@(estRespSlot.Responsable == "ATILSON" ? "selected" : null)">Resp: Atilson</option>
+                        <option value="PROVEEDOR" selected="@(estRespSlot.Responsable == "PROVEEDOR" ? "selected" : null)">Resp: Proveedor</option>
+                        <option value="AGENCIA" selected="@(estRespSlot.Responsable == "AGENCIA" ? "selected" : null)">Resp: Agencia</option>
+                    </select>
+                </div>
+            }
+    }
+    else
+    {
+        <div class="mb-3">
+            <h3 class="pro-title"><i class="bi bi-globe me-2 text-purple"></i>Certificado Origen / TLC <span class="badge bg-secondary bg-opacity-10 text-secondary border ms-2" style="font-size:9px;">INDIVIDUAL POR CONTENEDOR</span></h3>
+            <p class="pro-subtitle m-0">Cada contenedor gestiona su propio N° de certificado.</p>
+        </div>
+        @foreach (var cOri in Model.Contenedores.Where(c => c.IdUnidad.HasValue))
+        {
+            var estRespOriU = Model.PageModel.ObtenerEstadoConceptoExacto(op, $"Certificado de Origen (U{cOri.IdUnidad})");
+            <div class="p-3 mb-3 rounded border" style="background:#fafbfc;">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <span class="fw-bold text-dark" style="font-size:12px;"><i class="bi bi-box me-1"></i>@cOri.Label</span>
+                    <button type="button" class="btn btn-sm btn-dark py-1 px-3" style="font-size:10px;" onclick="guardarCertOrigenContenedor(@op.Id, @cOri.IdUnidad, 'ori-u-@cOri.IdUnidad-@Model.IdSuffix')">
+                        <i class="bi bi-save me-1"></i> Guardar
+                    </button>
+                </div>
+                <div id="ori-u-@cOri.IdUnidad-@Model.IdSuffix" class="row g-2 align-items-end">
+                    <div class="col-md-5">
+                        <label class="pro-label m-0">N° Certificado de Origen</label>
+                        <input type="text" class="pro-input fw-bold text-uppercase" data-field="NumOri1" value="@cOri.Doc?.RemisionOrigen1" placeholder="Pendiente..." />
+                    </div>
+                    <div class="col-md-4">
+                        <label class="pro-label m-0">Acuerdo Comercial</label>
+                        <select class="pro-input" data-field="AcuerdoOrigen">
+                            <option value="">Seleccione...</option>
+                            @foreach (var acuerdoOpt in new[] { "ALIANZA DEL PACÍFICO","BOLIVIA","CHINA","COLOMBIA","CUBA","ECUADOR","EFTA","EMIRATOS ARABES","INDIA","INDONESIA","JAPON","MALASIA","MERCOSUR","PERU","REINO UNIDO","TURQUIA","TAILANDIA","URUGUAY","VENEZUELA","VIETNAM","MERCANCIAS PRODUCIDAS (FGN)","REEXPORTACION","TLC USA" })
+                            {
+                                <option value="@acuerdoOpt" selected="@(cOri.Doc?.AcuerdoOrigen == acuerdoOpt ? "selected" : null)">@acuerdoOpt</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="pro-label m-0">Archivo</label>
+                        @if (!string.IsNullOrEmpty(cOri.Doc?.EvidenciaOrigen1))
+                        {
+                            <a href="@cOri.Doc.EvidenciaOrigen1" target="_blank" class="pro-btn d-block text-center mb-1" style="background:#f0f9ff; color:#0284c7;"><i class="bi bi-eye"></i> Ver</a>
+                        }
+                        <input type="file" class="pro-file-input" data-field-file="UploadOri1" />
+                    </div>
+                </div>
+                @if (estRespOriU.PendienteTarifa)
+                {
+                    <div class="alert alert-danger py-1 px-2 mt-2 mb-0" style="font-size:10px; font-weight:700;"><i class="bi bi-lock-fill me-1"></i>Pendiente de tarifa para este contenedor.</div>
+                }
+            </div>
+        }
+    }
+        </div>
+
+                @{
+            var estRespFito = EstadoConcepto("Certificado Fitosanitario");
+            string modalidadFit = Model.Op.ModalidadCertFito ?? "GRUPAL";
+            bool fitBloqueadaModalidad = Model.PageModel.ModalidadCertBloqueada(Model.Op, "fit");
+            bool fitEsIndividual = modalidadFit == "INDIVIDUAL" && Model.Contenedores.Any(c => c.IdUnidad.HasValue);
+            bool bloqueadoFit = (d?.CertsBloqueados ?? "").Split(',').Contains("fit");
+        }
+<div class="pro-pane-@Model.IdSuffix" id="pane-fito-@Model.IdSuffix" style="display: none;" data-tarifa-pendiente="@(estRespFito.PendienteTarifa ? "true" : "false")">
+    @if (Model.Contenedores.Any(c => c.IdUnidad.HasValue))
+    {
+        <div class="d-flex align-items-center gap-3 p-2 px-3 mb-3 rounded" style="background:#f8fafc; border:1px solid #e5e7eb;">
+            <span class="mod-label m-0" style="font-size:10px;"><i class="bi bi-boxes me-1"></i> Modalidad</span>
+            <div class="btn-group" role="group">
+                                <input type="radio" class="btn-check modalidad-cert-radio" name="modCertFit-@Model.IdSuffix" id="modFitGrupal-@Model.IdSuffix" value="GRUPAL" @(modalidadFit == "GRUPAL" ? "checked" : "") @(fitBloqueadaModalidad ? "disabled" : "") onchange="cambiarModalidadCertPorCertificado(@Model.Op.Id, 'fit', this.value)">
+                <label class="btn btn-outline-secondary btn-sm fw-bold" for="modFitGrupal-@Model.IdSuffix" style="font-size:10px;">GRUPAL</label>
+                                <input type="radio" class="btn-check modalidad-cert-radio" name="modCertFit-@Model.IdSuffix" id="modFitIndividual-@Model.IdSuffix" value="INDIVIDUAL" @(modalidadFit == "INDIVIDUAL" ? "checked" : "") @(fitBloqueadaModalidad ? "disabled" : "") onchange="cambiarModalidadCertPorCertificado(@Model.Op.Id, 'fit', this.value)">
+                <label class="btn btn-outline-secondary btn-sm fw-bold" for="modFitIndividual-@Model.IdSuffix" style="font-size:10px;">INDIVIDUAL</label>
+            </div>
+            @if (fitBloqueadaModalidad)
+            {
+                <span class="text-muted ms-auto" style="font-size:9px;"><i class="bi bi-lock-fill me-1"></i> Bloqueado — ya hay datos guardados</span>
+            }
+        </div>
+    }
+    @if (!fitEsIndividual)
+    {
+            <div class="d-flex justify-content-between align-items-center mb-4 pb-3 border-bottom border-light">
+                <div>
+                    <h3 class="pro-title">
+                        <i class="bi bi-tree-fill me-2 text-success"></i>Fitosanitario (SAG)
+                                                @if (bloqueadoFit)
+                        {
+                            <span class="badge bg-success bg-opacity-10 text-success border border-success ms-2" style="font-size:9px;"><i class="bi bi-check-circle-fill me-1"></i>ENVIADO A FINANZAS</span>
+                            @if (TieneSolicitudPendiente("fit"))
+                            {
+                                <span class="badge bg-warning bg-opacity-10 text-warning border border-warning ms-2" style="font-size:9px;"><i class="bi bi-hourglass-split me-1"></i>DESBLOQUEO SOLICITADO</span>
+                            }
+                            else
+                            {
+                                <button type="button" class="btn btn-link p-0 ms-2" style="font-size:10px; text-decoration:none; color:#0ea5e9;" onclick="solicitarDesbloqueo(@op.Id, @(Model.IdUnidadTecnica.HasValue ? Model.IdUnidadTecnica.Value.ToString() : "null"), 'fit')"><i class="bi bi-unlock-fill me-1"></i>Solicitar Desbloqueo</button>
+                            }
+                        }
+                        @if (d?.AplicaSag == true)
+                        {
+                            <span class="badge @DocumentalHelpers.GetSagModalidadBadgeClass(d?.SagModalidad) border ms-2" style="font-size:9px;"><i class="bi @DocumentalHelpers.GetSagModalidadIcono(d?.SagModalidad) me-1"></i>@DocumentalHelpers.GetSagModalidadTexto(d?.SagModalidad)</span>
+                        }
+                    </h3>
+                    <p class="pro-subtitle m-0">Aprobación y visación ante el SAG.</p>
+                </div>
+                <div class="d-flex align-items-center gap-3">
+                    <input type="hidden" name="aplica_fit_v3_@Model.IdSuffix" value="si" />
+                    <div class="text-end">
+    <a class="btn-edit-inline" style="font-size:11px;" onclick="toggleEditCert('fit', 'v3-@Model.IdSuffix', this)"><i class="bi bi-pencil me-1"></i> Editar</a>
+    <div class="btn-save-wrapper d-none d-flex gap-1 mt-1">
+        <button type="button" class="btn btn-sm btn-outline-secondary py-1 px-2" style="font-size:10px;" onclick="descartarCert('fit', 'v3-@Model.IdSuffix')">Descartar</button>
+        <button type="button" class="btn btn-sm btn-success py-1 px-2" style="font-size:10px;" onclick="guardarCertificadoAjax('fit', 'v3-@Model.IdSuffix', true, this)"><i class="bi bi-send me-1"></i> Guardar</button>
+    </div>
+</div>
+                </div>
+            </div>
+
+            <div id="v3-fit-wrapper-@Model.IdSuffix" style="opacity: @(d?.AplicaSag == true ? "1" : "0.3"); pointer-events: @(d?.AplicaSag == true ? "auto" : "none"); transition: opacity 0.3s;">
+
+                @{
+                    string logFitV3 = d?.LogFitosanitario?.ToUpper() ?? "";
+                    bool envCliFitV3 = logFitV3.Contains("ENVÍO A CLIENTE");
+                    bool recCliFitV3 = logFitV3.Contains("RESPUESTA CLIENTE");
+                    bool envSagV3 = logFitV3.Contains("INGRESO SAG");
+                    int idxAprFitV3 = logFitV3.IndexOf("APROBADO");
+                    int idxRechFitV3 = logFitV3.IndexOf("RECHAZADO");
+                    bool aprFitV3 = idxAprFitV3 != -1 && (idxRechFitV3 == -1 || idxAprFitV3 < idxRechFitV3);
+                    bool rechFitV3 = idxRechFitV3 != -1 && (idxAprFitV3 == -1 || idxRechFitV3 < idxAprFitV3);
+                }
+
+                <div class="d-flex align-items-center gap-4 mb-3 p-3 rounded bg-light border border-success border-opacity-25 edit-only-flex">
+                    <label class="mod-label text-success m-0"><i class="bi bi-geo-alt-fill me-1"></i> Lugar Inspección SAG</label>
+                    <label class="form-check d-flex align-items-center gap-2 m-0 cursor-pointer">
+                        <input class="form-check-input cuadradito-check inline-field" type="radio" name="docUpdates.SagModalidad" value="Planta" @(d?.SagModalidad == "Planta" ? "checked" : "") disabled onchange="previsualizarSagModalidad(this.value, 'v3-@Model.IdSuffix')">
+                        <span class="fw-bold" style="font-size:11px; color:#1e293b;">SAG en Planta (Costo $0)</span>
+                    </label>
+                    <label class="form-check d-flex align-items-center gap-2 m-0 cursor-pointer">
+                        <input class="form-check-input cuadradito-check inline-field" type="radio" name="docUpdates.SagModalidad" value="Puerto" @(d?.SagModalidad == "Puerto" ? "checked" : "") disabled onchange="previsualizarSagModalidad(this.value, 'v3-@Model.IdSuffix')">
+                        <span class="fw-bold" style="font-size:11px; color:#1e293b;">SAG Fuera de Planta / Puerto (Aplica Tarifa)</span>
+                    </label>
+                    <span id="sag-preview-v3-@Model.IdSuffix" class="ms-auto"></span>
+                </div>
+
+                <div class="pro-stepper" id="stepper-fit-v3-@Model.IdSuffix">
+                    <div class="pro-step @(envCliFitV3 ? "completed" : "")"><div class="pro-step-icon"><i class="bi bi-check-lg"></i></div><div class="pro-step-text">Envío Cli.</div></div>
+                    <div class="pro-step @(recCliFitV3 ? "completed" : "")"><div class="pro-step-icon"><i class="bi bi-check-lg"></i></div><div class="pro-step-text">Recep. Cli.</div></div>
+                    <div class="pro-step @(envSagV3 ? "completed" : "")" id="step-aga-san-v3-@Model.IdSuffix"><div class="pro-step-icon"><i class="bi bi-check-lg"></i></div><div class="pro-step-text">Ingreso SAG</div></div>
+                    <div class="pro-step @(aprFitV3 ? "completed" : (rechFitV3 ? "rejected" : ""))" id="step-aprob-fit-v3-@Model.IdSuffix"><div class="pro-step-icon"><i class="bi @(rechFitV3 ? "bi-x-lg" : "bi-check-lg")"></i></div><div class="pro-step-text">@(aprFitV3 ? "Aprobado" : (rechFitV3 ? "Rechazado" : "Resolución"))</div></div>
+                    <div class="pro-step" id="paso-pago-fit-v3-@Model.IdSuffix" onclick="togglePagoScan(this, 'v3-@Model.IdSuffix')" style="cursor:pointer;"><div class="pro-step-icon"><i class="bi bi-check-lg"></i></div><div class="pro-step-text">Pago Cert</div></div>
+                </div>
+
+                <div class="d-flex gap-2 mb-4 edit-only-flex pb-3 border-bottom border-light">
+                    <button type="button" class="pro-btn" style="background:#10b981; color:#fff;" onclick="registrarResolucionDoc('aprobado', 'fit', 'v3-@Model.IdSuffix', this)"><i class="bi bi-check-circle me-1"></i> Aprobado</button>
+                    <button type="button" class="pro-btn" style="background:#ef4444; color:#fff;" onclick="document.getElementById('v3-rechazo-fit-@Model.IdSuffix').classList.remove('d-none')"><i class="bi bi-x-circle me-1"></i> Rechazado</button>
+                </div>
+                <div id="v3-rechazo-fit-@Model.IdSuffix" class="d-none mb-4 d-flex gap-2">
+                    <input type="text" class="pro-input" id="txt-obs-fit-v3-@Model.IdSuffix" placeholder="Escriba el motivo del rechazo...">
+                    <button type="button" class="pro-btn" style="background:#111827; color:#fff;" onclick="confirmarRechazoDoc('fit', 'v3-@Model.IdSuffix')">Confirmar</button>
+                </div>
+
+                <div class="row g-5">
+                    <div class="col-md-7">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+    <h6 class="pro-label m-0">Documentos Físicos</h6>
+    <label class="d-flex align-items-center gap-1 mb-0" style="font-size:9px; font-weight:800; color:#94a3b8; cursor:pointer;" title="Permite guardar y enviar el certificado aunque no tenga N° de documento">
+        <input type="checkbox" id="chkSinNum-fit-v3-@Model.IdSuffix" style="width:13px;height:13px;"> SIN N°
+    </label>
+</div>
+@{
+    bool activoFit1 = DocumentalHelpers.SlotBloqueado(d, "fit", 1);
+    bool activoFit2 = DocumentalHelpers.SlotBloqueado(d, "fit", 2);
+    bool activoFit3 = DocumentalHelpers.SlotBloqueado(d, "fit", 3);
+    bool activoFit4 = DocumentalHelpers.SlotBloqueado(d, "fit", 4);
+    int siguienteSlotFit = DocumentalHelpers.SiguienteSlotEditable(d, "fit");
+}
+<table class="pro-table" style="table-layout: fixed;">
+    <thead>
+        <tr>
+            <th style="width:6%;"></th>
+            <th style="width: 20%;">Versión</th>
+            <th style="width: 44%;">N° Referencia</th>
+            <th style="width: 30%; text-align:right;">Archivo</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td class="text-center align-middle">
+                @if (activoFit1)
+                { <i class="bi bi-lock-fill text-success" title="Bloqueado por Finanzas" style="font-size:16px;"></i>
+                  <input type="hidden" name="docUpdates.ActivoFit1" value="true" /> }
+                else
+                { <input type="checkbox" class="pro-check inline-field" style="width:16px;height:16px;" name="docUpdates.ActivoFit1" value="true" disabled @(activoFit1 || !string.IsNullOrEmpty(d?.CertFitosanitario) ? "checked" : "") onchange="toggleInputsRow(this)"> }
+            </td>
+            <td style="font-size: 12px; font-weight: 700; color: #111827;">Principal</td>
+            <td>
+                                <div class="row-inputs" style="display: @(activoFit1 || !string.IsNullOrEmpty(d?.CertFitosanitario) ? "block" : "none");">
+                    <input type="text" name="docUpdates.NumFit1" class="pro-input @(activoFit1 ? "locked-finanzas" : "")" value="@d?.CertFitosanitario" placeholder="@(activoFit1 && (d?.CertsSinNumero ?? "").Split(',').Contains("fit1") ? "SIN N°" : "Pendiente...")" readonly />
+                </div>
+            </td>
+            <td class="text-end">
+                <div class="row-inputs" style="display: @(activoFit1 || !string.IsNullOrEmpty(d?.CertFitosanitario) || !string.IsNullOrEmpty(d?.EvidenciaFito1) ? "block" : "none");">
+                    @if (!string.IsNullOrEmpty(d?.EvidenciaFito1)) { <a href="@d.EvidenciaFito1" target="_blank" class="pro-btn" style="background:#ecfdf5; color:#10b981;"><i class="bi bi-eye"></i> Ver</a> }
+                    <input type="file" name="UploadCertFito" class="pro-file-input edit-only-file" style="display:none;" onchange="registrarActividadSubcert('fit', 'v3-@Model.IdSuffix', this)" disabled />
+                </div>
+                <input type="hidden" name="docUpdates.ValFit1" value="@d?.ValFit1" />
+            </td>
+        </tr>
+                @if (siguienteSlotFit >= 2)
+        {
+        <tr>
+            <td class="text-center align-middle">
+                @if (activoFit2)
+                { <i class="bi bi-lock-fill text-success" title="Bloqueado por Finanzas" style="font-size:16px;"></i>
+                  <input type="hidden" name="docUpdates.ActivoFit2" value="true" /> }
+                else
+                { <input type="checkbox" class="pro-check inline-field" style="width:16px;height:16px;" name="docUpdates.ActivoFit2" value="true" disabled @(activoFit2 || !string.IsNullOrEmpty(d?.NumFit2) ? "checked" : "") onchange="toggleInputsRow(this)"> }
+            </td>
+            <td style="font-size: 11px; font-weight: 600; color: #6b7280;">Reemisión 1</td>
+            <td>
+                <div class="row-inputs" style="display: @(activoFit2 || !string.IsNullOrEmpty(d?.NumFit2) ? "block" : "none");">
+                    <input type="text" name="docUpdates.NumFit2" class="pro-input @(activoFit2 ? "locked-finanzas" : "")" value="@d?.NumFit2" placeholder="@(activoFit2 && (d?.CertsSinNumero ?? "").Split(',').Contains("fit2") ? "SIN N°" : "Pendiente...")" readonly />
+                </div>
+            </td>
+            <td class="text-end">
+                <div class="row-inputs" style="display: @(activoFit2 || !string.IsNullOrEmpty(d?.NumFit2) || !string.IsNullOrEmpty(d?.EvidenciaFito2) ? "block" : "none");">
+                    @if (!string.IsNullOrEmpty(d?.EvidenciaFito2)) { <a href="@d.EvidenciaFito2" target="_blank" class="pro-btn" style="background:#ecfdf5; color:#10b981;"><i class="bi bi-eye"></i> Ver</a> }
+                    <input type="file" name="UploadFit2" class="pro-file-input edit-only-file" style="display:none;" onchange="registrarActividadSubcert('fit', 'v3-@Model.IdSuffix', this)" disabled />
+                </div>
+                <input type="hidden" name="docUpdates.ValFit2" value="@d?.ValFit2" />
+            </td>
+        </tr>
+        }
+                @if (siguienteSlotFit >= 3)
+        {
+        <tr>
+            <td class="text-center align-middle">
+                @if (activoFit3)
+                { <i class="bi bi-lock-fill text-success" title="Bloqueado por Finanzas" style="font-size:16px;"></i>
+                  <input type="hidden" name="docUpdates.ActivoFit3" value="true" /> }
+                else
+                { <input type="checkbox" class="pro-check inline-field" style="width:16px;height:16px;" name="docUpdates.ActivoFit3" value="true" disabled @(activoFit3 || !string.IsNullOrEmpty(d?.NumFit3) ? "checked" : "") onchange="toggleInputsRow(this)"> }
+            </td>
+            <td style="font-size: 11px; font-weight: 600; color: #6b7280;">Reemisión 2</td>
+            <td>
+                <div class="row-inputs" style="display: @(activoFit3 || !string.IsNullOrEmpty(d?.NumFit3) ? "block" : "none");">
+                    <input type="text" name="docUpdates.NumFit3" class="pro-input @(activoFit3 ? "locked-finanzas" : "")" value="@d?.NumFit3" placeholder="@(activoFit3 && (d?.CertsSinNumero ?? "").Split(',').Contains("fit3") ? "SIN N°" : "Pendiente...")" readonly />
+                </div>
+            </td>
+            <td class="text-end">
+                <div class="row-inputs" style="display: @(activoFit3 || !string.IsNullOrEmpty(d?.NumFit3) || !string.IsNullOrEmpty(d?.EvidenciaFito3) ? "block" : "none");">
+                    @if (!string.IsNullOrEmpty(d?.EvidenciaFito3)) { <a href="@d.EvidenciaFito3" target="_blank" class="pro-btn" style="background:#ecfdf5; color:#10b981;"><i class="bi bi-eye"></i> Ver</a> }
+                    <input type="file" name="UploadFit3" class="pro-file-input edit-only-file" style="display:none;" onchange="registrarActividadSubcert('fit', 'v3-@Model.IdSuffix', this)" disabled />
+                </div>
+                <input type="hidden" name="docUpdates.ValFit3" value="@d?.ValFit3" />
+            </td>
+        </tr>
+        }
+                @if (siguienteSlotFit >= 4)
+        {
+        <tr>
+            <td class="text-center align-middle">
+                @if (activoFit4)
+                { <i class="bi bi-lock-fill text-success" title="Bloqueado por Finanzas" style="font-size:16px;"></i>
+                  <input type="hidden" name="docUpdates.ActivoFit4" value="true" /> }
+                else
+                { <input type="checkbox" class="pro-check inline-field" style="width:16px;height:16px;" name="docUpdates.ActivoFit4" value="true" disabled @(activoFit4 || !string.IsNullOrEmpty(d?.NumFit4) ? "checked" : "") onchange="toggleInputsRow(this)"> }
+            </td>
+            <td style="font-size: 11px; font-weight: 600; color: #6b7280;">Reemisión 3</td>
+            <td>
+                <div class="row-inputs" style="display: @(activoFit4 || !string.IsNullOrEmpty(d?.NumFit4) ? "block" : "none");">
+                    <input type="text" name="docUpdates.NumFit4" class="pro-input @(activoFit4 ? "locked-finanzas" : "")" value="@d?.NumFit4" placeholder="@(activoFit4 && (d?.CertsSinNumero ?? "").Split(',').Contains("fit4") ? "SIN N°" : "Pendiente...")" readonly />
+                </div>
+            </td>
+            <td class="text-end">
+                <div class="row-inputs" style="display: @(activoFit4 || !string.IsNullOrEmpty(d?.NumFit4) || !string.IsNullOrEmpty(d?.EvidenciaFito4) ? "block" : "none");">
+                    @if (!string.IsNullOrEmpty(d?.EvidenciaFito4)) { <a href="@d.EvidenciaFito4" target="_blank" class="pro-btn" style="background:#ecfdf5; color:#10b981;"><i class="bi bi-eye"></i> Ver</a> }
+                    <input type="file" name="UploadFit4" class="pro-file-input edit-only-file" style="display:none;" onchange="registrarActividadSubcert('fit', 'v3-@Model.IdSuffix', this)" disabled />
+                </div>
+                <input type="hidden" name="docUpdates.ValFit4" value="@d?.ValFit4" />
+            </td>
+        </tr>
+        }
+    </tbody>
+</table>
+                    </div>
+                    <div class="col-md-5">
+                        <h6 class="pro-label">Registro de Actividad</h6>
+                        <input type="hidden" name="docUpdates.LogFitosanitario" value="@d?.LogFitosanitario" />
+                        <div class="pro-card-gray log-incidencias-wrap" id="log-fit-txt-v3-@Model.IdSuffix" style="height: 100%; min-height: 420px; overflow-y: auto;">
+                            @Html.Raw(!string.IsNullOrEmpty(d?.LogFitosanitario) ? d.LogFitosanitario : "<span style='font-size:12px; color:#9ca3af;'>Sin actividad.</span>")
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            @if (estRespFito.PendienteTarifa)
+            {
+                <div class="alert alert-danger d-flex align-items-center gap-2 py-2 px-3 mt-3 mb-0" style="font-size:11px; font-weight:700; border-radius:8px;">
+                    <i class="bi bi-lock-fill"></i>
+                    <div><strong>Pendiente de asignación de tarifa.</strong> Comercial debe agregar el valor de Certificado Fitosanitario en Acuerdos Operativos.</div>
+                </div>
+            }
+                        var slotsEnviadosFit = new List<(int Slot, string Label)>(); for (int s = 1; s <= 4; s++) if (DocumentalHelpers.SlotBloqueado(d, "fit", s)) slotsEnviadosFit.Add((s, s == 1 ? "Principal" : $"Reemisión {s - 1}"));
+            @foreach (var slotInfo in slotsEnviadosFit)
+            {
+                var estRespSlot = EstadoConceptoSlot("Certificado Fitosanitario", slotInfo.Slot);
+                <div class="d-flex align-items-center gap-1 mt-2 pt-2 border-top" style="font-size:10px;">
+                    <span class="text-muted fw-bold" style="min-width:68px;">@slotInfo.Label:</span>
+                    <span class="text-muted fw-bold"><i class="bi bi-cash-coin"></i></span>
+                    <select class="form-select form-select-sm resp-pagado border-0 bg-light" style="width:auto; font-size:10px; font-weight:700; padding:2px 6px; color:#475569;" data-concepto="@estRespSlot.ConceptoReal" onchange="guardarResponsabilidad(@op.Id, this.getAttribute('data-concepto'), this, this.closest('.d-flex').querySelector('.resp-responsable'))">
+                        <option value="ATILSON" selected="@(estRespSlot.PagadoPor == "ATILSON" || estRespSlot.PagadoPor == null ? "selected" : null)">Paga: Atilson</option>
+                        <option value="AGENCIA" selected="@(estRespSlot.PagadoPor == "AGENCIA" ? "selected" : null)">Paga: Agencia</option>
+                        <option value="PROVEEDOR" selected="@(estRespSlot.PagadoPor == "PROVEEDOR" ? "selected" : null)">Paga: Proveedor</option>
+                    </select>
+                    <span class="text-muted">→</span>
+                    <select class="form-select form-select-sm resp-responsable border-0 bg-light" style="width:auto; font-size:10px; font-weight:700; color:#b91c1c;" data-concepto="@estRespSlot.ConceptoReal" onchange="guardarResponsabilidad(@op.Id, this.getAttribute('data-concepto'), this.closest('.d-flex').querySelector('.resp-pagado'), this)">
+                        <option value="CLIENTE" selected="@(estRespSlot.Responsable == "CLIENTE" || estRespSlot.Responsable == null ? "selected" : null)">Resp: Cliente</option>
+                        <option value="ATILSON" selected="@(estRespSlot.Responsable == "ATILSON" ? "selected" : null)">Resp: Atilson</option>
+                        <option value="PROVEEDOR" selected="@(estRespSlot.Responsable == "PROVEEDOR" ? "selected" : null)">Resp: Proveedor</option>
+                        <option value="AGENCIA" selected="@(estRespSlot.Responsable == "AGENCIA" ? "selected" : null)">Resp: Agencia</option>
+                                        </select>
+                </div>
+            }
+    }
+    else
+    {
+        <div class="mb-3">
+            <h3 class="pro-title"><i class="bi bi-tree-fill me-2 text-success"></i>Fitosanitario (SAG) <span class="badge bg-secondary bg-opacity-10 text-secondary border ms-2" style="font-size:9px;">INDIVIDUAL POR CONTENEDOR</span></h3>
+            <p class="pro-subtitle m-0">Cada contenedor gestiona su propio N° de certificado.</p>
+        </div>
+        @foreach (var cFit in Model.Contenedores.Where(c => c.IdUnidad.HasValue))
+        {
+            var estRespFitU = Model.PageModel.ObtenerEstadoConceptoExacto(op, $"Certificado Fitosanitario (U{cFit.IdUnidad})");
+            <div class="p-3 mb-3 rounded border" style="background:#fafbfc;">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <span class="fw-bold text-dark" style="font-size:12px;"><i class="bi bi-box me-1"></i>@cFit.Label</span>
+                    <button type="button" class="btn btn-sm btn-dark py-1 px-3" style="font-size:10px;" onclick="guardarCertContenedor(@op.Id, @cFit.IdUnidad, 'fit', 'fit-u-@cFit.IdUnidad-@Model.IdSuffix')">
+                        <i class="bi bi-save me-1"></i> Guardar
+                    </button>
+                </div>
+                <div id="fit-u-@cFit.IdUnidad-@Model.IdSuffix" class="row g-2 align-items-end">
+                    <div class="col-md-6">
+                        <label class="pro-label m-0">N° Certificado Fitosanitario</label>
+                        <input type="text" class="pro-input fw-bold text-uppercase" data-field="NumFit1" value="@cFit.Doc?.CertFitosanitario" placeholder="Pendiente..." />
+                    </div>
+                    <div class="col-md-6">
+                        <label class="pro-label m-0">Archivo</label>
+                        @if (!string.IsNullOrEmpty(cFit.Doc?.EvidenciaFito1))
+                        {
+                            <a href="@cFit.Doc.EvidenciaFito1" target="_blank" class="pro-btn d-block text-center mb-1" style="background:#ecfdf5; color:#10b981;"><i class="bi bi-eye"></i> Ver</a>
+                        }
+                        <input type="file" class="pro-file-input" data-field-file="UploadCertFito" />
+                    </div>
+                </div>
+                @if (estRespFitU.PendienteTarifa)
+                {
+                    <div class="alert alert-danger py-1 px-2 mt-2 mb-0" style="font-size:10px; font-weight:700;"><i class="bi bi-lock-fill me-1"></i>Pendiente de tarifa para este contenedor.</div>
+                }
+            </div>
+        }
+    }
+        </div>
+
+                @{
+            var estRespSani = EstadoConcepto("Certificado Sanitario");
+            string modalidadSan = Model.Op.ModalidadCertSanitario ?? "GRUPAL";
+            bool sanBloqueadaModalidad = Model.PageModel.ModalidadCertBloqueada(Model.Op, "san");
+            bool sanEsIndividual = modalidadSan == "INDIVIDUAL" && Model.Contenedores.Any(c => c.IdUnidad.HasValue);
+            bool bloqueadoSan = (d?.CertsBloqueados ?? "").Split(',').Contains("san");
+        }
+<div class="pro-pane-@Model.IdSuffix" id="pane-sani-@Model.IdSuffix" style="display: none;" data-tarifa-pendiente="@(estRespSani.PendienteTarifa ? "true" : "false")">
+    @if (Model.Contenedores.Any(c => c.IdUnidad.HasValue))
+    {
+        <div class="d-flex align-items-center gap-3 p-2 px-3 mb-3 rounded" style="background:#f8fafc; border:1px solid #e5e7eb;">
+            <span class="mod-label m-0" style="font-size:10px;"><i class="bi bi-boxes me-1"></i> Modalidad</span>
+            <div class="btn-group" role="group">
+                                <input type="radio" class="btn-check modalidad-cert-radio" name="modCertSan-@Model.IdSuffix" id="modSanGrupal-@Model.IdSuffix" value="GRUPAL" @(modalidadSan == "GRUPAL" ? "checked" : "") @(sanBloqueadaModalidad ? "disabled" : "") onchange="cambiarModalidadCertPorCertificado(@Model.Op.Id, 'san', this.value)">
+                <label class="btn btn-outline-secondary btn-sm fw-bold" for="modSanGrupal-@Model.IdSuffix" style="font-size:10px;">GRUPAL</label>
+                                <input type="radio" class="btn-check modalidad-cert-radio" name="modCertSan-@Model.IdSuffix" id="modSanIndividual-@Model.IdSuffix" value="INDIVIDUAL" @(modalidadSan == "INDIVIDUAL" ? "checked" : "") @(sanBloqueadaModalidad ? "disabled" : "") onchange="cambiarModalidadCertPorCertificado(@Model.Op.Id, 'san', this.value)">
+                <label class="btn btn-outline-secondary btn-sm fw-bold" for="modSanIndividual-@Model.IdSuffix" style="font-size:10px;">INDIVIDUAL</label>
+            </div>
+            @if (sanBloqueadaModalidad)
+            {
+                <span class="text-muted ms-auto" style="font-size:9px;"><i class="bi bi-lock-fill me-1"></i> Bloqueado — ya hay datos guardados</span>
+            }
+        </div>
+    }
+    @if (!sanEsIndividual)
+    {
+            <div class="d-flex justify-content-between align-items-center mb-4 pb-3 border-bottom border-light">
+                <div>
+                    <h3 class="pro-title">
+                        <i class="bi bi-droplet-fill me-2 text-info"></i>Sanitario (Sernapesca)
+                                                @if (bloqueadoSan)
+                        {
+                            <span class="badge bg-success bg-opacity-10 text-success border border-success ms-2" style="font-size:9px;"><i class="bi bi-check-circle-fill me-1"></i>ENVIADO A FINANZAS</span>
+                            @if (TieneSolicitudPendiente("san"))
+                            {
+                                <span class="badge bg-warning bg-opacity-10 text-warning border border-warning ms-2" style="font-size:9px;"><i class="bi bi-hourglass-split me-1"></i>DESBLOQUEO SOLICITADO</span>
+                            }
+                            else
+                            {
+                                <button type="button" class="btn btn-link p-0 ms-2" style="font-size:10px; text-decoration:none; color:#0ea5e9;" onclick="solicitarDesbloqueo(@op.Id, @(Model.IdUnidadTecnica.HasValue ? Model.IdUnidadTecnica.Value.ToString() : "null"), 'san')"><i class="bi bi-unlock-fill me-1"></i>Solicitar Desbloqueo</button>
+                            }
+                        }
+                    </h3>
+                    <p class="pro-subtitle m-0">Aprobación y visación ante Sernapesca.</p>
+                </div>
+                <div class="d-flex align-items-center gap-3">
+                    <input type="hidden" name="aplica_san_v3_@Model.IdSuffix" value="si" />
+                    <div class="text-end">
+    <a class="btn-edit-inline" style="font-size:11px;" onclick="toggleEditCert('san', 'v3-@Model.IdSuffix', this)"><i class="bi bi-pencil me-1"></i> Editar</a>
+    <div class="btn-save-wrapper d-none d-flex gap-1 mt-1">
+        <button type="button" class="btn btn-sm btn-outline-secondary py-1 px-2" style="font-size:10px;" onclick="descartarCert('san', 'v3-@Model.IdSuffix')">Descartar</button>
+        <button type="button" class="btn btn-sm btn-success py-1 px-2" style="font-size:10px;" onclick="guardarCertificadoAjax('san', 'v3-@Model.IdSuffix', true, this)"><i class="bi bi-send me-1"></i> Guardar</button>
+    </div>
+</div>
+                </div>
+            </div>
+
+            <div id="v3-san-wrapper-@Model.IdSuffix" style="opacity: @(d?.AplicaSernapesca == true ? "1" : "0.3"); pointer-events: @(d?.AplicaSernapesca == true ? "auto" : "none"); transition: opacity 0.3s;">
+
+                @{
+                    string logSanV3 = d?.LogSanitario?.ToUpper() ?? "";
+                    string logSanV3Raw = d?.LogSanitario ?? "";
+                    bool envCliSanV3 = logSanV3.Contains("ENVÍO A CLIENTE");
+                    int idxRespClienteRechazoV3 = logSanV3.IndexOf("RESPUESTA CLIENTE (RECHAZO)");
+                    int idxRespClienteV3 = logSanV3.IndexOf("RESPUESTA CLIENTE");
+                    bool huboRespClienteV3 = idxRespClienteV3 != -1;
+                    bool rechCliSanV3 = huboRespClienteV3 && logSanV3.Substring(idxRespClienteV3).StartsWith("RESPUESTA CLIENTE (RECHAZO)");
+                    bool aprCliSanV3 = huboRespClienteV3 && !rechCliSanV3;
+                    string commentSanV3 = "";
+                    if (rechCliSanV3)
+                    {
+                        int idxCom1 = logSanV3Raw.IndexOf("<em>\"", idxRespClienteRechazoV3);
+                        if (idxCom1 != -1)
+                        {
+                            int idxCom2 = logSanV3Raw.IndexOf("\"</em>", idxCom1 + 5);
+                            if (idxCom2 != -1)
+                            {
+                                string txtCom = logSanV3Raw.Substring(idxCom1 + 5, idxCom2 - (idxCom1 + 5));
+                                commentSanV3 = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(txtCom));
+                            }
+                        }
+                    }
+                    bool envAgaSanV3 = logSanV3.Contains("ENVIADO A AGA-SERN");
+                    int idxAprSanV3 = logSanV3.IndexOf("APROBADO");
+                    int idxRechSanV3 = logSanV3.IndexOf("RECHAZADO");
+                    bool aprSanV3 = idxAprSanV3 != -1 && (idxRechSanV3 == -1 || idxAprSanV3 < idxRechSanV3);
+                    bool rechSanV3 = idxRechSanV3 != -1 && (idxAprSanV3 == -1 || idxRechSanV3 < idxAprSanV3);
+bool certFinalSanV3 = !string.IsNullOrEmpty(d?.EvidenciaSanitario1) || !string.IsNullOrEmpty(d?.EvidenciaSanitario2) || !string.IsNullOrEmpty(d?.EvidenciaSanitario3) || !string.IsNullOrEmpty(d?.EvidenciaSanitario4);
+                }
+                <div class="pro-stepper" id="stepper-san-v3-@Model.IdSuffix">
+    <div class="pro-step @(envCliSanV3 ? "completed" : "")"><div class="pro-step-icon"><i class="bi bi-check-lg"></i></div><div class="pro-step-text">Envío Cli.</div></div>
+    @if (rechCliSanV3)
+    {
+        <div class="pro-step rejected" id="step-cliente-san-v3-@Model.IdSuffix" style="cursor:pointer;" data-comment="@commentSanV3" onclick="verCambiosCliente(this)" title="Clic para ver comentarios"><div class="pro-step-icon"><i class="bi bi-x-lg"></i></div><div class="pro-step-text">Rechazado</div></div>
+    }
+    else
+    {
+        <div class="pro-step @(aprCliSanV3 ? "completed" : "")" id="step-cliente-san-v3-@Model.IdSuffix"><div class="pro-step-icon"><i class="bi bi-check-lg"></i></div><div class="pro-step-text">@(aprCliSanV3 ? "Aprobado" : "Aprobación Cliente")</div></div>
+    }
+    <div class="pro-step @(envAgaSanV3 ? "completed" : "")" id="step-aga-san-v3-@Model.IdSuffix"><div class="pro-step-icon"><i class="bi bi-check-lg"></i></div><div class="pro-step-text">Envío Aga-Sern</div></div>
+    <div class="pro-step @(certFinalSanV3 ? "completed" : "")" id="step-aprob-san-v3-@Model.IdSuffix"><div class="pro-step-icon"><i class="bi bi-check-lg"></i></div><div class="pro-step-text">Certificado Final</div></div>
+</div>
+
+      <div class="d-flex gap-2 mb-4 edit-only-flex pb-3 border-bottom border-light flex-wrap">
+    <button type="button" class="pro-btn" id="btn-enviar-cli-san-v3-@Model.IdSuffix" style="background:#f59e0b; color:#fff; display: @(!string.IsNullOrEmpty(d?.EvidenciaSanitario1) || !string.IsNullOrEmpty(d?.EvidenciaSanitario2) || !string.IsNullOrEmpty(d?.EvidenciaSanitario3) || !string.IsNullOrEmpty(d?.EvidenciaSanitario4) ? "inline-flex" : "none") !important;" onclick="enviarCertificadoCliente('v3-@Model.IdSuffix', 'san', '@op.NumeroBooking')"><i class="bi bi-send me-1"></i> Enviar a Cliente</button>
+    <button type="button" class="pro-btn" style="background:#10b981; color:#fff;" title="Registrar aprobación del cliente recibida por WhatsApp u otro medio (no por correo)" onclick="registrarRespuestaClienteManual('aprobado', 'san', 'v3-@Model.IdSuffix', this)"><i class="bi bi-check-circle me-1"></i> Aprobó Cliente</button>
+    <button type="button" class="pro-btn" style="background:#ef4444; color:#fff;" title="Registrar rechazo del cliente recibido por WhatsApp u otro medio (no por correo)" onclick="document.getElementById('v3-rechazo-san-@Model.IdSuffix').classList.remove('d-none')"><i class="bi bi-x-circle me-1"></i> Rechazó Cliente</button>
+    <button type="button" class="pro-btn" style="background:#0ea5e9; color:#fff;" onclick="enviarSanitarioAgencia('v3-@Model.IdSuffix', '@op.NumeroBooking')"><i class="bi bi-envelope me-1"></i> Enviar a Sernapesca</button>
+    <button type="button" class="pro-btn ms-auto" style="background:#6d2d9e; color:#fff;" onclick="document.getElementById('file-certfinal-san-v3-@Model.IdSuffix').click()"><i class="bi bi-paperclip me-1"></i> Adjuntar Certificado Final</button>
+</div>
+<div id="v3-rechazo-san-@Model.IdSuffix" class="d-none mb-4 d-flex gap-2">
+    <input type="text" class="pro-input" id="txt-obs-san-v3-@Model.IdSuffix" placeholder="Escriba el motivo del rechazo...">
+    <button type="button" class="pro-btn" style="background:#111827; color:#fff;" onclick="confirmarRespuestaClienteManualRechazo('san', 'v3-@Model.IdSuffix')">Confirmar</button>
+</div>
+
+                <div class="row g-5">
+                    <div class="col-md-7">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+    <h6 class="pro-label m-0">Documentos Físicos</h6>
+    <label class="d-flex align-items-center gap-1 mb-0" style="font-size:9px; font-weight:800; color:#94a3b8; cursor:pointer;" title="Permite guardar y enviar el certificado aunque no tenga N° de documento">
+        <input type="checkbox" id="chkSinNum-san-v3-@Model.IdSuffix" style="width:13px;height:13px;"> SIN N°
+    </label>
+</div>
+@{
+    bool activoSan1 = DocumentalHelpers.SlotBloqueado(d, "san", 1);
+    bool activoSan2 = DocumentalHelpers.SlotBloqueado(d, "san", 2);
+    bool activoSan3 = DocumentalHelpers.SlotBloqueado(d, "san", 3);
+    bool activoSan4 = DocumentalHelpers.SlotBloqueado(d, "san", 4);
+    int siguienteSlotSan = DocumentalHelpers.SiguienteSlotEditable(d, "san");
+}
+<table class="pro-table" style="table-layout: fixed;">
+    <thead>
+        <tr>
+            <th style="width:6%;"></th>
+            <th style="width: 20%;">Versión</th>
+            <th style="width: 44%;">N° Referencia</th>
+            <th style="width: 30%; text-align:right;">Archivo</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td class="text-center align-middle">
+                @if (activoSan1)
+                { <i class="bi bi-lock-fill text-success" title="Bloqueado por Finanzas" style="font-size:16px;"></i>
+                  <input type="hidden" name="docUpdates.ActivoSan1" value="true" /> }
+                else
+                { <input type="checkbox" class="pro-check inline-field" style="width:16px;height:16px;" name="docUpdates.ActivoSan1" value="true" disabled @(activoSan1 || !string.IsNullOrEmpty(d?.CertSanitario) ? "checked" : "") onchange="toggleInputsRow(this)"> }
+            </td>
+            <td style="font-size: 12px; font-weight: 700; color: #111827;">Principal</td>
+            <td>
+                                <div class="row-inputs" style="display: @(activoSan1 || !string.IsNullOrEmpty(d?.CertSanitario) ? "block" : "none");">
+                    <input type="text" name="docUpdates.NumSan1" class="pro-input @(activoSan1 ? "locked-finanzas" : "")" value="@d?.CertSanitario" placeholder="@(activoSan1 && (d?.CertsSinNumero ?? "").Split(',').Contains("san1") ? "SIN N°" : "Pendiente...")" readonly />
+                </div>
+            </td>
+            <td class="text-end">
+                <div class="row-inputs" style="display: @(activoSan1 || !string.IsNullOrEmpty(d?.CertSanitario) || !string.IsNullOrEmpty(d?.EvidenciaSanitario1) ? "block" : "none");">
+                    @if (!string.IsNullOrEmpty(d?.EvidenciaSanitario1)) {
+                        <div class="d-flex gap-1 justify-content-end">
+                            <a href="@d.EvidenciaSanitario1" target="_blank" class="pro-btn" style="background:#f0f9ff; color:#0284c7; padding: 6px 10px;"><i class="bi bi-eye"></i></a>
+                            <button type="button" class="pro-btn edit-only-inline" style="background:#ecfdf5; color:#10b981; padding: 6px 10px;" onclick="enviarCertificadoCliente('v3-@Model.IdSuffix', 'san', '@op.NumeroBooking')"><i class="bi bi-send"></i></button>
+                        </div>
+                    }
+                    <input type="file" id="file-certfinal-san-v3-@Model.IdSuffix" name="UploadCertSanitario" class="pro-file-input edit-only-file" style="display:none;" onchange="registrarActividadSubcert('san', 'v3-@Model.IdSuffix', this); document.getElementById('btn-enviar-cli-san-v3-@Model.IdSuffix').style.setProperty('display', 'inline-flex', 'important'); marcarCertificadoFinalCompletado('san', 'v3-@Model.IdSuffix');" disabled />
+                </div>
+                <input type="hidden" name="docUpdates.ValSan1" value="@d?.ValSan1" />
+            </td>
+        </tr>
+                @if (siguienteSlotSan >= 2)
+        {
+        <tr>
+            <td class="text-center align-middle">
+                @if (activoSan2)
+                { <i class="bi bi-lock-fill text-success" title="Bloqueado por Finanzas" style="font-size:16px;"></i>
+                  <input type="hidden" name="docUpdates.ActivoSan2" value="true" /> }
+                else
+                { <input type="checkbox" class="pro-check inline-field" style="width:16px;height:16px;" name="docUpdates.ActivoSan2" value="true" disabled @(activoSan2 || !string.IsNullOrEmpty(d?.NumSan2) ? "checked" : "") onchange="toggleInputsRow(this)"> }
+            </td>
+            <td style="font-size: 11px; font-weight: 600; color: #6b7280;">Reemisión 1</td>
+            <td>
+                <div class="row-inputs" style="display: @(activoSan2 || !string.IsNullOrEmpty(d?.NumSan2) ? "block" : "none");">
+                    <input type="text" name="docUpdates.NumSan2" class="pro-input @(activoSan2 ? "locked-finanzas" : "")" value="@d?.NumSan2" placeholder="@(activoSan2 && (d?.CertsSinNumero ?? "").Split(',').Contains("san2") ? "SIN N°" : "Pendiente...")" readonly />
+                </div>
+            </td>
+            <td class="text-end">
+                <div class="row-inputs" style="display: @(activoSan2 || !string.IsNullOrEmpty(d?.NumSan2) || !string.IsNullOrEmpty(d?.EvidenciaSanitario2) ? "block" : "none");">
+                    @if (!string.IsNullOrEmpty(d?.EvidenciaSanitario2)) { <a href="@d.EvidenciaSanitario2" target="_blank" class="pro-btn" style="background:#f0f9ff; color:#0284c7; padding: 6px 10px;"><i class="bi bi-eye"></i></a> }
+                    <input type="file" name="UploadSan2" class="pro-file-input edit-only-file" style="display:none;" onchange="registrarActividadSubcert('san', 'v3-@Model.IdSuffix', this)" disabled />
+                </div>
+                <input type="hidden" name="docUpdates.ValSan2" value="@d?.ValSan2" />
+            </td>
+        </tr>
+        }
+                @if (siguienteSlotSan >= 3)
+        {
+        <tr>
+            <td class="text-center align-middle">
+                @if (activoSan3)
+                { <i class="bi bi-lock-fill text-success" title="Bloqueado por Finanzas" style="font-size:16px;"></i>
+                  <input type="hidden" name="docUpdates.ActivoSan3" value="true" /> }
+                else
+                { <input type="checkbox" class="pro-check inline-field" style="width:16px;height:16px;" name="docUpdates.ActivoSan3" value="true" disabled @(activoSan3 || !string.IsNullOrEmpty(d?.NumSan3) ? "checked" : "") onchange="toggleInputsRow(this)"> }
+            </td>
+            <td style="font-size: 11px; font-weight: 600; color: #6b7280;">Reemisión 2</td>
+            <td>
+                <div class="row-inputs" style="display: @(activoSan3 || !string.IsNullOrEmpty(d?.NumSan3) ? "block" : "none");">
+                    <input type="text" name="docUpdates.NumSan3" class="pro-input @(activoSan3 ? "locked-finanzas" : "")" value="@d?.NumSan3" placeholder="@(activoSan3 && (d?.CertsSinNumero ?? "").Split(',').Contains("san3") ? "SIN N°" : "Pendiente...")" readonly />
+                </div>
+            </td>
+            <td class="text-end">
+                <div class="row-inputs" style="display: @(activoSan3 || !string.IsNullOrEmpty(d?.NumSan3) || !string.IsNullOrEmpty(d?.EvidenciaSanitario3) ? "block" : "none");">
+                    @if (!string.IsNullOrEmpty(d?.EvidenciaSanitario3)) { <a href="@d.EvidenciaSanitario3" target="_blank" class="pro-btn" style="background:#f0f9ff; color:#0284c7; padding: 6px 10px;"><i class="bi bi-eye"></i></a> }
+                    <input type="file" name="UploadSan3" class="pro-file-input edit-only-file" style="display:none;" onchange="registrarActividadSubcert('san', 'v3-@Model.IdSuffix', this)" disabled />
+                </div>
+                <input type="hidden" name="docUpdates.ValSan3" value="@d?.ValSan3" />
+            </td>
+        </tr>
+        }
+                @if (siguienteSlotSan >= 4)
+        {
+        <tr>
+            <td class="text-center align-middle">
+                @if (activoSan4)
+                { <i class="bi bi-lock-fill text-success" title="Bloqueado por Finanzas" style="font-size:16px;"></i>
+                  <input type="hidden" name="docUpdates.ActivoSan4" value="true" /> }
+                else
+                { <input type="checkbox" class="pro-check inline-field" style="width:16px;height:16px;" name="docUpdates.ActivoSan4" value="true" disabled @(activoSan4 || !string.IsNullOrEmpty(d?.NumSan4) ? "checked" : "") onchange="toggleInputsRow(this)"> }
+            </td>
+            <td style="font-size: 11px; font-weight: 600; color: #6b7280;">Reemisión 3</td>
+            <td>
+                <div class="row-inputs" style="display: @(activoSan4 || !string.IsNullOrEmpty(d?.NumSan4) ? "block" : "none");">
+                    <input type="text" name="docUpdates.NumSan4" class="pro-input @(activoSan4 ? "locked-finanzas" : "")" value="@d?.NumSan4" placeholder="@(activoSan4 && (d?.CertsSinNumero ?? "").Split(',').Contains("san4") ? "SIN N°" : "Pendiente...")" readonly />
+                </div>
+            </td>
+            <td class="text-end">
+                <div class="row-inputs" style="display: @(activoSan4 || !string.IsNullOrEmpty(d?.NumSan4) || !string.IsNullOrEmpty(d?.EvidenciaSanitario4) ? "block" : "none");">
+                    @if (!string.IsNullOrEmpty(d?.EvidenciaSanitario4)) { <a href="@d.EvidenciaSanitario4" target="_blank" class="pro-btn" style="background:#f0f9ff; color:#0284c7; padding: 6px 10px;"><i class="bi bi-eye"></i></a> }
+                    <input type="file" name="UploadSan4" class="pro-file-input edit-only-file" style="display:none;" onchange="registrarActividadSubcert('san', 'v3-@Model.IdSuffix', this)" disabled />
+                </div>
+                <input type="hidden" name="docUpdates.ValSan4" value="@d?.ValSan4" />
+            </td>
+        </tr>
+        }
+    </tbody>
+</table>
+                    </div>
+                    <div class="col-md-5">
+                        <h6 class="pro-label">Registro de Actividad</h6>
+                        <input type="hidden" name="docUpdates.LogSanitario" value="@d?.LogSanitario" />
+                        <div class="pro-card-gray log-incidencias-wrap" id="log-san-txt-v3-@Model.IdSuffix" style="height: 100%; min-height: 420px; overflow-y: auto;">
+                            @Html.Raw(!string.IsNullOrEmpty(d?.LogSanitario) ? d.LogSanitario : "<span style='font-size:12px; color:#9ca3af;'>Sin actividad.</span>")
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            @if (estRespSani.PendienteTarifa)
+            {
+                <div class="alert alert-danger d-flex align-items-center gap-2 py-2 px-3 mt-3 mb-0" style="font-size:11px; font-weight:700; border-radius:8px;">
+                    <i class="bi bi-lock-fill"></i>
+                    <div><strong>Pendiente de asignación de tarifa.</strong> Comercial debe agregar el valor de Certificado Sanitario en Acuerdos Operativos.</div>
+                </div>
+            }
+                        var slotsEnviadosSan = new List<(int Slot, string Label)>(); for (int s = 1; s <= 4; s++) if (DocumentalHelpers.SlotBloqueado(d, "san", s)) slotsEnviadosSan.Add((s, s == 1 ? "Principal" : $"Reemisión {s - 1}"));
+            @foreach (var slotInfo in slotsEnviadosSan)
+            {
+                var estRespSlot = EstadoConceptoSlot("Certificado Sanitario", slotInfo.Slot);
+                <div class="d-flex align-items-center gap-1 mt-2 pt-2 border-top" style="font-size:10px;">
+                    <span class="text-muted fw-bold" style="min-width:68px;">@slotInfo.Label:</span>
+                    <span class="text-muted fw-bold"><i class="bi bi-cash-coin"></i></span>
+                    <select class="form-select form-select-sm resp-pagado border-0 bg-light" style="width:auto; font-size:10px; font-weight:700; padding:2px 6px; color:#475569;" data-concepto="@estRespSlot.ConceptoReal" onchange="guardarResponsabilidad(@op.Id, this.getAttribute('data-concepto'), this, this.closest('.d-flex').querySelector('.resp-responsable'))">
+                        <option value="ATILSON" selected="@(estRespSlot.PagadoPor == "ATILSON" || estRespSlot.PagadoPor == null ? "selected" : null)">Paga: Atilson</option>
+                        <option value="AGENCIA" selected="@(estRespSlot.PagadoPor == "AGENCIA" ? "selected" : null)">Paga: Agencia</option>
+                        <option value="PROVEEDOR" selected="@(estRespSlot.PagadoPor == "PROVEEDOR" ? "selected" : null)">Paga: Proveedor</option>
+                    </select>
+                    <span class="text-muted">→</span>
+                    <select class="form-select form-select-sm resp-responsable border-0 bg-light" style="width:auto; font-size:10px; font-weight:700; color:#b91c1c;" data-concepto="@estRespSlot.ConceptoReal" onchange="guardarResponsabilidad(@op.Id, this.getAttribute('data-concepto'), this.closest('.d-flex').querySelector('.resp-pagado'), this)">
+                        <option value="CLIENTE" selected="@(estRespSlot.Responsable == "CLIENTE" || estRespSlot.Responsable == null ? "selected" : null)">Resp: Cliente</option>
+                        <option value="ATILSON" selected="@(estRespSlot.Responsable == "ATILSON" ? "selected" : null)">Resp: Atilson</option>
+                        <option value="PROVEEDOR" selected="@(estRespSlot.Responsable == "PROVEEDOR" ? "selected" : null)">Resp: Proveedor</option>
+                        <option value="AGENCIA" selected="@(estRespSlot.Responsable == "AGENCIA" ? "selected" : null)">Resp: Agencia</option>
+                                        </select>
+                </div>
+            }
+    }
+    else
+    {
+        <div class="mb-3">
+            <h3 class="pro-title"><i class="bi bi-droplet-fill me-2 text-info"></i>Sanitario (Sernapesca) <span class="badge bg-secondary bg-opacity-10 text-secondary border ms-2" style="font-size:9px;">INDIVIDUAL POR CONTENEDOR</span></h3>
+            <p class="pro-subtitle m-0">Cada contenedor gestiona su propio N° de certificado.</p>
+        </div>
+        @foreach (var cSan in Model.Contenedores.Where(c => c.IdUnidad.HasValue))
+        {
+            var estRespSanU = Model.PageModel.ObtenerEstadoConceptoExacto(op, $"Certificado Sanitario (U{cSan.IdUnidad})");
+            <div class="p-3 mb-3 rounded border" style="background:#fafbfc;">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <span class="fw-bold text-dark" style="font-size:12px;"><i class="bi bi-box me-1"></i>@cSan.Label</span>
+                    <button type="button" class="btn btn-sm btn-dark py-1 px-3" style="font-size:10px;" onclick="guardarCertContenedor(@op.Id, @cSan.IdUnidad, 'san', 'san-u-@cSan.IdUnidad-@Model.IdSuffix')">
+                        <i class="bi bi-save me-1"></i> Guardar
+                    </button>
+                </div>
+                <div id="san-u-@cSan.IdUnidad-@Model.IdSuffix" class="row g-2 align-items-end">
+                    <div class="col-md-6">
+                        <label class="pro-label m-0">N° Certificado Sanitario</label>
+                        <input type="text" class="pro-input fw-bold text-uppercase" data-field="NumSan1" value="@cSan.Doc?.CertSanitario" placeholder="Pendiente..." />
+                    </div>
+                    <div class="col-md-6">
+                        <label class="pro-label m-0">Archivo</label>
+                        @if (!string.IsNullOrEmpty(cSan.Doc?.EvidenciaSanitario1))
+                        {
+                            <a href="@cSan.Doc.EvidenciaSanitario1" target="_blank" class="pro-btn d-block text-center mb-1" style="background:#f0f9ff; color:#0284c7;"><i class="bi bi-eye"></i> Ver</a>
+                        }
+                        <input type="file" class="pro-file-input" data-field-file="UploadCertSanitario" />
+                    </div>
+                </div>
+                @if (estRespSanU.PendienteTarifa)
+                {
+                    <div class="alert alert-danger py-1 px-2 mt-2 mb-0" style="font-size:10px; font-weight:700;"><i class="bi bi-lock-fill me-1"></i>Pendiente de tarifa para este contenedor.</div>
+                }
+            </div>
+        }
+    }
+        </div>
+
+                @{
+            var estRespCap = EstadoConcepto("Certificado de Captura");
+            string modalidadCap = Model.Op.ModalidadCertCaptura ?? "GRUPAL";
+            bool capBloqueadaModalidad = Model.PageModel.ModalidadCertBloqueada(Model.Op, "cap");
+            bool capEsIndividual = modalidadCap == "INDIVIDUAL" && Model.Contenedores.Any(c => c.IdUnidad.HasValue);
+            bool bloqueadoCap = (d?.CertsBloqueados ?? "").Split(',').Contains("cap");
+        }
+            <div class="pro-pane-@Model.IdSuffix" id="pane-cap-@Model.IdSuffix" style="display: none;" data-tarifa-pendiente="@(estRespCap.PendienteTarifa ? "true" : "false")">
+    @if (Model.Contenedores.Any(c => c.IdUnidad.HasValue))
+    {
+        <div class="d-flex align-items-center gap-3 p-2 px-3 mb-3 rounded" style="background:#f8fafc; border:1px solid #e5e7eb;">
+            <span class="mod-label m-0" style="font-size:10px;"><i class="bi bi-boxes me-1"></i> Modalidad</span>
+            <div class="btn-group" role="group">
+                                <input type="radio" class="btn-check modalidad-cert-radio" name="modCertCap-@Model.IdSuffix" id="modCapGrupal-@Model.IdSuffix" value="GRUPAL" @(modalidadCap == "GRUPAL" ? "checked" : "") @(capBloqueadaModalidad ? "disabled" : "") onchange="cambiarModalidadCertPorCertificado(@Model.Op.Id, 'cap', this.value)">
+                <label class="btn btn-outline-secondary btn-sm fw-bold" for="modCapGrupal-@Model.IdSuffix" style="font-size:10px;">GRUPAL</label>
+                                <input type="radio" class="btn-check modalidad-cert-radio" name="modCertCap-@Model.IdSuffix" id="modCapIndividual-@Model.IdSuffix" value="INDIVIDUAL" @(modalidadCap == "INDIVIDUAL" ? "checked" : "") @(capBloqueadaModalidad ? "disabled" : "") onchange="cambiarModalidadCertPorCertificado(@Model.Op.Id, 'cap', this.value)">
+                <label class="btn btn-outline-secondary btn-sm fw-bold" for="modCapIndividual-@Model.IdSuffix" style="font-size:10px;">INDIVIDUAL</label>
+            </div>
+            @if (capBloqueadaModalidad)
+            {
+                <span class="text-muted ms-auto" style="font-size:9px;"><i class="bi bi-lock-fill me-1"></i> Bloqueado — ya hay datos guardados</span>
+            }
+        </div>
+    }
+    @if (!capEsIndividual)
+    {
+                <div class="d-flex justify-content-between align-items-center mb-4 pb-3 border-bottom border-light">
+                    <div>
+                        <h3 class="pro-title">
+                            <i class="bi bi-bezier2 me-2 text-danger"></i>Certificado de Captura
+                                                        @if (bloqueadoCap)
+                            {
+                                <span class="badge bg-success bg-opacity-10 text-success border border-success ms-2" style="font-size:9px;"><i class="bi bi-check-circle-fill me-1"></i>ENVIADO A FINANZAS</span>
+                                @if (TieneSolicitudPendiente("cap"))
+                                {
+                                    <span class="badge bg-warning bg-opacity-10 text-warning border border-warning ms-2" style="font-size:9px;"><i class="bi bi-hourglass-split me-1"></i>DESBLOQUEO SOLICITADO</span>
+                                }
+                                else
+                                {
+                                    <button type="button" class="btn btn-link p-0 ms-2" style="font-size:10px; text-decoration:none; color:#0ea5e9;" onclick="solicitarDesbloqueo(@op.Id, @(Model.IdUnidadTecnica.HasValue ? Model.IdUnidadTecnica.Value.ToString() : "null"), 'cap')"><i class="bi bi-unlock-fill me-1"></i>Solicitar Desbloqueo</button>
+                                }
+                            }
+                        </h3>
+                        <p class="pro-subtitle m-0">Aprobación, pago y visación Sernapesca.</p>
+                    </div>
+                    <div class="d-flex align-items-center gap-3">
+                        <input type="hidden" name="aplica_cap_v3_@Model.IdSuffix" value="si" />
+                        <div class="text-end">
+                            <a class="btn-edit-inline" style="font-size:11px;" onclick="toggleEditCert('cap', 'v3-@Model.IdSuffix', this)"><i class="bi bi-pencil me-1"></i> Editar</a>
+                            <div class="btn-save-wrapper d-none d-flex gap-1 mt-1">
+                                <button type="button" class="btn btn-sm btn-outline-secondary py-1 px-2" style="font-size:10px;" onclick="descartarCert('cap', 'v3-@Model.IdSuffix')">Descartar</button>
+                                <button type="button" class="btn btn-sm btn-success py-1 px-2" style="font-size:10px;" onclick="guardarCertificadoAjax('cap', 'v3-@Model.IdSuffix', true, this)"><i class="bi bi-send me-1"></i> Guardar</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="v3-cap-wrapper-@Model.IdSuffix" style="opacity: @(d?.AplicaSernapesca == true ? "1" : "0.3"); pointer-events: @(d?.AplicaSernapesca == true ? "auto" : "none"); transition: opacity 0.3s;">
+
+                    @{
+                        string logCapV3 = d?.LogCaptura?.ToUpper() ?? "";
+                        int idxAprCapV3 = logCapV3.IndexOf("APROBADO");
+                        int idxRechCapV3 = logCapV3.IndexOf("RECHAZADO");
+                        bool aprCapV3 = idxAprCapV3 != -1 && (idxRechCapV3 == -1 || idxAprCapV3 < idxRechCapV3);
+                        bool rechCapV3 = idxRechCapV3 != -1 && (idxAprCapV3 == -1 || idxRechCapV3 < idxAprCapV3);
+                        bool pagoScanCapV3 = logCapV3.Contains("PAGO / SCAN CONFIRMADO");
+                    }
+                    <div class="pro-stepper" id="stepper-cap-v3-@Model.IdSuffix">
+                        <div class="pro-step @(aprCapV3 ? "completed" : (rechCapV3 ? "rejected" : ""))" id="step-aprob-cap-v3-@Model.IdSuffix"><div class="pro-step-icon"><i class="bi @(rechCapV3 ? "bi-x-lg" : "bi-check-lg")"></i></div><div class="pro-step-text">@(aprCapV3 ? "Aprobado" : (rechCapV3 ? "Rechazado" : "Aprobación Sern."))</div></div>
+                        <div class="pro-step @(pagoScanCapV3 ? "completed" : "")" id="paso-scan-cap-v3-@Model.IdSuffix" onclick="togglePagoScan(this, 'v3-@Model.IdSuffix')" style="cursor:pointer;"><div class="pro-step-icon"><i class="bi bi-check-lg"></i></div><div class="pro-step-text">Pago / Scan Confirmado</div></div>
+                    </div>
+
+                    <div class="d-flex gap-2 mb-4 edit-only-flex pb-3 border-bottom border-light align-items-center flex-wrap">
+                        <button type="button" class="pro-btn" style="background:#10b981; color:#fff;" onclick="registrarResolucionDoc('aprobado', 'cap', 'v3-@Model.IdSuffix', this)"><i class="bi bi-check-circle me-1"></i> Aprobado</button>
+                        <button type="button" class="pro-btn" style="background:#ef4444; color:#fff;" onclick="document.getElementById('v3-rechazo-cap-@Model.IdSuffix').classList.remove('d-none')"><i class="bi bi-x-circle me-1"></i> Rechazado</button>
+                        <button type="button" class="pro-btn" id="btn-enviar-cli-cap-main-v3-@Model.IdSuffix" style="background:#0ea5e9; color:#fff; display: @(!string.IsNullOrEmpty(d?.EvidenciaCap1) || !string.IsNullOrEmpty(d?.EvidenciaCap2) || !string.IsNullOrEmpty(d?.EvidenciaCap3) || !string.IsNullOrEmpty(d?.EvidenciaCap4) ? "inline-flex" : "none") !important;" onclick="enviarCertificadoCliente('v3-@Model.IdSuffix', 'cap', '@op.NumeroBooking')"><i class="bi bi-send me-1"></i> Enviar a Cliente</button>
+
+                        <div class="ms-auto d-flex align-items-center gap-2 bg-light px-3 py-1 rounded border shadow-sm">
+                            <i class="bi bi-file-earmark-arrow-up text-primary"></i>
+                            <span class="pro-label m-0 text-dark">Subir Escaneado (Cliente):</span>
+                            <input type="file" name="UploadCap1" class="pro-file-input m-0 edit-only-file" style="width: 250px; display:none;" onchange="registrarActividadSubcert('cap', 'v3-@Model.IdSuffix', this); document.getElementById('btn-enviar-cli-cap-main-v3-@Model.IdSuffix').style.setProperty('display', 'inline-flex', 'important');" disabled />
+                        </div>
+                    </div>
+                    <div id="v3-rechazo-cap-@Model.IdSuffix" class="d-none mb-4 d-flex gap-2">
+                        <input type="text" class="pro-input" id="txt-obs-cap-v3-@Model.IdSuffix" placeholder="Escriba el motivo del rechazo...">
+                        <button type="button" class="pro-btn" style="background:#111827; color:#fff;" onclick="confirmarRechazoDoc('cap', 'v3-@Model.IdSuffix')">Confirmar</button>
+                    </div>
+                    <div class="row g-5">
+                        <div class="col-md-7">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <h6 class="pro-label m-0">Documentos Físicos</h6>
+                                <label class="d-flex align-items-center gap-1 mb-0" style="font-size:9px; font-weight:800; color:#94a3b8; cursor:pointer;" title="Permite guardar y enviar el certificado aunque no tenga N° de documento">
+                                    <input type="checkbox" id="chkSinNum-cap-v3-@Model.IdSuffix" style="width:13px;height:13px;"> SIN N°
+                                </label>
+                            </div>
+                                                        @{
+                                bool activoCap1 = DocumentalHelpers.SlotBloqueado(d, "cap", 1);
+                                bool activoCap2 = DocumentalHelpers.SlotBloqueado(d, "cap", 2);
+                                bool activoCap3 = DocumentalHelpers.SlotBloqueado(d, "cap", 3);
+                                bool activoCap4 = DocumentalHelpers.SlotBloqueado(d, "cap", 4);
+                                int siguienteSlotCap = DocumentalHelpers.SiguienteSlotEditable(d, "cap");
+                            }
+                            <table class="pro-table" style="table-layout: fixed;">
+                                <thead>
+                                    <tr>
+                                        <th style="width:6%;"></th>
+                                        <th style="width: 20%;">Versión</th>
+                                        <th style="width: 44%;">N° Referencia</th>
+                                        <th style="width: 30%; text-align:right;">Archivo</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td class="text-center align-middle">
+                                            @if (activoCap1)
+                                            {
+                                                <i class="bi bi-lock-fill text-success" title="Bloqueado por Finanzas" style="font-size:16px;"></i>
+                                                <input type="hidden" name="docUpdates.ActivoCap1" value="true" />
+                                            }
+                                            else
+                                            {
+
+                                                <input type="checkbox" class="pro-check inline-field" style="width:16px;height:16px;" name="docUpdates.ActivoCap1" value="true" disabled @(activoCap1 || !string.IsNullOrEmpty(d?.NumCap1) ? "checked" : "") onchange="toggleInputsRow(this)">
+                                            }
+                                        </td>
+                                        <td style="font-size: 12px; font-weight: 700; color: #111827;">Principal</td>
+                                        <td>
+                                            <div class="row-inputs" style="display: @(activoCap1 || !string.IsNullOrEmpty(d?.NumCap1) ? "block" : "none");">
+                                                <input type="text" name="docUpdates.NumCap1" class="pro-input @(activoCap1 ? "locked-finanzas" : "")" value="@d?.NumCap1" placeholder="@(activoCap1 && (d?.CertsSinNumero ?? "").Split(',').Contains("cap1") ? "SIN N°" : "Pendiente...")" readonly />
+                                            </div>
+                                        </td>
+                                        <td class="text-end">
+                                            <div class="row-inputs" style="display: @(activoCap1 || !string.IsNullOrEmpty(d?.NumCap1) || !string.IsNullOrEmpty(d?.EvidenciaCap1) ? "block" : "none");">
+                                                @if (!string.IsNullOrEmpty(d?.EvidenciaCap1))
+                                                {
+                                                    <a href="@d.EvidenciaCap1" target="_blank" class="pro-btn" style="background:#fef2f2; color:#ef4444; padding: 6px 10px;" title="Ver"><i class="bi bi-eye"></i></a>
+                                                }
+                                                <input type="file" name="UploadCap1" class="pro-file-input edit-only-file" style="display:none;" onchange="registrarActividadSubcert('cap', 'v3-@Model.IdSuffix', this)" disabled />
+                                            </div>
+                                            <input type="hidden" name="docUpdates.ValCap1" value="@d?.ValCap1" />
+                                        </td>
+                                    </tr>
+                                                                        @if (siguienteSlotCap >= 2)
+                                    {
+                                    <tr>
+                                        <td class="text-center align-middle">
+                                            @if (activoCap2)
+                                            {
+                                                <i class="bi bi-lock-fill text-success" title="Bloqueado por Finanzas" style="font-size:16px;"></i>
+                                                <input type="hidden" name="docUpdates.ActivoCap2" value="true" />
+                                            }
+                                            else
+                                            {
+
+                                                <input type="checkbox" class="pro-check inline-field" style="width:16px;height:16px;" name="docUpdates.ActivoCap2" value="true" disabled @(activoCap2 || !string.IsNullOrEmpty(d?.NumCap2) ? "checked" : "") onchange="toggleInputsRow(this)">
+                                            }
+                                        </td>
+                                        <td style="font-size: 11px; font-weight: 600; color: #6b7280;">Reemisión 1</td>
+                                        <td>
+                                            <div class="row-inputs" style="display: @(activoCap2 || !string.IsNullOrEmpty(d?.NumCap2) ? "block" : "none");">
+                                                <input type="text" name="docUpdates.NumCap2" class="pro-input @(activoCap2 ? "locked-finanzas" : "")" value="@d?.NumCap2" placeholder="@(activoCap2 && (d?.CertsSinNumero ?? "").Split(',').Contains("cap2") ? "SIN N°" : "Pendiente...")" readonly />
+                                            </div>
+                                        </td>
+                                        <td class="text-end">
+                                            <div class="row-inputs" style="display: @(activoCap2 || !string.IsNullOrEmpty(d?.NumCap2) || !string.IsNullOrEmpty(d?.EvidenciaCap2) ? "block" : "none");">
+                                                @if (!string.IsNullOrEmpty(d?.EvidenciaCap2))
+                                                {
+                                                    <a href="@d.EvidenciaCap2" target="_blank" class="pro-btn" style="background:#fef2f2; color:#ef4444; padding: 6px 10px;"><i class="bi bi-eye"></i></a>
+                                                }
+                                                <input type="file" name="UploadCap2" class="pro-file-input edit-only-file" style="display:none;" onchange="registrarActividadSubcert('cap', 'v3-@Model.IdSuffix', this)" disabled />
+                                            </div>
+                                            <input type="hidden" name="docUpdates.ValCap2" value="@d?.ValCap2" />
+                                        </td>
+                                    </tr>
+                                    }
+                                                                        @if (siguienteSlotCap >= 3)
+                                    {
+                                    <tr>
+                                        <td class="text-center align-middle">
+                                            @if (activoCap3)
+                                            {
+                                                <i class="bi bi-lock-fill text-success" title="Bloqueado por Finanzas" style="font-size:16px;"></i>
+                                                <input type="hidden" name="docUpdates.ActivoCap3" value="true" />
+                                            }
+                                            else
+                                            {
+
+                                                <input type="checkbox" class="pro-check inline-field" style="width:16px;height:16px;" name="docUpdates.ActivoCap3" value="true" disabled @(activoCap3 || !string.IsNullOrEmpty(d?.NumCap3) ? "checked" : "") onchange="toggleInputsRow(this)">
+                                            }
+                                        </td>
+                                        <td style="font-size: 11px; font-weight: 600; color: #6b7280;">Reemisión 2</td>
+                                        <td>
+                                            <div class="row-inputs" style="display: @(activoCap3 || !string.IsNullOrEmpty(d?.NumCap3) ? "block" : "none");">
+                                                <input type="text" name="docUpdates.NumCap3" class="pro-input @(activoCap3 ? "locked-finanzas" : "")" value="@d?.NumCap3" placeholder="@(activoCap3 && (d?.CertsSinNumero ?? "").Split(',').Contains("cap3") ? "SIN N°" : "Pendiente...")" readonly />
+                                            </div>
+                                        </td>
+                                        <td class="text-end">
+                                            <div class="row-inputs" style="display: @(activoCap3 || !string.IsNullOrEmpty(d?.NumCap3) || !string.IsNullOrEmpty(d?.EvidenciaCap3) ? "block" : "none");">
+                                                @if (!string.IsNullOrEmpty(d?.EvidenciaCap3))
+                                                {
+                                                    <a href="@d.EvidenciaCap3" target="_blank" class="pro-btn" style="background:#fef2f2; color:#ef4444; padding: 6px 10px;"><i class="bi bi-eye"></i></a>
+                                                }
+                                                <input type="file" name="UploadCap3" class="pro-file-input edit-only-file" style="display:none;" onchange="registrarActividadSubcert('cap', 'v3-@Model.IdSuffix', this)" disabled />
+                                            </div>
+                                            <input type="hidden" name="docUpdates.ValCap3" value="@d?.ValCap3" />
+                                        </td>
+                                    </tr>
+                                    }
+                                                                        @if (siguienteSlotCap >= 4)
+                                    {
+                                    <tr>
+                                        <td class="text-center align-middle">
+                                            @if (activoCap4)
+                                            {
+                                                <i class="bi bi-lock-fill text-success" title="Bloqueado por Finanzas" style="font-size:16px;"></i>
+                                                <input type="hidden" name="docUpdates.ActivoCap4" value="true" />
+                                            }
+                                            else
+                                            {
+
+                                                <input type="checkbox" class="pro-check inline-field" style="width:16px;height:16px;" name="docUpdates.ActivoCap4" value="true" disabled @(activoCap4 || !string.IsNullOrEmpty(d?.NumCap4) ? "checked" : "") onchange="toggleInputsRow(this)">
+                                            }
+                                        </td>
+                                        <td style="font-size: 11px; font-weight: 600; color: #6b7280;">Reemisión 3</td>
+                                        <td>
+                                            <div class="row-inputs" style="display: @(activoCap4 || !string.IsNullOrEmpty(d?.NumCap4) ? "block" : "none");">
+                                                <input type="text" name="docUpdates.NumCap4" class="pro-input @(activoCap4 ? "locked-finanzas" : "")" value="@d?.NumCap4" placeholder="@(activoCap4 && (d?.CertsSinNumero ?? "").Split(',').Contains("cap4") ? "SIN N°" : "Pendiente...")" readonly />
+                                            </div>
+                                        </td>
+                                        <td class="text-end">
+                                            <div class="row-inputs" style="display: @(activoCap4 || !string.IsNullOrEmpty(d?.NumCap4) || !string.IsNullOrEmpty(d?.EvidenciaCap4) ? "block" : "none");">
+                                                @if (!string.IsNullOrEmpty(d?.EvidenciaCap4))
+                                                {
+                                                    <a href="@d.EvidenciaCap4" target="_blank" class="pro-btn" style="background:#fef2f2; color:#ef4444; padding: 6px 10px;"><i class="bi bi-eye"></i></a>
+                                                }
+                                                <input type="file" name="UploadCap4" class="pro-file-input edit-only-file" style="display:none;" onchange="registrarActividadSubcert('cap', 'v3-@Model.IdSuffix', this)" disabled />
+                                            </div>
+                                            <input type="hidden" name="docUpdates.ValCap4" value="@d?.ValCap4" />
+                                        </td>
+                                    </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                        <div class="col-md-5">
+                            <h6 class="pro-label">Registro de Actividad</h6>
+                            <input type="hidden" name="docUpdates.LogCaptura" value="@d?.LogCaptura" />
+                            <div class="pro-card-gray log-incidencias-wrap" id="log-cap-txt-v3-@Model.IdSuffix" style="height: 100%; min-height: 420px; overflow-y: auto;">
+                                @Html.Raw(!string.IsNullOrEmpty(d?.LogCaptura) ? d.LogCaptura : "<span style='font-size:12px; color:#9ca3af;'>Sin actividad.</span>")
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                @if (estRespCap.PendienteTarifa)
+                {
+                    <div class="alert alert-danger d-flex align-items-center gap-2 py-2 px-3 mt-3 mb-0" style="font-size:11px; font-weight:700; border-radius:8px;">
+                        <i class="bi bi-lock-fill"></i>
+                        <div><strong>Pendiente de asignación de tarifa.</strong> Comercial debe agregar el valor de Certificado de Captura en Acuerdos Operativos.</div>
+                    </div>
+                }
+                                var slotsEnviadosCap = new List<(int Slot, string Label)>(); for (int s = 1; s <= 4; s++) if (DocumentalHelpers.SlotBloqueado(d, "cap", s)) slotsEnviadosCap.Add((s, s == 1 ? "Principal" : $"Reemisión {s - 1}"));
+                @foreach (var slotInfo in slotsEnviadosCap)
+                {
+                    var estRespSlot = EstadoConceptoSlot("Certificado de Captura", slotInfo.Slot);
+                    <div class="d-flex align-items-center gap-1 mt-2 pt-2 border-top" style="font-size:10px;">
+                        <span class="text-muted fw-bold" style="min-width:68px;">@slotInfo.Label:</span>
+                        <span class="text-muted fw-bold"><i class="bi bi-cash-coin"></i></span>
+                        <select class="form-select form-select-sm resp-pagado border-0 bg-light" style="width:auto; font-size:10px; font-weight:700; padding:2px 6px; color:#475569;" data-concepto="@estRespSlot.ConceptoReal" onchange="guardarResponsabilidad(@op.Id, this.getAttribute('data-concepto'), this, this.closest('.d-flex').querySelector('.resp-responsable'))">
+                            <option value="ATILSON" selected="@(estRespSlot.PagadoPor == "ATILSON" || estRespSlot.PagadoPor == null ? "selected" : null)">Paga: Atilson</option>
+                            <option value="AGENCIA" selected="@(estRespSlot.PagadoPor == "AGENCIA" ? "selected" : null)">Paga: Agencia</option>
+                            <option value="PROVEEDOR" selected="@(estRespSlot.PagadoPor == "PROVEEDOR" ? "selected" : null)">Paga: Proveedor</option>
+                        </select>
+                        <span class="text-muted">→</span>
+                        <select class="form-select form-select-sm resp-responsable border-0 bg-light" style="width:auto; font-size:10px; font-weight:700; color:#b91c1c;" data-concepto="@estRespSlot.ConceptoReal" onchange="guardarResponsabilidad(@op.Id, this.getAttribute('data-concepto'), this.closest('.d-flex').querySelector('.resp-pagado'), this)">
+                            <option value="CLIENTE" selected="@(estRespSlot.Responsable == "CLIENTE" || estRespSlot.Responsable == null ? "selected" : null)">Resp: Cliente</option>
+                            <option value="ATILSON" selected="@(estRespSlot.Responsable == "ATILSON" ? "selected" : null)">Resp: Atilson</option>
+                            <option value="PROVEEDOR" selected="@(estRespSlot.Responsable == "PROVEEDOR" ? "selected" : null)">Resp: Proveedor</option>
+                            <option value="AGENCIA" selected="@(estRespSlot.Responsable == "AGENCIA" ? "selected" : null)">Resp: Agencia</option>
+                        </select>
+                    </div>
+                                }
+    }
+    else
+    {
+        <div class="mb-3">
+            <h3 class="pro-title"><i class="bi bi-bezier2 me-2 text-danger"></i>Certificado de Captura <span class="badge bg-secondary bg-opacity-10 text-secondary border ms-2" style="font-size:9px;">INDIVIDUAL POR CONTENEDOR</span></h3>
+            <p class="pro-subtitle m-0">Cada contenedor gestiona su propio N° de certificado.</p>
+        </div>
+        @foreach (var cCap in Model.Contenedores.Where(c => c.IdUnidad.HasValue))
+        {
+            var estRespCapU = Model.PageModel.ObtenerEstadoConceptoExacto(op, $"Certificado de Captura (U{cCap.IdUnidad})");
+            <div class="p-3 mb-3 rounded border" style="background:#fafbfc;">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <span class="fw-bold text-dark" style="font-size:12px;"><i class="bi bi-box me-1"></i>@cCap.Label</span>
+                    <button type="button" class="btn btn-sm btn-dark py-1 px-3" style="font-size:10px;" onclick="guardarCertContenedor(@op.Id, @cCap.IdUnidad, 'cap', 'cap-u-@cCap.IdUnidad-@Model.IdSuffix')">
+                        <i class="bi bi-save me-1"></i> Guardar
+                    </button>
+                </div>
+                <div id="cap-u-@cCap.IdUnidad-@Model.IdSuffix" class="row g-2 align-items-end">
+                    <div class="col-md-6">
+                        <label class="pro-label m-0">N° Certificado de Captura</label>
+                        <input type="text" class="pro-input fw-bold text-uppercase" data-field="NumCap1" value="@cCap.Doc?.NumCap1" placeholder="Pendiente..." />
+                    </div>
+                    <div class="col-md-6">
+                        <label class="pro-label m-0">Archivo</label>
+                        @if (!string.IsNullOrEmpty(cCap.Doc?.EvidenciaCap1))
+                        {
+                            <a href="@cCap.Doc.EvidenciaCap1" target="_blank" class="pro-btn d-block text-center mb-1" style="background:#fef2f2; color:#ef4444;"><i class="bi bi-eye"></i> Ver</a>
+                        }
+                        <input type="file" class="pro-file-input" data-field-file="UploadCap1" />
+                    </div>
+                </div>
+                @if (estRespCapU.PendienteTarifa)
+                {
+                    <div class="alert alert-danger py-1 px-2 mt-2 mb-0" style="font-size:10px; font-weight:700;"><i class="bi bi-lock-fill me-1"></i>Pendiente de tarifa para este contenedor.</div>
+                }
+            </div>
+        }
+    }
+            </div>
+            <div class="pro-pane-@Model.IdSuffix" id="pane-base-@Model.IdSuffix" style="display: none;">
+                <div class="d-flex justify-content-between align-items-center mb-4 pb-3 border-bottom border-light">
+                    <div>
+                        <h3 class="pro-title"><i class="bi bi-folder2-open me-2 text-dark"></i>Documentos Base y Anexos</h3>
+                        <p class="pro-subtitle m-0">Consolidación de documentos internos, certificados de agencia y despachos al cliente.</p>
+                    </div>
+                    <div class="d-flex align-items-center gap-3">
+                        <div class="text-end">
+                            <a class="btn-edit-inline" style="font-size:11px;" onclick="toggleEditMode('pane-base-@Model.IdSuffix', this)"><i class="bi bi-pencil me-1"></i> Editar Panel</a>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="pro-card mb-4" style="border-top: 4px solid #0ea5e9; background-color: #f0f9ff;">
+                    <h6 class="fw-bold text-info mb-4" style="font-size: 13px; text-transform: uppercase;"><i class="bi bi-bank text-info me-2"></i> 1. Certificados Agencia (AGA) y Operativos</h6>
+
+                    <div class="row g-4">
+                        <div class="col-md-6">
+                            <div class="p-3 bg-white rounded border border-info border-opacity-25 h-100">
+                                <div class="d-flex justify-content-between align-items-center mb-3">
+                                    <label class="pro-label text-info m-0">Instrucciones Embarque</label>
+                                    <div class="mini-stepper m-0">
+                                        <span class="mini-step @((d?.LogInstructivo?.ToUpper().Contains("ENVIADO") == true) ? "active" : "")">Env</span><i class="bi bi-chevron-right mini-arrow"></i>
+                                        <span class="mini-step @((d?.LogInstructivo?.ToUpper().Contains("PROCESO") == true) ? "active" : "")">Proc</span>
+                                    </div>
+                                </div>
+                                <div class="row g-2 mb-2">
+                                    <div class="col-8">
+                                        <input type="text" name="docUpdates.InstructivoCliente" class="pro-input fw-bold" value="@d?.InstructivoCliente" placeholder="Código / Ref..." readonly />
+                                        <input type="file" name="UploadInstructivo" class="pro-file-input edit-only-file mt-2" style="display:none;" onchange="registrarActividadSubcert('instructivo', 'v3-@Model.IdSuffix', this)" disabled />
+                                    </div>
+                                    <div class="col-4 d-flex gap-1 flex-column">
+                                        @if (!string.IsNullOrEmpty(d?.RutaInstructivo))
+                                        {
+                                            <a href="@d.RutaInstructivo" target="_blank" class="pro-btn w-100 justify-content-center" style="background:#f0f9ff; color:#0ea5e9; border: 1px solid #bae6fd;" title="Ver"><i class="bi bi-eye"></i> Ver</a>
+                                        }
+                                        <button type="button" class="pro-btn edit-only-inline w-100 justify-content-center" style="display:none; background:#0ea5e9; color:#fff;" onclick="abrirGeneradorCorreos('v3-@Model.IdSuffix', 'instructivoAgencia')"><i class="bi bi-send me-1"></i> Enviar</button>
+                                    </div>
+                                </div>
+                                <label class="pro-label mt-2 border-top pt-2">Actividad Instructivo</label>
+                                <input type="hidden" name="docUpdates.LogInstructivo" value="@d?.LogInstructivo" />
+                                <div class="pro-card-gray log-incidencias-wrap m-0 p-2" id="log-instructivo-txt-v3-@Model.IdSuffix" style="height: 70px; overflow-y:auto; background:#f8fafc;">
+                                    @Html.Raw(!string.IsNullOrEmpty(d?.LogInstructivo) ? d.LogInstructivo : "<span style='color:#9ca3af;'>Sin registros.</span>")
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <div class="p-3 bg-white rounded border border-info border-opacity-25 h-100">
+                                <div class="d-flex justify-content-between align-items-center mb-3">
+                                    <label class="pro-label text-info m-0">Cert. Captura AGA</label>
+                                    <div class="mini-stepper m-0">
+                                        <span class="mini-step @((d?.LogCapturaAga?.ToUpper().Contains("ENVIADO") == true) ? "active" : "")">Env</span><i class="bi bi-chevron-right mini-arrow"></i>
+                                        <span class="mini-step @((d?.LogCapturaAga?.ToUpper().Contains("PROCESO") == true) ? "active" : "")">Proc</span>
+                                    </div>
+                                </div>
+                                <div class="row g-2 mb-2">
+                                    <div class="col-8">
+                                        <input type="text" name="docUpdates.NumCapturaAga" class="pro-input fw-bold" value="@d?.NumCapturaAga" placeholder="N° / Ref..." readonly />
+                                        <input type="file" name="UploadCapturaAga" class="pro-file-input edit-only-file mt-2" style="display:none;" onchange="registrarActividadSubcert('capturaAga', 'v3-@Model.IdSuffix', this)" disabled />
+                                    </div>
+                                    <div class="col-4 d-flex gap-1 flex-column">
+                                        @if (!string.IsNullOrEmpty(d?.RutaCapturaAga))
+                                        {
+                                            <a href="@d.RutaCapturaAga" target="_blank" class="pro-btn w-100 justify-content-center" style="background:#f0f9ff; color:#0ea5e9; border: 1px solid #bae6fd;" title="Ver"><i class="bi bi-eye"></i> Ver</a>
+                                        }
+                                        <button type="button" class="pro-btn edit-only-inline w-100 justify-content-center" style="display:none; background:#0ea5e9; color:#fff;" onclick="abrirGeneradorCorreos('v3-@Model.IdSuffix', 'capturaAgencia')"><i class="bi bi-send me-1"></i> Enviar</button>
+                                    </div>
+                                </div>
+                                <label class="pro-label mt-2 border-top pt-2">Actividad Captura AGA</label>
+                                <input type="hidden" name="docUpdates.LogCapturaAga" value="@d?.LogCapturaAga" />
+                                <div class="pro-card-gray log-incidencias-wrap m-0 p-2" id="log-capturaAga-txt-v3-@Model.IdSuffix" style="height: 70px; overflow-y:auto; background:#f8fafc;">
+                                    @Html.Raw(!string.IsNullOrEmpty(d?.LogCapturaAga) ? d.LogCapturaAga : "<span style='color:#9ca3af;'>Sin registros.</span>")
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <div class="p-3 bg-white rounded border border-info border-opacity-25 h-100">
+                                <div class="d-flex justify-content-between align-items-center mb-3">
+                                    <label class="pro-label text-info m-0">Booking Atilson</label>
+                                    <div class="mini-stepper m-0">
+                                        <span class="mini-step @((d?.LogBookingAtilson?.ToUpper().Contains("ENVIADO") == true) ? "active" : "")">Env</span><i class="bi bi-chevron-right mini-arrow"></i>
+                                        <span class="mini-step @((d?.LogBookingAtilson?.ToUpper().Contains("PROCESO") == true) ? "active" : "")">Proc</span>
+                                    </div>
+                                </div>
+                                <div class="row g-2 mb-2">
+                                    <div class="col-8">
+                                        <input type="text" name="docUpdates.BookingAtilson" class="pro-input fw-bold" value="@d?.BookingAtilson" placeholder="Ref Booking..." readonly />
+                                        <input type="file" name="UploadBookingAtilson" class="pro-file-input edit-only-file mt-2" style="display:none;" onchange="registrarActividadSubcert('booking', 'v3-@Model.IdSuffix', this)" disabled />
+                                    </div>
+                                    <div class="col-4 d-flex gap-1 flex-column">
+                                        @if (!string.IsNullOrEmpty(d?.RutaBookingAtilson))
+                                        {
+                                            <a href="@d.RutaBookingAtilson" target="_blank" class="pro-btn w-100 justify-content-center" style="background:#f0f9ff; color:#0ea5e9; border: 1px solid #bae6fd;" title="Ver"><i class="bi bi-eye"></i> Ver</a>
+                                        }
+                                        <button type="button" class="pro-btn edit-only-inline w-100 justify-content-center" style="display:none; background:#0ea5e9; color:#fff;" onclick="abrirGeneradorCorreos('v3-@Model.IdSuffix', 'bookingAgencia')"><i class="bi bi-send me-1"></i> Enviar</button>
+                                    </div>
+                                </div>
+                                <label class="pro-label mt-2 border-top pt-2">Actividad Booking AGA</label>
+                                <input type="hidden" name="docUpdates.LogBookingAtilson" value="@d?.LogBookingAtilson" />
+                                <div class="pro-card-gray log-incidencias-wrap m-0 p-2" id="log-bookingAga-txt-v3-@Model.IdSuffix" style="height: 70px; overflow-y:auto; background:#f8fafc;">
+                                    @Html.Raw(!string.IsNullOrEmpty(d?.LogBookingAtilson) ? d.LogBookingAtilson : "<span style='color:#9ca3af;'>Sin registros.</span>")
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <div class="p-3 bg-white rounded border border-info border-opacity-25 h-100">
+                                <div class="d-flex justify-content-between align-items-center mb-3">
+                                    <label class="pro-label text-info m-0">Guía de Despacho</label>
+                                    <div class="mini-stepper m-0">
+                                        <span class="mini-step @((d?.LogGuia?.ToUpper().Contains("ENVIADO") == true) ? "active" : "")">Env</span><i class="bi bi-chevron-right mini-arrow"></i>
+                                        <span class="mini-step @((d?.LogGuia?.ToUpper().Contains("PROCESO") == true) ? "active" : "")">Proc</span><i class="bi bi-chevron-right mini-arrow"></i>
+                                        <span class="mini-step @((d?.LogGuia?.ToUpper().Contains("VISADO") == true) ? "active" : "")">Vis</span>
+                                    </div>
+                                </div>
+                                <div class="row g-2 mb-2">
+                                    <div class="col-8">
+                                        <input type="text" name="docUpdates.GuiaDespacho" class="pro-input fw-bold" value="@d?.GuiaDespacho" placeholder="N° Guía..." readonly />
+                                        <input type="file" name="UploadGuia" class="pro-file-input edit-only-file mt-2" style="display:none;" onchange="registrarActividadSubcert('guia', 'v3-@Model.IdSuffix', this)" disabled />
+                                    </div>
+                                    <div class="col-4 d-flex gap-1 flex-column">
+                                        @if (!string.IsNullOrEmpty(d?.RutaGuia))
+                                        {
+                                            <a href="@d.RutaGuia" target="_blank" class="pro-btn w-100 justify-content-center" style="background:#f0f9ff; color:#0ea5e9; border: 1px solid #bae6fd;" title="Ver"><i class="bi bi-eye"></i> Ver</a>
+                                        }
+                                        <button type="button" class="pro-btn edit-only-inline w-100 justify-content-center" style="display:none; background:#0ea5e9; color:#fff;" onclick="abrirGeneradorCorreos('v3-@Model.IdSuffix', 'guiaAgencia')"><i class="bi bi-send me-1"></i> Enviar</button>
+                                    </div>
+                                </div>
+                                <label class="pro-label mt-2 border-top pt-2">Actividad Guía</label>
+                                <input type="hidden" name="docUpdates.LogGuia" value="@d?.LogGuia" />
+                                <div class="pro-card-gray log-incidencias-wrap m-0 p-2" id="log-guia-txt-v3-@Model.IdSuffix" style="height: 70px; overflow-y:auto; background:#f8fafc;">
+                                    @Html.Raw(!string.IsNullOrEmpty(d?.LogGuia) ? d.LogGuia : "<span style='color:#9ca3af;'>Sin registros.</span>")
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <div class="p-3 bg-white rounded border border-info border-opacity-25 h-100">
+                                <label class="pro-label text-info m-0 mb-2">Factura Exportación</label>
+                                <div class="input-group input-group-sm mb-2">
+                                    <input type="text" name="docUpdates.FacturaExportacion" class="pro-input fw-bold" value="@d?.FacturaExportacion" placeholder="N° Factura..." readonly style="max-width: 40%;" />
+                                    <input type="file" name="UploadFactura" class="pro-file-input edit-only-file" style="display:none;" onchange="registrarActividadSubcert('factura', 'v3-@Model.IdSuffix', this)" disabled />
+                                </div>
+                                @if (!string.IsNullOrEmpty(d?.RutaFactura))
+                                {
+                                    <a href="@d.RutaFactura" target="_blank" class="pro-btn w-100 justify-content-center mb-2" style="background:#f0f9ff; border:1px solid #bae6fd; color:#0ea5e9;"><i class="bi bi-eye me-1"></i> Ver Documento Guardado</a>
+                                }
+                                <label class="pro-label mt-2 border-top pt-2">Actividad Factura</label>
+                                <input type="hidden" name="docUpdates.LogFactura" value="@d?.LogFactura" />
+                                <div class="pro-card-gray log-incidencias-wrap m-0 p-2" id="log-factura-txt-v3-@Model.IdSuffix" style="height: 70px; overflow-y:auto; background:#f8fafc;">
+                                    @Html.Raw(!string.IsNullOrEmpty(d?.LogFactura) ? d.LogFactura : "<span style='color:#9ca3af;'>Sin registros.</span>")
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <div class="p-3 bg-white rounded border border-info border-opacity-25 h-100">
+                                <label class="pro-label text-info m-0 mb-2">Packing List</label>
+                                <div class="input-group input-group-sm mb-2">
+                                    <input type="text" name="docUpdates.NotificarA" class="pro-input fw-bold" value="@d?.NotificarA" placeholder="Identificador / Ref..." readonly style="max-width: 40%;" />
+                                    <input type="file" name="UploadPacking" class="pro-file-input edit-only-file" style="display:none;" onchange="registrarActividadSubcert('packing', 'v3-@Model.IdSuffix', this)" disabled />
+                                </div>
+                                @if (!string.IsNullOrEmpty(d?.RutaPacking))
+                                {
+                                    <a href="@d.RutaPacking" target="_blank" class="pro-btn w-100 justify-content-center mb-2" style="background:#f0f9ff; border:1px solid #bae6fd; color:#0ea5e9;"><i class="bi bi-eye me-1"></i> Ver Documento Guardado</a>
+                                }
+                                <label class="pro-label mt-2 border-top pt-2">Actividad Packing</label>
+                                <input type="hidden" name="docUpdates.LogPacking" value="@d?.LogPacking" />
+                                <div class="pro-card-gray log-incidencias-wrap m-0 p-2" id="log-packing-txt-v3-@Model.IdSuffix" style="height: 70px; overflow-y:auto; background:#f8fafc;">
+                                    @Html.Raw(!string.IsNullOrEmpty(d?.LogPacking) ? d.LogPacking : "<span style='color:#9ca3af;'>Sin registros.</span>")
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <div class="p-3 bg-white rounded border border-info border-opacity-25 h-100">
+                                <label class="pro-label text-info m-0 mb-2">Certs. Extra (HACCP)</label>
+                                <div class="input-group input-group-sm mb-2">
+                                    <input type="text" name="docUpdates.CertExtra" class="pro-input fw-bold" value="@d?.CertExtra" placeholder="N° Certificado..." readonly style="max-width: 40%;" />
+                                    <input type="file" name="UploadCertExtra" class="pro-file-input edit-only-file" style="display:none;" onchange="registrarActividadSubcert('extra', 'v3-@Model.IdSuffix', this)" disabled />
+                                </div>
+                                @if (!string.IsNullOrEmpty(d?.RutaCertExtra))
+                                {
+                                    <a href="@d.RutaCertExtra" target="_blank" class="pro-btn w-100 justify-content-center mb-2" style="background:#f0f9ff; border:1px solid #bae6fd; color:#0ea5e9;"><i class="bi bi-eye me-1"></i> Ver Documento Guardado</a>
+                                }
+                                <label class="pro-label mt-2 border-top pt-2">Actividad Cert. Extra</label>
+                                <input type="hidden" name="docUpdates.LogExtra" value="@d?.LogExtra" />
+                                <div class="pro-card-gray log-incidencias-wrap m-0 p-2" id="log-extra-txt-v3-@Model.IdSuffix" style="height: 70px; overflow-y:auto; background:#f8fafc;">
+                                    @Html.Raw(!string.IsNullOrEmpty(d?.LogExtra) ? d.LogExtra : "<span style='color:#9ca3af;'>Sin registros.</span>")
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <div class="p-3 bg-white rounded border border-info border-opacity-25 h-100">
+                                <div class="d-flex justify-content-between align-items-center mb-3">
+                                    <label class="pro-label text-info m-0">Cert. Libre Venta</label>
+                                    <div class="mini-stepper m-0">
+                                        <span class="mini-step @((d?.LogLibreVenta?.ToUpper().Contains("ENVIADO") == true) ? "active" : "")">Env</span><i class="bi bi-chevron-right mini-arrow"></i>
+                                        <span class="mini-step @((d?.LogLibreVenta?.ToUpper().Contains("PROCESO") == true) ? "active" : "")">Proc</span>
+                                    </div>
+                                </div>
+                                <div class="row g-2 mb-2">
+                                    <div class="col-8">
+                                        <input type="text" name="docUpdates.CertLibreVenta" class="pro-input fw-bold" value="@d?.CertLibreVenta" placeholder="N° / Ref..." readonly />
+                                        <input type="file" name="UploadLibreVenta" class="pro-file-input edit-only-file mt-2" style="display:none;" onchange="registrarActividadSubcert('libreven', 'v3-@Model.IdSuffix', this)" disabled />
+                                    </div>
+                                    <div class="col-4 d-flex gap-1 flex-column">
+                                        @if (!string.IsNullOrEmpty(d?.RutaLibreVenta))
+                                        {
+                                            <a href="@d.RutaLibreVenta" target="_blank" class="pro-btn w-100 justify-content-center" style="background:#f0f9ff; color:#0ea5e9; border: 1px solid #bae6fd;" title="Ver"><i class="bi bi-eye"></i> Ver</a>
+                                        }
+                                        <button type="button" class="pro-btn edit-only-inline w-100 justify-content-center" style="display:none; background:#0ea5e9; color:#fff;" onclick="abrirGeneradorCorreos('v3-@Model.IdSuffix', 'librevenAgencia')"><i class="bi bi-send me-1"></i> Enviar</button>
+                                    </div>
+                                </div>
+                                <label class="pro-label mt-2 border-top pt-2">Actividad Libre Venta</label>
+                                <input type="hidden" name="docUpdates.LogLibreVenta" value="@d?.LogLibreVenta" />
+                                <div class="pro-card-gray log-incidencias-wrap m-0 p-2" id="log-libreven-txt-v3-@Model.IdSuffix" style="height: 70px; overflow-y:auto; background:#f8fafc;">
+                                    @Html.Raw(!string.IsNullOrEmpty(d?.LogLibreVenta) ? d.LogLibreVenta : "<span style='color:#9ca3af;'>Sin registros.</span>")
+                                </div>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+
+                <div class="pro-card mb-4" style="border-top: 4px solid #eab308; background-color: #fefce8;">
+                    <h6 class="fw-bold mb-4" style="font-size: 13px; text-transform: uppercase; color:#a16207;"><i class="bi bi-person-badge text-warning me-2"></i> 2. Certificados Cliente</h6>
+                    <div class="row g-4">
+                        <div class="col-md-6">
+                            <div class="p-3 bg-white rounded border border-warning border-opacity-25 h-100">
+                                <div class="d-flex justify-content-between align-items-center mb-3">
+                                    <label class="pro-label text-warning m-0">Full Set</label>
+                                    <div class="mini-stepper m-0">
+                                        <span class="mini-step @((d?.LogFullSet?.ToUpper().Contains("ENVIADO") == true) ? "active" : "")">Env</span><i class="bi bi-chevron-right mini-arrow"></i>
+                                        <span class="mini-step @((d?.LogFullSet?.ToUpper().Contains("RECEPCIÓN") == true) ? "active" : "")">Recep</span>
+                                    </div>
+                                </div>
+                                <div class="row g-2 mb-2">
+                                    <div class="col-8">
+                                        <input type="text" name="docUpdates.NumFullSet" class="pro-input fw-bold" value="@d?.NumFullSet" placeholder="N° / Ref..." readonly />
+                                        <input type="file" name="UploadFullSet" class="pro-file-input edit-only-file mt-2" style="display:none;" onchange="registrarActividadSubcert('fullset', 'v3-@Model.IdSuffix', this)" disabled />
+                                    </div>
+                                    <div class="col-4 d-flex gap-1 flex-column">
+                                        @if (!string.IsNullOrEmpty(d?.RutaFullSet))
+                                        {
+                                            <a href="@d.RutaFullSet" target="_blank" class="pro-btn w-100 justify-content-center" style="background:#fefce8; color:#a16207; border: 1px solid #fde68a;" title="Ver"><i class="bi bi-eye"></i> Ver</a>
+                                        }
+                                        <button type="button" class="pro-btn edit-only-inline w-100 justify-content-center" style="display:none; background:#eab308; color:#fff;" onclick="abrirGeneradorCorreos('v3-@Model.IdSuffix', 'fullsetCliente')"><i class="bi bi-send me-1"></i> Enviar</button>
+                                    </div>
+                                </div>
+                                <label class="pro-label mt-2 border-top pt-2">Actividad Full Set</label>
+                                <input type="hidden" name="docUpdates.LogFullSet" value="@d?.LogFullSet" />
+                                <div class="pro-card-gray log-incidencias-wrap m-0 p-2" id="log-fullset-txt-v3-@Model.IdSuffix" style="height: 70px; overflow-y:auto; background:#f8fafc;">
+                                    @Html.Raw(!string.IsNullOrEmpty(d?.LogFullSet) ? d.LogFullSet : "<span style='color:#9ca3af;'>Sin registros.</span>")
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <div class="p-3 bg-white rounded border border-warning border-opacity-25 h-100">
+                                <div class="d-flex justify-content-between align-items-center mb-3">
+                                    <label class="pro-label text-warning m-0">DHL</label>
+                                    <div class="mini-stepper m-0">
+                                        <span class="mini-step @((d?.LogDhl?.ToUpper().Contains("ENVIADO") == true) ? "active" : "")">Env</span><i class="bi bi-chevron-right mini-arrow"></i>
+                                        <span class="mini-step @((d?.LogDhl?.ToUpper().Contains("RECEPCIÓN") == true) ? "active" : "")">Recep</span>
+                                    </div>
+                                </div>
+                                <div class="row g-2 mb-2">
+                                    <div class="col-8">
+                                        <input type="text" name="docUpdates.TrackingDhl" class="pro-input fw-bold" value="@d?.TrackingDhl" placeholder="N° de Tracking..." readonly />
+                                        <input type="file" name="UploadDhl" class="pro-file-input edit-only-file mt-2" style="display:none;" onchange="registrarActividadSubcert('dhl', 'v3-@Model.IdSuffix', this)" disabled />
+                                    </div>
+                                    <div class="col-4 d-flex gap-1 flex-column">
+                                        @if (!string.IsNullOrEmpty(d?.RutaDhl))
+                                        {
+                                            <a href="@d.RutaDhl" target="_blank" class="pro-btn w-100 justify-content-center" style="background:#fefce8; color:#a16207; border: 1px solid #fde68a;" title="Ver"><i class="bi bi-eye"></i> Ver</a>
+                                        }
+                                        <button type="button" class="pro-btn edit-only-inline w-100 justify-content-center" style="display:none; background:#eab308; color:#fff;" onclick="abrirGeneradorCorreos('v3-@Model.IdSuffix', 'dhlCliente')"><i class="bi bi-send me-1"></i> Enviar</button>
+                                    </div>
+                                </div>
+                                <label class="pro-label mt-2 border-top pt-2">Actividad DHL</label>
+                                <input type="hidden" name="docUpdates.LogDhl" value="@d?.LogDhl" />
+                                <div class="pro-card-gray log-incidencias-wrap m-0 p-2" id="log-dhl-txt-v3-@Model.IdSuffix" style="height: 70px; overflow-y:auto; background:#f8fafc;">
+                                    @Html.Raw(!string.IsNullOrEmpty(d?.LogDhl) ? d.LogDhl : "<span style='color:#9ca3af;'>Sin registros.</span>")
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+
+            <div class="pro-pane-@Model.IdSuffix" id="pane-sub-@Model.IdSuffix" style="display: none;">
+                <h3 class="pro-title"><i class="bi bi-diagram-3 me-2 text-secondary"></i>Subcertificados Asociados</h3>
+                <p class="pro-subtitle m-0 mb-4">COA, DT, CODAUT, CLAVE, NEPPEX.</p>
+
+                <div class="d-flex gap-4 flex-wrap mb-4 pb-3 border-bottom border-light">
+                    <label class="d-flex align-items-center gap-2 m-0" style="cursor:pointer;">
+                        <input class="pro-check" type="checkbox" id="chkCoa-v3-@Model.IdSuffix" onchange="toggleSubCert('row-coa-v3-@Model.IdSuffix', this)">
+                        <span class="fw-bold text-warning" style="font-size:12px; text-transform:uppercase;">COA</span>
+                    </label>
+                    <label class="d-flex align-items-center gap-2 m-0" style="cursor:pointer;">
+                        <input class="pro-check" type="checkbox" id="chkDt-v3-@Model.IdSuffix" onchange="toggleSubCert('row-dt-v3-@Model.IdSuffix', this)">
+                        <span class="fw-bold text-secondary" style="font-size:12px; text-transform:uppercase;">DT</span>
+                    </label>
+                    <label class="d-flex align-items-center gap-2 m-0" style="cursor:pointer;">
+                        <input class="pro-check" type="checkbox" id="chkCod-v3-@Model.IdSuffix" onchange="toggleSubCert('row-cod-v3-@Model.IdSuffix', this)">
+                        <span class="fw-bold text-danger" style="font-size:12px; text-transform:uppercase;">CODAUT</span>
+                    </label>
+                    <label class="d-flex align-items-center gap-2 m-0" style="cursor:pointer;">
+                        <input class="pro-check" type="checkbox" id="chkCla-v3-@Model.IdSuffix" onchange="toggleSubCert('row-cla-v3-@Model.IdSuffix', this)">
+                        <span class="fw-bold text-danger" style="font-size:12px; text-transform:uppercase;">CLAVE</span>
+                    </label>
+                    <label class="d-flex align-items-center gap-2 m-0" style="cursor:pointer;">
+                        <input class="pro-check" type="checkbox" id="chkNep-v3-@Model.IdSuffix" onchange="toggleSubCert('row-nep-v3-@Model.IdSuffix', this)">
+                        <span class="fw-bold text-danger" style="font-size:12px; text-transform:uppercase;">NEPPEX</span>
+                    </label>
+                </div>
+
+                <div class="d-flex flex-column">
+                    @{
+                        bool bloqueadoCoa = (d?.CertsBloqueados ?? "").Split(',').Contains("coa");
+                        bool bloqueadoDt = (d?.CertsBloqueados ?? "").Split(',').Contains("dt");
+                        bool bloqueadoCod = (d?.CertsBloqueados ?? "").Split(',').Contains("cod");
+                        bool bloqueadoCla = (d?.CertsBloqueados ?? "").Split(',').Contains("cla");
+                        bool bloqueadoNep = (d?.CertsBloqueados ?? "").Split(',').Contains("nep");
+                    }
+
+                    <div id="row-coa-v3-@Model.IdSuffix" style="display:none;">
+                        <div class="d-flex align-items-center gap-3 py-3 border-bottom" style="border-color:#f1f5f9 !important;">
+                            <div style="width:4px; height:34px; background:#f59e0b; border-radius:3px; flex-shrink:0;"></div>
+                            <div style="width:85px; flex-shrink:0;">
+                                <span class="fw-bold text-dark" style="font-size:12px;">COA</span>
+                                                                @if (bloqueadoCoa)
+                                {
+                                    <i class="bi bi-check-circle-fill text-success ms-1" title="Enviado a Finanzas" style="font-size:11px;"></i>
+                                    @if (TieneSolicitudPendiente("coa"))
+                                    {
+                                        <i class="bi bi-hourglass-split text-warning ms-1" title="Desbloqueo solicitado" style="font-size:11px;"></i>
+                                    }
+                                    else
+                                    {
+                                        <i class="bi bi-unlock-fill text-primary ms-1" style="font-size:11px; cursor:pointer;" title="Solicitar Desbloqueo" onclick="solicitarDesbloqueo(@op.Id, @(Model.IdUnidadTecnica.HasValue ? Model.IdUnidadTecnica.Value.ToString() : "null"), 'coa')"></i>
+                                    }
+                                }
+                            </div>
+                            <input type="text" name="docUpdates.NumCoa1" value="@d?.NumCoa1" class="pro-input" placeholder="N° de referencia..." readonly style="font-size:12px; padding:7px 10px; max-width:220px;" />
+                            <div class="flex-grow-1"></div>
+                            @if (!string.IsNullOrEmpty(d?.EvidenciaCoa1))
+                            {
+                                <a href="@d.EvidenciaCoa1" target="_blank" class="btn btn-sm btn-light border me-1" style="font-size:10px;" title="Ver documento"><i class="bi bi-eye"></i></a>
+                            }
+                            <label class="btn btn-sm btn-light border edit-only-inline m-0" style="font-size:10px; cursor:pointer;" title="Adjuntar archivo">
+                                <i class="bi bi-paperclip"></i>
+                                <input type="file" name="UploadCoa" class="d-none" disabled onchange="registrarActividadSubcert('coa', 'v3-@Model.IdSuffix', this)" />
+                            </label>
+                            <a class="btn-edit-inline ms-2" style="font-size:11px;" onclick="toggleEditCert('coa', 'v3-@Model.IdSuffix', this)"><i class="bi bi-pencil"></i></a>
+                            <div class="btn-save-wrapper d-none d-flex gap-1 ms-2">
+                                <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2" style="font-size:10px;" onclick="descartarCert('coa', 'v3-@Model.IdSuffix')"><i class="bi bi-x"></i></button>
+                                <button type="button" class="btn btn-sm btn-success py-0 px-2" style="font-size:10px;" onclick="guardarCertificadoAjax('coa', 'v3-@Model.IdSuffix', true, this)"><i class="bi bi-check2"></i></button>
+                            </div>
+                            <input type="hidden" name="docUpdates.LogCoa" value="@d?.LogCoa" />
+                        </div>
+                    </div>
+
+                    <div id="row-dt-v3-@Model.IdSuffix" style="display:none;">
+                        <div class="d-flex align-items-center gap-3 py-3 border-bottom" style="border-color:#f1f5f9 !important;">
+                            <div style="width:4px; height:34px; background:#6b7280; border-radius:3px; flex-shrink:0;"></div>
+                            <div style="width:85px; flex-shrink:0;">
+                                <span class="fw-bold text-dark" style="font-size:12px;">DT</span>
+                                                                @if (bloqueadoDt)
+                                {
+                                    <i class="bi bi-check-circle-fill text-success ms-1" title="Enviado a Finanzas" style="font-size:11px;"></i>
+                                    @if (TieneSolicitudPendiente("dt"))
+                                    {
+                                        <i class="bi bi-hourglass-split text-warning ms-1" title="Desbloqueo solicitado" style="font-size:11px;"></i>
+                                    }
+                                    else
+                                    {
+                                        <i class="bi bi-unlock-fill text-primary ms-1" style="font-size:11px; cursor:pointer;" title="Solicitar Desbloqueo" onclick="solicitarDesbloqueo(@op.Id, @(Model.IdUnidadTecnica.HasValue ? Model.IdUnidadTecnica.Value.ToString() : "null"), 'dt')"></i>
+                                    }
+                                }
+                            </div>
+                            <input type="text" name="docUpdates.NumDt1" value="@d?.NumDt1" class="pro-input" placeholder="N° de referencia..." readonly style="font-size:12px; padding:7px 10px; max-width:220px;" />
+                            <div class="flex-grow-1"></div>
+                            @if (!string.IsNullOrEmpty(d?.EvidenciaDt1))
+                            {
+                                <a href="@d.EvidenciaDt1" target="_blank" class="btn btn-sm btn-light border me-1" style="font-size:10px;" title="Ver documento"><i class="bi bi-eye"></i></a>
+                            }
+                            <label class="btn btn-sm btn-light border edit-only-inline m-0" style="font-size:10px; cursor:pointer;" title="Adjuntar archivo">
+                                <i class="bi bi-paperclip"></i>
+                                <input type="file" name="UploadDt" class="d-none" disabled onchange="registrarActividadSubcert('dt', 'v3-@Model.IdSuffix', this)" />
+                            </label>
+                            <a class="btn-edit-inline ms-2" style="font-size:11px;" onclick="toggleEditCert('dt', 'v3-@Model.IdSuffix', this)"><i class="bi bi-pencil"></i></a>
+                            <div class="btn-save-wrapper d-none d-flex gap-1 ms-2">
+                                <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2" style="font-size:10px;" onclick="descartarCert('dt', 'v3-@Model.IdSuffix')"><i class="bi bi-x"></i></button>
+                                <button type="button" class="btn btn-sm btn-success py-0 px-2" style="font-size:10px;" onclick="guardarCertificadoAjax('dt', 'v3-@Model.IdSuffix', true, this)"><i class="bi bi-check2"></i></button>
+                            </div>
+                            <input type="hidden" name="docUpdates.LogDt" value="@d?.LogDt" />
+                        </div>
+                    </div>
+
+                    <div id="row-cod-v3-@Model.IdSuffix" style="display:none;">
+                        <div class="d-flex align-items-center gap-3 py-3 border-bottom" style="border-color:#f1f5f9 !important;">
+                            <div style="width:4px; height:34px; background:#dc2626; border-radius:3px; flex-shrink:0;"></div>
+                            <div style="width:85px; flex-shrink:0;">
+                                <span class="fw-bold text-dark" style="font-size:12px;">CODAUT</span>
+                                                                @if (bloqueadoCod)
+                                {
+                                    <i class="bi bi-check-circle-fill text-success ms-1" title="Enviado a Finanzas" style="font-size:11px;"></i>
+                                    @if (TieneSolicitudPendiente("cod"))
+                                    {
+                                        <i class="bi bi-hourglass-split text-warning ms-1" title="Desbloqueo solicitado" style="font-size:11px;"></i>
+                                    }
+                                    else
+                                    {
+                                        <i class="bi bi-unlock-fill text-primary ms-1" style="font-size:11px; cursor:pointer;" title="Solicitar Desbloqueo" onclick="solicitarDesbloqueo(@op.Id, @(Model.IdUnidadTecnica.HasValue ? Model.IdUnidadTecnica.Value.ToString() : "null"), 'cod')"></i>
+                                    }
+                                }
+                            </div>
+                            <input type="text" name="docUpdates.NumCod1" value="@d?.NumCod1" class="pro-input" placeholder="N° de referencia..." readonly style="font-size:12px; padding:7px 10px; max-width:220px;" />
+                            <div class="flex-grow-1"></div>
+                            @if (!string.IsNullOrEmpty(d?.EvidenciaCod1))
+                            {
+                                <a href="@d.EvidenciaCod1" target="_blank" class="btn btn-sm btn-light border me-1" style="font-size:10px;" title="Ver documento"><i class="bi bi-eye"></i></a>
+                            }
+                            <label class="btn btn-sm btn-light border edit-only-inline m-0" style="font-size:10px; cursor:pointer;" title="Adjuntar archivo">
+                                <i class="bi bi-paperclip"></i>
+                                <input type="file" name="UploadCodaut" class="d-none" disabled onchange="registrarActividadSubcert('cod', 'v3-@Model.IdSuffix', this)" />
+                            </label>
+                            <a class="btn-edit-inline ms-2" style="font-size:11px;" onclick="toggleEditCert('cod', 'v3-@Model.IdSuffix', this)"><i class="bi bi-pencil"></i></a>
+                            <div class="btn-save-wrapper d-none d-flex gap-1 ms-2">
+                                <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2" style="font-size:10px;" onclick="descartarCert('cod', 'v3-@Model.IdSuffix')"><i class="bi bi-x"></i></button>
+                                <button type="button" class="btn btn-sm btn-success py-0 px-2" style="font-size:10px;" onclick="guardarCertificadoAjax('cod', 'v3-@Model.IdSuffix', true, this)"><i class="bi bi-check2"></i></button>
+                            </div>
+                            <input type="hidden" name="docUpdates.LogCodaut" value="@d?.LogCodaut" />
+                        </div>
+                    </div>
+
+                    <div id="row-cla-v3-@Model.IdSuffix" style="display:none;">
+                        <div class="d-flex align-items-center gap-3 py-3 border-bottom" style="border-color:#f1f5f9 !important;">
+                            <div style="width:4px; height:34px; background:#dc2626; border-radius:3px; flex-shrink:0;"></div>
+                            <div style="width:85px; flex-shrink:0;">
+                                <span class="fw-bold text-dark" style="font-size:12px;">CLAVE</span>
+                                                                @if (bloqueadoCla)
+                                {
+                                    <i class="bi bi-check-circle-fill text-success ms-1" title="Enviado a Finanzas" style="font-size:11px;"></i>
+                                    @if (TieneSolicitudPendiente("cla"))
+                                    {
+                                        <i class="bi bi-hourglass-split text-warning ms-1" title="Desbloqueo solicitado" style="font-size:11px;"></i>
+                                    }
+                                    else
+                                    {
+                                        <i class="bi bi-unlock-fill text-primary ms-1" style="font-size:11px; cursor:pointer;" title="Solicitar Desbloqueo" onclick="solicitarDesbloqueo(@op.Id, @(Model.IdUnidadTecnica.HasValue ? Model.IdUnidadTecnica.Value.ToString() : "null"), 'cla')"></i>
+                                    }
+                                }
+                            </div>
+                            <input type="text" name="docUpdates.NumCla1" value="@d?.NumCla1" class="pro-input" placeholder="N° de referencia..." readonly style="font-size:12px; padding:7px 10px; max-width:220px;" />
+                            <div class="flex-grow-1"></div>
+                            @if (!string.IsNullOrEmpty(d?.EvidenciaCla1))
+                            {
+                                <a href="@d.EvidenciaCla1" target="_blank" class="btn btn-sm btn-light border me-1" style="font-size:10px;" title="Ver documento"><i class="bi bi-eye"></i></a>
+                            }
+                            <label class="btn btn-sm btn-light border edit-only-inline m-0" style="font-size:10px; cursor:pointer;" title="Adjuntar archivo">
+                                <i class="bi bi-paperclip"></i>
+                                <input type="file" name="UploadClave" class="d-none" disabled onchange="registrarActividadSubcert('cla', 'v3-@Model.IdSuffix', this)" />
+                            </label>
+                            <a class="btn-edit-inline ms-2" style="font-size:11px;" onclick="toggleEditCert('cla', 'v3-@Model.IdSuffix', this)"><i class="bi bi-pencil"></i></a>
+                            <div class="btn-save-wrapper d-none d-flex gap-1 ms-2">
+                                <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2" style="font-size:10px;" onclick="descartarCert('cla', 'v3-@Model.IdSuffix')"><i class="bi bi-x"></i></button>
+                                <button type="button" class="btn btn-sm btn-success py-0 px-2" style="font-size:10px;" onclick="guardarCertificadoAjax('cla', 'v3-@Model.IdSuffix', true, this)"><i class="bi bi-check2"></i></button>
+                            </div>
+                            <input type="hidden" name="docUpdates.LogClave" value="@d?.LogClave" />
+                        </div>
+                    </div>
+
+                    <div id="row-nep-v3-@Model.IdSuffix" style="display:none;">
+                        <div class="d-flex align-items-center gap-3 py-3" style="border-color:#f1f5f9 !important;">
+                            <div style="width:4px; height:34px; background:#dc2626; border-radius:3px; flex-shrink:0;"></div>
+                            <div style="width:85px; flex-shrink:0;">
+                                <span class="fw-bold text-dark" style="font-size:12px;">NEPPEX</span>
+                                                                @if (bloqueadoNep)
+                                {
+                                    <i class="bi bi-check-circle-fill text-success ms-1" title="Enviado a Finanzas" style="font-size:11px;"></i>
+                                    @if (TieneSolicitudPendiente("nep"))
+                                    {
+                                        <i class="bi bi-hourglass-split text-warning ms-1" title="Desbloqueo solicitado" style="font-size:11px;"></i>
+                                    }
+                                    else
+                                    {
+                                        <i class="bi bi-unlock-fill text-primary ms-1" style="font-size:11px; cursor:pointer;" title="Solicitar Desbloqueo" onclick="solicitarDesbloqueo(@op.Id, @(Model.IdUnidadTecnica.HasValue ? Model.IdUnidadTecnica.Value.ToString() : "null"), 'nep')"></i>
+                                    }
+                                }
+                            </div>
+                            <input type="text" name="docUpdates.NumNep1" value="@d?.NumNep1" class="pro-input" placeholder="N° de referencia..." readonly style="font-size:12px; padding:7px 10px; max-width:220px;" />
+                            <div class="flex-grow-1"></div>
+                            @if (!string.IsNullOrEmpty(d?.EvidenciaNep1))
+                            {
+                                <a href="@d.EvidenciaNep1" target="_blank" class="btn btn-sm btn-light border me-1" style="font-size:10px;" title="Ver documento"><i class="bi bi-eye"></i></a>
+                            }
+                            <label class="btn btn-sm btn-light border edit-only-inline m-0" style="font-size:10px; cursor:pointer;" title="Adjuntar archivo">
+                                <i class="bi bi-paperclip"></i>
+                                <input type="file" name="UploadNeppex" class="d-none" disabled onchange="registrarActividadSubcert('nep', 'v3-@Model.IdSuffix', this)" />
+                            </label>
+                            <a class="btn-edit-inline ms-2" style="font-size:11px;" onclick="toggleEditCert('nep', 'v3-@Model.IdSuffix', this)"><i class="bi bi-pencil"></i></a>
+                            <div class="btn-save-wrapper d-none d-flex gap-1 ms-2">
+                                <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2" style="font-size:10px;" onclick="descartarCert('nep', 'v3-@Model.IdSuffix')"><i class="bi bi-x"></i></button>
+                                <button type="button" class="btn btn-sm btn-success py-0 px-2" style="font-size:10px;" onclick="guardarCertificadoAjax('nep', 'v3-@Model.IdSuffix', true, this)"><i class="bi bi-check2"></i></button>
+                            </div>
+                            <input type="hidden" name="docUpdates.LogNeppex" value="@d?.LogNeppex" />
+                        </div>
+                    </div>
+                </div>
+
+            </div><!-- /pane-sub -->
+        </div><!-- /pro-content-area -->
+    </div><!-- /pro-wrapper -->
+</form>

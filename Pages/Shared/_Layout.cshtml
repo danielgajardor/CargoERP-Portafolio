@@ -1,0 +1,527 @@
+﻿<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@ViewData["Title"] - Atilson Cargo ERP</title>
+
+    <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
+    <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+
+    <style>
+            :root {
+                --atilson-dark: #0f172a;
+                --atilson-darker: #020617;
+                --atilson-accent: #6d2d9e;
+                --atilson-accent-light: #9b51e0;
+                --dark-text: #1e293b;
+                --bg-light: #f8fafc;
+                --sidebar-width: 240px; /* Ajustado para lectura completa */
+                --sidebar-collapsed-width: 70px;
+            }
+
+            body {
+                font-family: 'Inter', sans-serif;
+                background-color: var(--bg-light);
+                color: var(--dark-text);
+                overflow-x: hidden;
+            }
+
+            /* SIDEBAR */
+            .sidebar {
+                display: flex;
+                flex-direction: column;
+                width: var(--sidebar-width);
+                background-color: var(--atilson-dark);
+                color: white;
+                position: fixed;
+                top: 0;
+                bottom: 0;
+                left: 0;
+                box-shadow: 4px 0 25px rgba(0,0,0,0.1);
+                z-index: 1000;
+                transition: width 0.3s cubic-bezier(0.25, 1, 0.5, 1);
+                border-right: 1px solid rgba(255,255,255,0.03);
+                overflow-x: hidden;
+                white-space: nowrap;
+            }
+
+            .sidebar-header {
+                height: 75px;
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                padding: 0 18px;
+                border-bottom: 1px solid rgba(255,255,255,0.05);
+            }
+
+            .logo-atilson {
+                max-height: 28px;
+                filter: brightness(0) invert(1);
+            }
+
+            .minimal-toggle {
+                background: transparent;
+                border: none;
+                color: rgba(255,255,255,0.5);
+                font-size: 24px;
+                cursor: pointer;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                transition: color 0.3s;
+            }
+
+                .minimal-toggle:hover {
+                    color: var(--atilson-accent-light);
+                }
+
+            .sidebar-nav {
+                list-style: none;
+                padding: 15px 10px;
+                margin: 0;
+                flex-grow: 1;
+                overflow-y: auto;
+                scrollbar-width: none;
+            }
+
+                .sidebar-nav::-webkit-scrollbar {
+                    display: none;
+                }
+
+            .nav-link {
+                color: rgba(255,255,255,0.65);
+                padding: 10px 12px;
+                border-radius: 8px;
+                font-size: 12.5px;
+                font-weight: 600;
+                display: flex;
+                align-items: center;
+                justify-content: flex-start;
+                text-decoration: none;
+                transition: all 0.2s ease;
+                margin-bottom: 4px;
+            }
+
+                .nav-link:focus, .nav-link:active {
+                    outline: none;
+                    box-shadow: none;
+                    color: inherit;
+                }
+
+                .nav-link i.icon-main {
+                    font-size: 17px;
+                    margin-right: 12px;
+                    min-width: 20px;
+                    text-align: center;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    transition: color 0.2s ease;
+                }
+
+            .nav-text {
+                flex-grow: 1;
+                white-space: normal;
+                line-height: 1.2;
+                display: flex;
+                align-items: center;
+            }
+
+            .nav-link:hover {
+                background-color: rgba(255,255,255,0.05);
+                color: white;
+            }
+
+            .nav-link.active {
+                background-color: rgba(109, 45, 158, 0.2);
+                color: var(--atilson-accent-light);
+            }
+
+                .nav-link.active i.icon-main, .nav-link:hover i.icon-main {
+                    color: var(--atilson-accent-light);
+                }
+
+            /* FLECHAS PERFECTAMENTE ALINEADAS Y PEQUEÑAS */
+            .nav-link .bi-chevron-down {
+                font-size: 8px;
+                margin-left: auto;
+                margin-right: 4px;
+                opacity: 0.5;
+                transition: transform 0.3s ease;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                height: 100%;
+            }
+
+            .nav-link[aria-expanded="true"] .bi-chevron-down {
+                transform: rotate(180deg);
+                opacity: 1;
+                color: var(--atilson-accent-light);
+            }
+
+            /* SUBMENÚS */
+            #sidebarMenu .collapse .nav-link,
+            #sidebarMenu .collapsing .nav-link {
+                padding: 8px 12px 8px 44px;
+                font-size: 11.5px;
+                background-color: transparent;
+                margin-bottom: 2px;
+                color: rgba(255,255,255,0.5);
+            }
+
+                #sidebarMenu .collapse .nav-link:hover,
+                #sidebarMenu .collapsing .nav-link:hover {
+                    color: white;
+                    background-color: rgba(255,255,255,0.05);
+                }
+
+                #sidebarMenu .collapse .nav-link.active {
+                    color: var(--atilson-accent-light);
+                    background-color: rgba(109, 45, 158, 0.15);
+                }
+
+            .sidebar-title {
+                font-size: 9.5px;
+                font-weight: 800;
+                text-transform: uppercase;
+                letter-spacing: 1.5px;
+                color: rgba(255,255,255,0.25);
+                padding-left: 12px;
+                margin-top: 18px !important;
+                margin-bottom: 8px !important;
+            }
+
+            /* USUARIO */
+            .sidebar-user-footer {
+                padding: 18px 15px;
+                border-top: 1px solid rgba(255,255,255,0.05);
+                background-color: var(--atilson-darker);
+            }
+
+            .user-avatar {
+                width: 32px;
+                height: 32px;
+                border-radius: 8px;
+                background: linear-gradient(135deg, var(--atilson-accent) 0%, #3b1459 100%);
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                font-weight: 900;
+                color: #fff;
+                font-size: 13px;
+                margin-right: 12px;
+                flex-shrink: 0;
+            }
+
+            .btn-logout {
+                background: transparent;
+                border: 1px solid rgba(255,255,255,0.1);
+                color: rgba(255,255,255,0.5);
+                padding: 8px;
+                width: 100%;
+                border-radius: 6px;
+                font-size: 10px;
+                font-weight: 800;
+                text-transform: uppercase;
+                margin-top: 12px;
+                transition: all 0.2s;
+            }
+
+                .btn-logout:hover {
+                    background: rgba(239, 68, 68, 0.1);
+                    border-color: rgba(239, 68, 68, 0.3);
+                    color: #fca5a5;
+                }
+
+            /* ÁREA PRINCIPAL */
+            .main-content {
+                margin-left: var(--sidebar-width);
+                min-height: 100vh;
+                transition: margin-left 0.3s cubic-bezier(0.25, 1, 0.5, 1);
+            }
+
+            /* ==========================================================
+                               MODO CONTRAÍDO (PERFECTAMENTE ALINEADO)
+                    ========================================================== */
+            body.sidebar-collapsed .sidebar {
+                width: var(--sidebar-collapsed-width);
+            }
+
+            body.sidebar-collapsed .main-content {
+                margin-left: var(--sidebar-collapsed-width);
+            }
+
+            body.sidebar-collapsed .sidebar-header {
+                justify-content: center;
+                padding: 0;
+            }
+
+            body.sidebar-collapsed .brand-logo-link,
+            body.sidebar-collapsed .nav-text,
+            body.sidebar-collapsed .sidebar-title,
+            body.sidebar-collapsed .user-info,
+            body.sidebar-collapsed .btn-logout span,
+            body.sidebar-collapsed .bi-chevron-down,
+            body.sidebar-collapsed #sidebarMenu .collapse,
+            body.sidebar-collapsed #sidebarMenu .collapsing {
+                display: none !important;
+            }
+
+            body.sidebar-collapsed #sidebarMenu [data-bs-toggle="collapse"] {
+                pointer-events: none;
+            }
+
+            body.sidebar-collapsed .nav-link {
+                justify-content: center;
+                padding: 12px 0;
+                margin-bottom: 6px;
+            }
+
+                body.sidebar-collapsed .nav-link i.icon-main {
+                    margin: 0 !important;
+                    font-size: 20px;
+                    min-width: auto !important;
+                }
+
+            body.sidebar-collapsed .sidebar-user-footer {
+                padding: 15px 0;
+                background: transparent;
+                border-top: none;
+            }
+
+                body.sidebar-collapsed .sidebar-user-footer .d-flex {
+                    justify-content: center !important;
+                }
+
+            body.sidebar-collapsed .user-avatar {
+                margin-right: 0;
+            }
+
+            body.sidebar-collapsed .btn-logout {
+                border: none;
+                padding: 8px 0;
+                margin-top: 0;
+            }
+
+                body.sidebar-collapsed .btn-logout i.icon-logout {
+                    display: inline-block !important;
+                    font-size: 18px;
+                    margin: 0;
+                    color: rgba(255,255,255,0.4);
+                }
+
+                body.sidebar-collapsed .btn-logout:hover i.icon-logout {
+                    color: #ef4444;
+                }
+    </style>
+</head>
+<body>
+
+    <script>
+            if (localStorage.getItem('sidebar-collapsed-erp') === 'true') {
+                document.body.classList.add('sidebar-collapsed');
+            }
+    </script>
+
+    @{
+        var currentUrl = ViewContext.RouteData.Values["page"]?.ToString() ?? "/Dashboard";
+        string nombreUsuario = User.Identity?.Name ?? "Sistema";
+        string[] listaJefaturas = { "Daniel Gajardo", "Cristian Prada", "Jane Diaz", "Ignacio Reyes", "Sistema", "Admin" };
+        bool esJefatura = Array.Exists(listaJefaturas, j => j == nombreUsuario);
+    }
+
+    <!-- SIDEBAR -->
+    <aside class="sidebar">
+        <div class="sidebar-header">
+            <a asp-page="/Dashboard" class="brand-logo-link">
+                <img src="~/img/Atilson.png" alt="Atilson" class="logo-atilson me-2" onerror="this.style.display='none'" />
+            </a>
+            <button id="sidebarToggle" class="minimal-toggle" title="Contraer Menú">
+                <i class="bi bi-list"></i>
+            </button>
+        </div>
+
+        <ul class="sidebar-nav" id="sidebarMenu">
+
+            <li class="nav-item">
+                <a class="nav-link @(currentUrl == "/Dashboard" || currentUrl == "/Index" ? "active" : "")" asp-page="/Dashboard">
+                    <i class="bi bi-grid-1x2-fill icon-main"></i> <span class="nav-text">Dashboard</span>
+                </a>
+            </li>
+
+            <li class="nav-item sidebar-title">Operativa</li>
+
+            <li class="nav-item">
+                <a class="nav-link" data-bs-toggle="collapse" href="#menuOperaciones" role="button" aria-expanded="false" aria-controls="menuOperaciones">
+                    <i class="bi bi-briefcase-fill icon-main"></i>
+                    <span class="nav-text">Operaciones</span>
+                    <i class="bi bi-chevron-down"></i>
+                </a>
+                <div class="collapse" id="menuOperaciones" data-bs-parent="#sidebarMenu">
+                    <ul class="nav flex-column">
+                        <li><a class="nav-link sub-link" asp-page="/Operaciones/Index">Main Board</a></li>
+                        <li><a class="nav-link sub-link" asp-page="/Operaciones/Maritimo">Servicio Marítimo</a></li>
+                        <li><a class="nav-link sub-link" asp-page="/Operaciones/Transporte">Servicio Terrestre</a></li>
+                        <li><a class="nav-link sub-link" asp-page="/Operaciones/Documental">Gestión Documental</a></li>
+                    </ul>
+                </div>
+            </li>
+
+            @if (esJefatura)
+            {
+                <li class="nav-item sidebar-title">Negocios</li>
+
+                <li class="nav-item">
+                    <a class="nav-link" data-bs-toggle="collapse" href="#menuFinanzas" role="button" aria-expanded="false" aria-controls="menuFinanzas">
+                        <i class="bi bi-currency-dollar icon-main"></i>
+                        <span class="nav-text">Finanzas</span>
+                        <i class="bi bi-chevron-down"></i>
+                    </a>
+                                        <div class="collapse" id="menuFinanzas" data-bs-parent="#sidebarMenu">
+                        <ul class="nav flex-column">
+                            <li><a class="nav-link sub-link" asp-page="/Finanzas/Index">Main Board</a></li>
+                            <li><a class="nav-link sub-link" asp-page="/Finanzas/ControlFinanciero">Control Financiero</a></li>
+                            <li><a class="nav-link sub-link" asp-page="/Finanzas/Cobranza">Cobranza</a></li>
+                            <li><a class="nav-link sub-link" asp-page="/Finanzas/OrdenesCompra">Órdenes de Compra</a></li>
+                            <li><a class="nav-link sub-link" asp-page="/Finanzas/Facturacion">Facturación Clientes</a></li>
+                        </ul>
+                    </div>
+                </li>
+
+                <li class="nav-item">
+                    <a class="nav-link" data-bs-toggle="collapse" href="#menuComercial" role="button" aria-expanded="false" aria-controls="menuComercial">
+                        <i class="bi bi-tags-fill icon-main"></i>
+                        <span class="nav-text">Comercial</span>
+                        <i class="bi bi-chevron-down"></i>
+                    </a>
+                    <div class="collapse" id="menuComercial" data-bs-parent="#sidebarMenu">
+                        <ul class="nav flex-column">
+                            <li><a class="nav-link sub-link" asp-page="/Comercial/Index">Tarifas</a></li>
+                            <li><a class="nav-link sub-link" asp-page="/Comercial/AcuerdosOperativos">Acuerdos por Booking</a></li>
+                        </ul>
+                    </div>
+                </li>
+            }
+
+            <li class="nav-item sidebar-title">Configuración Base</li>
+
+            <li class="nav-item">
+                <a class="nav-link" data-bs-toggle="collapse" href="#menuMaestros" role="button" aria-expanded="false" aria-controls="menuMaestros">
+                    <i class="bi bi-buildings-fill icon-main"></i>
+                    <span class="nav-text">Maestros</span>
+                    <i class="bi bi-chevron-down"></i>
+                </a>
+                <div class="collapse" id="menuMaestros" data-bs-parent="#sidebarMenu">
+                    <ul class="nav flex-column">
+                        <li><a class="nav-link sub-link" asp-page="/Clientes/Index">Mis Clientes</a></li>
+                        <li><a class="nav-link sub-link" asp-page="/Plantas/Index">Plantas</a></li>
+                        <li><a class="nav-link sub-link" asp-page="/Depositos/Index">Depósitos</a></li>
+                        <li><a class="nav-link sub-link" asp-page="/Navieras/Index">Navieras</a></li>
+                        <li><a class="nav-link sub-link" asp-page="/Puertos/Index">Puertos</a></li>
+                    </ul>
+                </div>
+            </li>
+        </ul>
+
+        @if (User.Identity?.IsAuthenticated == true)
+        {
+            <div class="sidebar-user-footer">
+                <div class="d-flex align-items-center">
+                    <div class="user-avatar" title="@nombreUsuario">@(nombreUsuario.Substring(0, 1).ToUpper())</div>
+                    <div class="user-info">
+                        <span class="d-block fw-bold text-white text-truncate" style="font-size: 12px; max-width: 120px;">@nombreUsuario</span>
+                        <span style="font-size: 9.5px; font-weight: 600; color: var(--atilson-accent-light);">@User.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value</span>
+                    </div>
+                </div>
+                <form method="post" asp-page="/Logout" title="Cerrar Sesión">
+                    <button type="submit" class="btn-logout">
+                        <span>Cerrar Sesión</span>
+                        <i class="bi bi-box-arrow-right d-none icon-logout"></i>
+                    </button>
+                </form>
+            </div>
+        }
+    </aside>
+
+    <main class="main-content">
+        <div style="flex-grow: 1; padding: 25px;">
+            @RenderBody()
+        </div>
+    </main>
+
+    <script src="~/lib/jquery/dist/jquery.min.js"></script>
+    <script src="~/lib/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
+
+    <script>
+            document.addEventListener("DOMContentLoaded", function() {
+                const toggleBtn = document.getElementById('sidebarToggle');
+                const body = document.body;
+
+                // 1. Lógica Toggle Principal
+                toggleBtn.addEventListener('click', function() {
+                    body.classList.toggle('sidebar-collapsed');
+                    let isCollapsed = body.classList.contains('sidebar-collapsed');
+                    localStorage.setItem('sidebar-collapsed-erp', isCollapsed);
+
+                    if (isCollapsed) {
+                        document.querySelectorAll('.sidebar-nav .collapse.show').forEach(el => {
+                            let bsCollapse = bootstrap.Collapse.getOrCreateInstance(el);
+                            bsCollapse.hide();
+                        });
+                    } else {
+                        let activeLink = document.querySelector('.sidebar-nav .collapse .nav-link.active');
+                        if (activeLink) {
+                            let parentCollapse = activeLink.closest('.collapse');
+                            if (parentCollapse) {
+                                let bsCollapse = bootstrap.Collapse.getOrCreateInstance(parentCollapse);
+                                bsCollapse.show();
+                                let parentTrigger = document.querySelector(`[href="#${parentCollapse.id}"]`);
+                                if (parentTrigger) parentTrigger.setAttribute('aria-expanded', 'true');
+                            }
+                        }
+                    }
+                });
+
+                // 2. CLIC INTELIGENTE CUANDO  ESTÁ CONTRAIDO POR LA VENTANA MODAL
+                document.querySelectorAll('.sidebar-nav .nav-link[data-bs-toggle="collapse"]').forEach(toggle => {
+                    toggle.addEventListener('click', function(e) {
+                        if (document.body.classList.contains('sidebar-collapsed')) {
+                            document.getElementById('sidebarToggle').click();
+                        }
+                    });
+                });
+
+                // 3. Selección Estricta de URL activa
+                let currentPath = window.location.pathname.replace(/\/$/, '').replace(/\/Index$/, '');
+                if (currentPath === '') currentPath = '/Dashboard';
+
+                document.querySelectorAll('.sidebar-nav .nav-link:not([data-bs-toggle="collapse"])').forEach(link => {
+                    let href = link.getAttribute('href');
+                    if (href && href !== '#' && href.trim() !== '') {
+                        let cleanHref = href.replace(/\/$/, '').replace(/\/Index$/, '');
+
+                        if (currentPath === cleanHref) {
+                            link.classList.add('active');
+                            let parentCollapse = link.closest('.collapse');
+                            if (parentCollapse) {
+                                let parentTrigger = document.querySelector(`[href="#${parentCollapse.id}"]`);
+                                if (parentTrigger) {
+                                    parentTrigger.classList.add('active');
+                                    parentTrigger.setAttribute('aria-expanded', 'true');
+                                }
+                                if (!body.classList.contains('sidebar-collapsed')) {
+                                    parentCollapse.classList.add('show');
+                                }
+                            }
+                        }
+                    }
+                });
+            });
+    </script>
+    @await RenderSectionAsync("Scripts", required: false)
+</body>
+</html>

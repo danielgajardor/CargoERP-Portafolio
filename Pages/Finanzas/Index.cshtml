@@ -1,0 +1,536 @@
+﻿@page
+@model AtilsonCargoSpa.Pages.Finanzas.IndexModel
+@{
+    ViewData["Title"] = "Main Board Financiero";
+}
+
+<style>
+    /* VARIABLES CORPORATIVAS ATILSON */
+    :root {
+        --atilson-slate-900: #0f172a;
+        --atilson-slate-500: #64748b;
+        --atilson-bg-soft: #f8fafc;
+        --atilson-border: #e2e8f0;
+    }
+
+    body {
+        background-color: #f8fafc;
+    }
+
+    /* MENU DE NAVEGACIÓN PRINCIPAL UNIFICADO */
+    .workspace-nav {
+        display: flex;
+        gap: 2px;
+        background: #ffffff;
+        padding: 6px;
+        border-radius: 8px;
+        border: 1px solid var(--atilson-border);
+        box-shadow: 0 1px 2px rgba(0,0,0,0.02);
+    }
+
+    .ws-btn {
+        font-size: 11px;
+        font-weight: 800;
+        text-transform: uppercase;
+        padding: 10px 20px;
+        border-radius: 6px;
+        color: var(--atilson-slate-500);
+        text-decoration: none;
+        transition: all 0.2s;
+        letter-spacing: 0.5px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+        .ws-btn:hover {
+            background: var(--atilson-bg-soft);
+            color: var(--atilson-slate-900);
+        }
+
+        .ws-btn.active {
+            background: var(--atilson-slate-900);
+            color: #ffffff;
+            box-shadow: 0 2px 5px rgba(15, 23, 42, 0.15);
+        }
+
+    /* MOCKUP PARA LAS TARJETAS KPI VACÍAS */
+    .kpi-mock {
+        background: #ffffff;
+        border: 1px dashed #cbd5e1;
+        border-radius: 12px;
+        padding: 24px;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        height: 110px;
+        justify-content: center;
+    }
+
+    .kpi-mock-title {
+        height: 10px;
+        width: 50%;
+        background: #e2e8f0;
+        border-radius: 4px;
+    }
+
+    .kpi-mock-value {
+        height: 24px;
+        width: 70%;
+        background: #f1f5f9;
+        border-radius: 6px;
+    }
+
+    /* MOCKUP PARA LA GRILLA VACÍA */
+    .fin-table-wrapper {
+        background: #ffffff;
+        border-radius: 8px;
+        border: 1px solid var(--atilson-border);
+        box-shadow: 0 4px 6px rgba(0,0,0,0.02);
+        overflow: hidden;
+    }
+
+    .table-main-grid {
+        margin-bottom: 0;
+        width: 100%;
+        border-collapse: collapse;
+    }
+
+        .table-main-grid > thead > tr > th {
+            font-size: 10px;
+            text-transform: uppercase;
+            color: var(--atilson-slate-500);
+            font-weight: 700;
+            background-color: #f1f5f9;
+            border-bottom: 2px solid #cbd5e1;
+            padding: 12px 20px;
+            letter-spacing: 0.5px;
+        }
+
+    .mock-row {
+        border-bottom: 1px solid var(--atilson-border);
+        height: 50px;
+    }
+
+    .mock-cell {
+        height: 14px;
+        background: #f1f5f9;
+        border-radius: 4px;
+        margin-left: 20px;
+        margin-right: 20px;
+    }
+
+    /* WIDGET "AJUSTES PENDIENTES" — luz roja latente cuando Comercial no ha cerrado tarifa */
+    .kpi-ajustes {
+        background: #ffffff;
+        border: 1px solid var(--atilson-border);
+        border-radius: 12px;
+        padding: 20px 24px;
+        height: 110px;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        gap: 4px;
+        transition: all 0.2s;
+    }
+
+        .kpi-ajustes:hover {
+            box-shadow: 0 4px 10px rgba(0,0,0,0.06);
+        }
+
+    .kpi-ajustes-title {
+        font-size: 10px;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        color: var(--atilson-slate-500);
+    }
+
+    .kpi-ajustes-value {
+        font-size: 26px;
+        font-weight: 900;
+        color: var(--atilson-slate-900);
+        line-height: 1;
+    }
+
+    .kpi-ajustes-sub {
+        font-size: 10px;
+        font-weight: 600;
+        color: var(--atilson-slate-500);
+    }
+
+    .kpi-ajustes-alerta {
+        border-color: #fca5a5;
+        background: #fef2f2;
+        animation: pulseCardAjustes 2.2s infinite;
+    }
+
+        .kpi-ajustes-alerta .kpi-ajustes-value {
+            color: #dc2626;
+        }
+
+        .kpi-ajustes-alerta .kpi-ajustes-sub {
+            color: #dc2626;
+            font-weight: 800;
+        }
+
+    .kpi-ajustes-dot {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background: #ef4444;
+        animation: pulseDotAjustes 1.4s infinite;
+        margin-top: 3px;
+    }
+
+    @@keyframes pulseCardAjustes {
+        0% {
+            box-shadow: 0 0 0 0 rgba(239,68,68,0.15);
+        }
+
+        70% {
+            box-shadow: 0 0 0 10px rgba(239,68,68,0);
+        }
+
+        100% {
+            box-shadow: 0 0 0 0 rgba(239,68,68,0);
+        }
+    }
+
+    @@keyframes pulseDotAjustes {
+        0% {
+            box-shadow: 0 0 0 0 rgba(239,68,68,0.6);
+        }
+
+        70% {
+            box-shadow: 0 0 0 6px rgba(239,68,68,0);
+        }
+
+        100% {
+            box-shadow: 0 0 0 0 rgba(239,68,68,0);
+        }
+    }
+
+    .pendiente-row td {
+        border-bottom: 1px solid var(--atilson-border);
+        vertical-align: middle;
+    }
+
+    .pendiente-row:hover td {
+        background-color: #fef2f2;
+    }
+</style>
+
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+<div class="container-fluid px-4 py-4">
+    <form id="antiForgeryForm">@Html.AntiForgeryToken()</form>
+
+    <!-- HEADER HOMOLOGADO -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 style="font-size: 24px; font-weight: 900; color: var(--atilson-slate-900); margin: 0; letter-spacing: -0.5px;">MAIN BOARD FINANCIERO</h1>
+            <p class="text-muted small m-0 fw-medium mt-1">Centro de mando gerencial y analítica de rentabilidad.</p>
+        </div>
+    </div>
+
+    <!-- MENÚ UNIFICADO (Main Board marcado como 'active') -->
+    <div class="d-flex mb-4">
+        <div class="workspace-nav">
+            <a asp-page="/Finanzas/Index" class="ws-btn active"><i class="bi bi-grid-1x2-fill"></i> Main Board</a>
+            <a asp-page="/Finanzas/ControlFinanciero" class="ws-btn"><i class="bi bi-sliders"></i> Control Financiero</a>
+            <a asp-page="/Finanzas/OrdenesCompra" class="ws-btn"><i class="bi bi-receipt"></i> Órdenes de Compra</a>
+            <a asp-page="/Finanzas/Facturacion" class="ws-btn"><i class="bi bi-file-earmark-spreadsheet-fill"></i> Facturación</a>
+            <a asp-page="/Finanzas/ConsolidadoCliente" class="ws-btn"><i class="bi bi-person-lines-fill"></i> Consolidado Cliente</a>
+        </div>
+    </div>
+
+    <!-- SECCIÓN: TARJETAS KPI (BOCETO + WIDGET REAL "AJUSTES PENDIENTES") -->
+        <div class="row g-4 mb-4">
+        <div class="col-md-3">
+            <div class="kpi-ajustes @(Model.AjustesPendientes.Any() ? "kpi-ajustes-alerta" : "")" style="cursor:pointer;" onclick="mostrarTabFinanzas('ajustes')" role="button">
+                <div class="d-flex justify-content-between align-items-start">
+                    <span class="kpi-ajustes-title">Ajustes Pendientes</span>
+                    @if (Model.AjustesPendientes.Any())
+                    {
+                        <span class="kpi-ajustes-dot"></span>
+                    }
+                </div>
+                <div class="kpi-ajustes-value">@Model.AjustesPendientes.Count</div>
+                <span class="kpi-ajustes-sub">
+                    @if (Model.AjustesPendientes.Any())
+                    {
+                        <text><i class="bi bi-exclamation-triangle-fill me-1"></i>Tarifas sin cierre por Comercial</text>
+                    }
+                    else
+                    {
+                        <text><i class="bi bi-check-circle-fill me-1"></i>Sin acuerdos pendientes</text>
+                    }
+                </span>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="kpi-ajustes @(Model.TotalSolicitudesPendientes > 0 ? "kpi-ajustes-alerta" : "")" style="cursor:pointer;" onclick="mostrarTabFinanzas('bloqueos')" role="button">
+                <div class="d-flex justify-content-between align-items-start">
+                    <span class="kpi-ajustes-title">Solicitudes de Desbloqueo</span>
+                    @if (Model.TotalSolicitudesPendientes > 0)
+                    {
+                        <span class="kpi-ajustes-dot"></span>
+                    }
+                </div>
+                <div class="kpi-ajustes-value">@Model.TotalSolicitudesPendientes</div>
+                <span class="kpi-ajustes-sub">
+                    @if (Model.TotalSolicitudesPendientes > 0)
+                    {
+                        <text><i class="bi bi-unlock-fill me-1"></i>Esperando resolución de Finanzas</text>
+                    }
+                    else
+                    {
+                        <text><i class="bi bi-lock-fill me-1"></i>Sin solicitudes pendientes</text>
+                    }
+                </span>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="kpi-mock">
+                <div class="kpi-mock-title"></div>
+                <div class="kpi-mock-value"></div>
+            </div>
+        </div>
+    </div>
+
+        @if (Model.AjustesPendientes.Any() || Model.BookingsConBloqueos.Any())
+    {
+        <div class="collapse" id="seccionAlertasFinancieras">
+            <div class="fin-table-wrapper mb-4">
+                <div class="px-4 py-3 border-bottom bg-white">
+                    <ul class="nav nav-pills gap-2" id="alertasFinanzasTabs">
+                        <li class="nav-item">
+                            <button class="nav-link active" id="tab-ajustes-btn" data-bs-toggle="pill" data-bs-target="#panel-ajustes" type="button" style="font-size:11px; font-weight:800; padding:8px 16px; border-radius:6px;">
+                                <i class="bi bi-exclamation-triangle-fill me-1 text-danger"></i>Ajustes Pendientes (@Model.AjustesPendientes.Count)
+                            </button>
+                        </li>
+                        <li class="nav-item">
+                            <button class="nav-link" id="tab-bloqueos-btn" data-bs-toggle="pill" data-bs-target="#panel-bloqueos" type="button" style="font-size:11px; font-weight:800; padding:8px 16px; border-radius:6px;">
+                                <i class="bi bi-lock-fill me-1 text-primary"></i>Solicitudes de Desbloqueo (@Model.TotalSolicitudesPendientes)
+                            </button>
+                        </li>
+                    </ul>
+                </div>
+                <div class="tab-content" style="max-height: 420px; overflow-y: auto;">
+                    <div class="tab-pane fade show active" id="panel-ajustes">
+                        @if (Model.AjustesPendientes.Any())
+                        {
+                            <div class="table-responsive">
+                                <table class="table-main-grid">
+                                    <thead>
+                                        <tr>
+                                            <th class="ps-4" style="width: 22%;">Booking</th>
+                                            <th style="width: 28%;">Cliente</th>
+                                            <th class="ps-2">Conceptos sin Tarifa</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @foreach (var item in Model.AjustesPendientes)
+                                        {
+                                            <tr class="pendiente-row">
+                                                <td class="ps-4 py-3">
+                                                    <a href="/Finanzas/ControlFinanciero" class="fw-black text-danger text-decoration-none" style="font-size: 13px;">
+                                                        <i class="bi bi-record-fill me-1" style="font-size:8px;"></i>@item.NumeroBooking
+                                                    </a>
+                                                </td>
+                                                <td class="py-3" style="font-size:12px; color:#475569; font-weight:600;">@item.Cliente</td>
+                                                <td class="py-3 ps-2">
+                                                    @foreach (var c in item.ConceptosPendientes)
+                                                    {
+                                                        <span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25 me-1 mb-1" style="font-size:9px; font-weight:700;">@c</span>
+                                                    }
+                                                </td>
+                                            </tr>
+                                        }
+                                    </tbody>
+                                </table>
+                            </div>
+                            <div class="px-4 py-2 text-end border-top bg-white">
+                                <a href="/Finanzas/ControlFinanciero" class="btn btn-outline-danger btn-sm fw-bold" style="font-size: 10px;">Ir a Control Financiero</a>
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="text-center text-muted py-5" style="font-size:12px;"><i class="bi bi-check-circle-fill d-block mb-2" style="font-size:22px; opacity:0.4;"></i>Sin ajustes pendientes.</div>
+                        }
+                    </div>
+
+                        <div class="tab-pane fade" id="panel-bloqueos">
+                        @if (Model.BookingsConBloqueos.Any())
+                        {
+                            @foreach (var booking in Model.BookingsConBloqueos)
+                            {
+                                <div class="px-4 py-3 border-bottom">
+                                    <div class="d-flex align-items-center gap-2 mb-2">
+                                        <span class="fw-black" style="font-size:13px; color:var(--atilson-slate-900);">@booking.NumeroBooking</span>
+                                        <span class="text-muted" style="font-size:11px;">@booking.Cliente</span>
+                                    </div>
+                                    <table class="table table-sm mb-0" style="font-size:11px;">
+                                        <thead>
+                                            <tr style="color:#94a3b8; text-transform:uppercase; font-size:9px;">
+                                                <th style="width:14%;">Servicio</th>
+                                                <th style="width:16%;">Contenedor</th>
+                                                <th style="width:24%;">Concepto</th>
+                                                <th style="width:26%;">Solicitud</th>
+                                                <th class="text-center" style="width:10%;">Estado</th>
+                                                <th class="text-center" style="width:10%;">Acción</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            @foreach (var c in booking.Conceptos)
+                                            {
+                                                <tr class="@(c.SolicitudPendiente ? "pendiente-row" : "")">
+                                                    <td class="text-muted">Documental</td>
+                                                    <td class="fw-bold">@c.EtiquetaContenedor</td>
+                                                    <td class="fw-bold text-dark">@c.NombreConcepto</td>
+                                                    <td>
+                                                        @if (c.SolicitudPendiente)
+                                                        {
+                                                            <span class="text-warning fw-bold" title="@c.UsuarioSolicitante — @(c.FechaSolicitud?.ToString("dd/MM/yyyy HH:mm"))">
+                                                                <i class="bi bi-hourglass-split me-1"></i>@c.ComentarioSolicitud
+                                                            </span>
+                                                        }
+                                                        else
+                                                        {
+                                                            <span class="text-muted">-</span>
+                                                        }
+                                                    </td>
+                                                    <td class="text-center">
+                                                        @if (c.Bloqueado)
+                                                        {
+                                                            <i class="bi bi-lock-fill text-danger"></i>
+                                                        }
+                                                        else
+                                                        {
+                                                            <i class="bi bi-unlock-fill text-success"></i>
+                                                        }
+                                                    </td>
+                                                    <td class="text-center">
+                                                        @if (c.Bloqueado || c.SolicitudPendiente)
+                                                        {
+                                                            <button type="button" class="btn btn-sm btn-outline-dark py-0 px-2" style="font-size:10px;" onclick="desbloquearConceptoMainBoard(@booking.IdOperacion, @(c.IdUnidadTecnica.HasValue ? c.IdUnidadTecnica.Value.ToString() : "null"), '@c.CertKey', this)">
+                                                                Desbloquear
+                                                            </button>
+                                                        }
+                                                    </td>
+                                                </tr>
+                                            }
+                                        </tbody>
+                                    </table>
+                                </div>
+                            }
+                        }
+                        else
+                        {
+                            <div class="text-center text-muted py-5" style="font-size:12px;"><i class="bi bi-unlock-fill d-block mb-2" style="font-size:22px; opacity:0.4;"></i>Sin solicitudes de desbloqueo.</div>
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+
+    <!-- SECCIÓN: GRILLA PRINCIPAL (BOCETO) -->
+
+    <!-- SECCIÓN: GRILLA PRINCIPAL (BOCETO) -->
+    <div class="fin-table-wrapper">
+        <div class="px-4 py-3 border-bottom d-flex justify-content-between align-items-center bg-white">
+            <h6 class="m-0 fw-bold text-dark" style="font-size: 13px;">
+                <i class="bi bi-bar-chart-line-fill me-2 text-primary"></i>(ESPACIO RESERVADO)
+            </h6>
+        </div>
+
+        <div class="table-responsive">
+            <table class="table-main-grid">
+                <thead>
+                    <tr>
+                        <th style="width: 25%;" class="ps-4">Operación / Booking</th>
+                        <th style="width: 25%;">Cliente</th>
+                        <th style="width: 15%;" class="text-end">Ingresos</th>
+                        <th style="width: 15%;" class="text-end">Egresos</th>
+                        <th style="width: 20%;" class="text-end pe-4">Rentabilidad</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <!-- Filas fantasma para visualizar el volumen -->
+                    <tr class="mock-row">
+                        <td><div class="mock-cell w-50"></div></td>
+                        <td><div class="mock-cell w-75"></div></td>
+                        <td><div class="mock-cell w-50 ms-auto"></div></td>
+                        <td><div class="mock-cell w-50 ms-auto"></div></td>
+                        <td><div class="mock-cell w-50 ms-auto me-4"></div></td>
+                    </tr>
+                    <tr class="mock-row">
+                        <td><div class="mock-cell w-50"></div></td>
+                        <td><div class="mock-cell w-75"></div></td>
+                        <td><div class="mock-cell w-50 ms-auto"></div></td>
+                        <td><div class="mock-cell w-50 ms-auto"></div></td>
+                        <td><div class="mock-cell w-50 ms-auto me-4"></div></td>
+                    </tr>
+                    <tr class="mock-row">
+                        <td><div class="mock-cell w-50"></div></td>
+                        <td><div class="mock-cell w-75"></div></td>
+                        <td><div class="mock-cell w-50 ms-auto"></div></td>
+                        <td><div class="mock-cell w-50 ms-auto"></div></td>
+                        <td><div class="mock-cell w-50 ms-auto me-4"></div></td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <!-- Mensaje de construcción -->
+            <div class="px-4 py-4 bg-light text-center text-muted" style="font-size: 11px; font-style: italic;">
+                Página en construcción. Los datos y funcionalidades se implementarán próximamente.
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<script>
+    function mostrarTabFinanzas(tab) {
+        const collapseEl = document.getElementById('seccionAlertasFinancieras');
+        if (!collapseEl) return;
+        const btnId = tab === 'ajustes' ? 'tab-ajustes-btn' : 'tab-bloqueos-btn';
+        const btn = document.getElementById(btnId);
+        if (btn && typeof bootstrap !== 'undefined') {
+            bootstrap.Tab.getOrCreateInstance(btn).show();
+        }
+        const bsCollapse = bootstrap.Collapse.getOrCreateInstance(collapseEl, { toggle: false });
+        bsCollapse.show();
+    }
+
+    function desbloquearConceptoMainBoard(idOp, idUnidad, certKey, btn) {
+        Swal.fire({
+            title: '¿Desbloquear este concepto?',
+            text: 'Operaciones podrá volver a editar y reenviar este certificado a Finanzas.',
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonText: 'Sí, desbloquear',
+            confirmButtonColor: '#0f172a',
+            cancelButtonText: 'Cancelar'
+        }).then((result) => {
+            if (!result.isConfirmed) return;
+            const token = document.querySelector('input[name="__RequestVerificationToken"]').value;
+            const formData = new FormData();
+            formData.append('idOperacion', idOp);
+            if (idUnidad !== null) formData.append('idUnidadTecnica', idUnidad);
+            formData.append('certKey', certKey);
+
+            fetch('?handler=DesbloquearConcepto', { method: 'POST', headers: { 'RequestVerificationToken': token }, body: formData })
+            .then(res => res.json()).then(data => {
+                if (data.success) {
+                    Swal.fire({ icon: 'success', title: 'Resuelto', toast: true, position: 'top-end', timer: 1500, showConfirmButton: false })
+                    .then(() => window.location.reload());
+                } else {
+                    Swal.fire('Error', data.message || 'No se pudo procesar.', 'error');
+                }
+            }).catch(() => Swal.fire('Error', 'Fallo de conexión.', 'error'));
+        });
+    }
+</script>
