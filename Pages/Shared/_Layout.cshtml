@@ -371,6 +371,26 @@
                 </div>
             </li>
 
+            <li class="nav-item sidebar-title">Negocios</li>
+
+                <li class="nav-item">
+                    <a class="nav-link" data-bs-toggle="collapse" href="#menuFinanzas" role="button" aria-expanded="false" aria-controls="menuFinanzas">
+                        <i class="bi bi-currency-dollar icon-main"></i>
+                        <span class="nav-text">Finanzas</span>
+                        <i class="bi bi-chevron-down"></i>
+                    </a>
+                                        <div class="collapse" id="menuFinanzas" data-bs-parent="#sidebarMenu">
+                        <ul class="nav flex-column">
+                            <li><a class="nav-link sub-link" asp-page="/Finanzas/Index">Main Board</a></li>
+                            <li><a class="nav-link sub-link" asp-page="/Finanzas/ControlFinanciero">Control Financiero</a></li>
+                            <li><a class="nav-link sub-link" asp-page="/Finanzas/Cobranza">Cobranza</a></li>
+                            <li><a class="nav-link sub-link" asp-page="/Finanzas/OrdenesCompra">Órdenes de Compra</a></li>
+                            <li><a class="nav-link sub-link" asp-page="/Finanzas/Facturacion">Facturación Clientes</a></li>
+                        </ul>
+                    </div>
+                </li>
+
+
             @if (esJefatura)
             {
                 <li class="nav-item sidebar-title">Negocios</li>
