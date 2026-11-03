@@ -51,6 +51,11 @@ namespace AtilsonCargoSpa.Models
 
         public string? EvidenciaMatriz { get; set; }
 
+        // Número de Bill of Lading. Antes se recibía desde el formulario de la
+        // Matriz Documental pero nunca se guardaba en una columna (solo quedaba
+        // en el texto libre del historial/hito) — se agrega para persistirlo real.
+        public string? NumeroBL { get; set; }
+
         public bool ExtensionDocumental { get; set; }
 
         public bool GuiaVisado { get; set; }

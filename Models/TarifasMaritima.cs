@@ -30,4 +30,10 @@ public partial class TarifasMaritima
     public decimal? CostoLateArrival { get; set; }
     public decimal? CostoCorrectorBL { get; set; }
     public decimal? DemurrageDiario { get; set; }
+
+    // ===================== MODALIDAD COLLECT / NO PREPAID =====================
+    // Rebate que la naviera nos paga a nosotros por esta ruta/equipo cuando el
+    // embarque es Collect (el consignatario le paga el flete directo a la naviera).
+    // Se usa en vez de TarifaUsd cuando Operacione.CondicionPago es Collect/Full Collect.
+    public decimal? RebateUsd { get; set; }
 }

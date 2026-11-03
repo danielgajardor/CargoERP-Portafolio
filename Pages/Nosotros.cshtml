@@ -1,0 +1,179 @@
+@page
+@model AtilsonCargoSpa.Pages.NosotrosModel
+@using AtilsonCargoSpa.Pages
+@inject AtilsonCargoSpa.Services.SitioWebInfo Sitio
+@* Página "Nosotros" (nov-2026). Los textos están en Nosotros.cshtml.cs › NosotrosContenido.
+   Estilos: wwwroot/css/nosotros.css (más los del encabezado de servicios-web.css). *@
+@{
+    Layout = "_LayoutPublico";
+    ViewData["Title"] = "Nosotros · Atilson Cargo";
+    ViewData["Description"] = NosotrosContenido.Bajada;
+    ViewData["Nav"] = "nosotros";
+    static string Iniciales(string nombre)
+    {
+        var p = nombre.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        return p.Length == 0 ? "?" : (p[0][0].ToString() + (p.Length > 1 ? p[^1][0].ToString() : "")).ToUpperInvariant();
+    }
+}
+@section Head {
+    <link rel="stylesheet" href="~/css/servicios-web.css" asp-append-version="true" />
+    <link rel="stylesheet" href="~/css/nosotros.css" asp-append-version="true" />
+}
+
+<header class="sv-hero ns-hero">
+    <div class="plexus" data-plexus="0.8" aria-hidden="true"></div>
+    <div class="contenedor sv-hero-grid">
+        <div class="sv-hero-copia">
+            <nav class="sv-migas" aria-label="Ruta de navegación">
+                <a href="/">Inicio</a><i class="bi bi-chevron-right" aria-hidden="true"></i><span aria-current="page">Nosotros</span>
+            </nav>
+            <p class="sv-lema"><i class="bi bi-people" aria-hidden="true"></i> Nosotros</p>
+            <h1 class="titular sv-titulo">@NosotrosContenido.Titular</h1>
+            <p class="sv-bajada">@NosotrosContenido.Bajada</p>
+            <div class="sv-acciones">
+                <a href="#equipo" class="btn-hero btn-hero-principal"><i class="bi bi-people"></i> Conoce al equipo</a>
+                <a href="/#contacto" class="btn-hero btn-hero-secundario"><i class="bi bi-chat-text"></i> Hablemos</a>
+            </div>
+        </div>
+        <aside class="sv-ficha" aria-label="Atilson en breve">
+            <div class="sv-ficha-cab">
+                <span><img src="~/img/marca/atilson-isotipo.svg" alt="" class="ns-ficha-iso" asp-append-version="true" /></span>
+                <div><b>Atilson Cargo SpA</b><small>Freight forwarder en Valparaíso</small></div>
+            </div>
+            <dl>
+                @foreach (var (etiqueta, valor) in NosotrosContenido.Ficha)
+                {
+                    <div><dt>@etiqueta</dt><dd>@valor</dd></div>
+                }
+            </dl>
+        </aside>
+    </div>
+</header>
+
+<section class="ns-quienes" aria-labelledby="nsQuienes">
+    <div class="contenedor ns-quienes-grid">
+        <div>
+            <h2 class="titular ns-h2" id="nsQuienes">Quiénes somos</h2>
+            <p class="ns-destacado">@NosotrosContenido.IntroDestacada</p>
+            @foreach (var p in NosotrosContenido.Intro)
+            {
+                <p class="ns-parrafo">@p</p>
+            }
+        </div>
+        <figure class="ns-foto @(NosotrosContenido.FotoEquipo == null ? "ns-foto--marca" : "")">
+            @if (NosotrosContenido.FotoEquipo != null)
+            {
+                <img src="@NosotrosContenido.FotoEquipo" alt="El equipo de Atilson Cargo" loading="lazy" />
+            }
+            else
+            {
+                <img src="~/img/marca/atilson-isotipo-blanco.svg" alt="" class="ns-foto-iso" aria-hidden="true" asp-append-version="true" />
+                <figcaption><i class="bi bi-geo-alt" aria-hidden="true"></i> Valparaíso, Chile</figcaption>
+            }
+        </figure>
+    </div>
+</section>
+
+<section class="ns-historia" aria-labelledby="nsHistoria">
+    <div class="contenedor">
+        <h2 class="titular ns-h2" id="nsHistoria">Nuestra historia</h2>
+        <ol class="ns-linea" style="--n:@NosotrosContenido.Historia.Length">
+            @foreach (var h in NosotrosContenido.Historia)
+            {
+                <li>
+                    <span class="ns-anio">@h.Anio</span>
+                    <h3>@h.Titulo</h3>
+                    <p>@h.Texto</p>
+                </li>
+            }
+        </ol>
+    </div>
+</section>
+
+<section class="ns-proposito" aria-labelledby="nsProposito">
+    <div class="contenedor">
+        <h2 class="visually-hidden" id="nsProposito">Misión, visión y valores</h2>
+        <div class="ns-mv">
+            <article>
+                <span class="ns-mv-ico"><i class="bi bi-compass" aria-hidden="true"></i></span>
+                <h3>Misión</h3>
+                <p>@NosotrosContenido.Mision</p>
+            </article>
+            <article>
+                <span class="ns-mv-ico"><i class="bi bi-binoculars" aria-hidden="true"></i></span>
+                <h3>Visión</h3>
+                <p>@NosotrosContenido.Vision</p>
+            </article>
+        </div>
+        <h3 class="ns-valores-tit">Lo que nos guía</h3>
+        <ul class="ns-valores">
+            @foreach (var v in NosotrosContenido.Valores)
+            {
+                <li><i class="bi @v.Icono" aria-hidden="true"></i><b>@v.Titulo</b><span>@v.Texto</span></li>
+            }
+        </ul>
+    </div>
+</section>
+
+<section class="ns-equipo" id="equipo" aria-labelledby="nsEquipo">
+    <div class="contenedor">
+        <div class="ns-equipo-cab">
+            <h2 class="titular ns-h2" id="nsEquipo">El equipo</h2>
+            <p>Las personas que coordinan cada embarque, de la reserva al arribo.</p>
+        </div>
+        <ul class="ns-personas">
+            @foreach (var p in NosotrosContenido.Equipo)
+            {
+                <li class="ns-persona">
+                    <div class="ns-persona-foto">
+                        @if (p.Foto != null)
+                        {
+                            <img src="@p.Foto" alt="@p.Nombre" loading="lazy" />
+                        }
+                        else
+                        {
+                            <span aria-hidden="true">@Iniciales(p.Nombre)</span>
+                        }
+                    </div>
+                    <span class="ns-area">@p.Area</span>
+                    <b>@p.Nombre</b>
+                    <small>@p.Cargo</small>
+                    @if (p.LinkedIn != null)
+                    {
+                        <a href="@p.LinkedIn" target="_blank" rel="noopener" class="ns-persona-in" aria-label="LinkedIn de @p.Nombre"><i class="bi bi-linkedin"></i></a>
+                    }
+                </li>
+            }
+        </ul>
+    </div>
+</section>
+
+<section class="ns-cierre" aria-label="Trabaja con nosotros y dónde estamos">
+    <div class="contenedor ns-cierre-grid">
+        <article class="ns-tarjeta ns-tarjeta--oscura">
+            <i class="bi bi-briefcase" aria-hidden="true"></i>
+            <h3>Trabaja con nosotros</h3>
+            <p>¿Te interesa la logística y el comercio exterior? Envíanos tu CV indicando el área a la que postulas.</p>
+            <a href="mailto:@Sitio.CorreoContacto?subject=Postulaci%C3%B3n" class="btn-hero btn-hero-principal"><i class="bi bi-envelope"></i> Enviar mi CV</a>
+        </article>
+        <article class="ns-tarjeta">
+            <i class="bi bi-geo-alt" aria-hidden="true"></i>
+            <h3>Dónde estamos</h3>
+            <p>A. Prat 814, oficina 503, Valparaíso, Chile.</p>
+            <a href="@NosotrosContenido.MapaUrl" target="_blank" rel="noopener" class="btn-hero btn-hero-borde"><i class="bi bi-map"></i> Cómo llegar</a>
+        </article>
+    </div>
+</section>
+
+<section class="sv-cta">
+    <div class="contenedor sv-cta-caja">
+        <div>
+            <h2 class="titular">¿Hablamos de tu próximo embarque?</h2>
+            <p>Cotiza y solicita desde el portal, o déjanos tus datos y un ejecutivo te contacta.</p>
+        </div>
+        <div class="sv-cta-acciones">
+            <a href="/PortalCliente/SolicitarCotizacion" class="btn-hero btn-hero-indigo"><i class="bi bi-calculator"></i> Cotizar servicio</a>
+            <a href="/#contacto" class="btn-hero btn-hero-borde"><i class="bi bi-envelope"></i> Dejar mis datos</a>
+        </div>
+    </div>
+</section>

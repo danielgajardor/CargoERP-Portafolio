@@ -1,0 +1,243 @@
+﻿@page
+@model AtilsonCargoSpa.Pages.RegistroEquipoModel
+@{
+    Layout = null;
+}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Cuenta del equipo - Atilson Cargo</title>
+    <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    <link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&display=swap" rel="stylesheet">
+    <link rel="icon" type="image/svg+xml" href="~/img/marca/atilson-isotipo.svg" asp-append-version="true" />
+    <style>
+        :root {
+            --rg-brand: #6d2d9e;
+            --rg-deep: #2c1b4d;
+            --rg-ink: #0f172a;
+            --rg-muted: #64748b;
+            --rg-line: #e2e8f0;
+            --rg-soft: #f8fafc;
+            --rg-bad: #b91c1c;
+        }
+        body { font-family: 'Inter', system-ui, sans-serif; background: var(--rg-soft); color: var(--rg-ink); margin: 0; }
+        .rg { display: grid; grid-template-columns: minmax(280px, 380px) minmax(0, 1fr); min-height: 100vh; }
+        .rg-lado {
+            background: linear-gradient(160deg, #0f172a 0%, var(--rg-deep) 55%, #6d2d9e 100%);
+            color: #fff; padding: 48px 36px; position: sticky; top: 0; height: 100vh;
+            display: flex; flex-direction: column; gap: 28px;
+        }
+        .rg-lado img { max-width: 170px; filter: brightness(0) invert(1); }
+        .rg-lado h1 { font-size: 26px; font-weight: 800; letter-spacing: -.4px; margin: 0; }
+        .rg-lado p { color: rgba(255,255,255,.75); font-size: 14px; line-height: 1.6; margin: 0; }
+        .rg-pasos { list-style: none; padding: 0; margin: 0; display: grid; gap: 14px; }
+        .rg-pasos li { display: flex; gap: 12px; font-size: 13.5px; color: rgba(255,255,255,.85); }
+        .rg-pasos b { flex: none; width: 26px; height: 26px; border-radius: 50%; background: rgba(255,255,255,.14); display: grid; place-items: center; font-size: 12px; }
+        .rg-main { padding: 40px clamp(16px, 4vw, 56px) 64px; }
+        .rg-top { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 24px; max-width: 860px; }
+        .rg-top a { color: var(--rg-muted); font-size: 13px; font-weight: 600; text-decoration: none; }
+        .rg-top a:hover { color: var(--rg-brand); }
+        .rg-titulo { font-size: 28px; font-weight: 800; letter-spacing: -.5px; margin: 0 0 6px; }
+        .rg-sub { color: var(--rg-muted); font-size: 14px; margin: 0 0 24px; max-width: 640px; }
+        .rg-card { background: #fff; border: 1px solid var(--rg-line); border-radius: 14px; padding: 22px; margin-bottom: 16px; max-width: 860px; box-shadow: 0 1px 2px rgba(15,23,42,.04); }
+        .rg-card h2 { font-size: 13px; font-weight: 800; text-transform: uppercase; letter-spacing: .6px; margin: 0 0 16px; display: flex; align-items: center; gap: 8px; }
+        .rg-card h2 i { color: var(--rg-brand); font-size: 16px; }
+        .rg-campos { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px 18px; }
+        .rg-campo.full { grid-column: 1 / -1; }
+        .rg-campo label { display: block; font-size: 12px; font-weight: 700; color: #334155; margin-bottom: 6px; }
+        .rg-campo label .req { color: #e11d48; }
+        .rg-campo input, .rg-campo select {
+            width: 100%; height: 42px; padding: 0 12px; border: 1px solid #cbd5e1; border-radius: 9px; font-size: 14px; background: #fff; color: var(--rg-ink);
+        }
+        .rg-campo input:focus, .rg-campo select:focus { outline: none; border-color: var(--rg-brand); box-shadow: 0 0 0 3px rgba(109,45,158,.15); }
+        .rg-campo input.input-validation-error { border-color: #f87171; }
+        .rg-ayuda { font-size: 12px; color: var(--rg-muted); margin-top: 5px; }
+        .rg-error { display: block; font-size: 12px; color: var(--rg-bad); font-weight: 600; margin-top: 4px; }
+        .rg-errores { background: #fef2f2; border: 1px solid #fecaca; color: #991b1b; border-radius: 12px; padding: 12px 16px; margin-bottom: 16px; max-width: 860px; font-size: 13.5px; }
+        .rg-errores ul { margin: 4px 0 0; padding-left: 18px; }
+        .rg-errores.validation-summary-valid { display: none; }
+        .rg-sesion { display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap; background: #eff6ff !important; border-color: #bfdbfe !important; color: #1e3a8a !important; }
+        .rg-sesion-btn { flex: none; display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; border-radius: 999px; background: #1e3a8a; color: #fff; font-weight: 700; font-size: 13px; text-decoration: none; }
+        .rg-sesion-btn:hover { background: #1e40af; color: #fff; }
+        .rg-trampa { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; }
+        .rg-pie { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; max-width: 860px; }
+        .rg-pie p { margin: 0; font-size: 12.5px; color: var(--rg-muted); }
+        .rg-btn { background: var(--rg-deep); color: #fff; border: 0; border-radius: 10px; padding: 12px 22px; font-weight: 800; font-size: 14px; display: inline-flex; gap: 8px; align-items: center; }
+        .rg-btn:hover { background: #3b2470; }
+        .rg-btn:disabled { opacity: .7; }
+        .rg-ok { max-width: 640px; background: #fff; border: 1px solid var(--rg-line); border-radius: 16px; padding: 36px; text-align: center; margin-top: 40px; }
+        .rg-ok > .rg-ok-check { width: 64px; height: 64px; margin: 0 auto; display: block; }
+        .rg-ok-check circle { fill: #dcfce7; transform-origin: center; animation: rgOkPop .5s cubic-bezier(.2,1.4,.4,1) both; }
+        .rg-ok-check path { fill: none; stroke: #16a34a; stroke-width: 5; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 40; stroke-dashoffset: 40; animation: rgOkTrazo .45s .35s ease-out forwards; }
+        @@keyframes rgOkPop { from { transform: scale(.4); opacity: 0; } }
+        @@keyframes rgOkTrazo { to { stroke-dashoffset: 0; } }
+        .rg-ok-pasos { list-style: none; padding: 0; margin: 22px auto 24px; max-width: 460px; text-align: left; display: grid; gap: 10px; }
+        .rg-ok-pasos li { display: grid; grid-template-columns: 30px 1fr; gap: 12px; align-items: start; font-size: 14px; color: var(--rg-muted); }
+        .rg-ok-pasos li b { display: block; color: var(--rg-ink, #1e1835); font-size: 14.5px; }
+        .rg-ok-pasos span { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; background: #f1edff; color: #443094; font-weight: 800; font-size: 13px; }
+        .rg-ok-pasos li.hecho span { background: #16a34a; color: #fff; }
+        .rg-ok-acciones { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+        .rg-ok a.rg-btn { text-decoration: none; }
+        .rg-ok a.rg-btn i { font-size: 16px; color: inherit; }
+        .rg-btn-sec { background: transparent !important; color: #443094 !important; box-shadow: inset 0 0 0 1.5px #d9d2f3; }
+        .rg-btn-sec:hover { background: #f4f2fa !important; }
+        @@media (prefers-reduced-motion: reduce) { .rg-ok-check circle, .rg-ok-check path { animation: none; stroke-dashoffset: 0; } }
+        .rg-ok h1 { font-size: 24px; font-weight: 800; margin: 12px 0 8px; }
+        .rg-ok p { color: var(--rg-muted); font-size: 14.5px; }
+        .select2-container .select2-selection--single { height: 42px; border-color: #cbd5e1; border-radius: 9px; }
+        .select2-container .select2-selection--single .select2-selection__rendered { line-height: 40px; padding-left: 12px; font-size: 14px; }
+        .select2-container .select2-selection--single .select2-selection__arrow { height: 40px; }
+        @@media (max-width: 900px) {
+            .rg { grid-template-columns: 1fr; }
+            .rg-lado { position: static; height: auto; padding: 28px 20px; }
+            .rg-campos { grid-template-columns: 1fr; }
+        }
+    </style>
+    <link rel="stylesheet" href="~/css/marca-acceso.css" asp-append-version="true" />
+</head>
+<body class="ac-body ac-registro">
+    <div class="rg">
+        <aside class="rg-lado">
+            <a href="/" aria-label="Atilson Cargo, ir al sitio" style="line-height:0"><img src="~/img/marca/atilson-logo-blanco.svg" alt="Atilson Servicios Logísticos" asp-append-version="true" /></a>
+            <div>
+                <h1>Cuenta del equipo</h1>
+                <p>Acceso al ERP para las personas que trabajan en Atilson Cargo.</p>
+            </div>
+            <ol class="rg-pasos">
+                <li><b>1</b><span>Completa tus datos y elige tu contraseña.</span></li>
+                <li><b>2</b><span>Un administrador valida tu cuenta y te asigna el rol (Operaciones, Ventas, Finanzas…).</span></li>
+                <li><b>3</b><span>Te avisamos por correo y entras con tu correo y contraseña.</span></li>
+            </ol>
+        </aside>
+
+        <main class="rg-main">
+            <div class="rg-top">
+                <a href="/Login"><i class="bi bi-arrow-left"></i> Volver a iniciar sesión</a>
+                <a href="/Registro">¿Eres cliente? Registra tu empresa</a>
+            </div>
+
+            @if (Model.Enviado)
+            {
+                <div class="rg-ok" role="status">
+                    <svg class="rg-ok-check" viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="30" /><path d="M20 33 l8 8 l16 -17" /></svg>
+                    <h1>¡Listo! Recibimos tu solicitud</h1>
+                    <p>Un administrador revisará tus datos y te asignará el rol que corresponde. Te avisaremos @(string.IsNullOrEmpty(Model.CorreoEnviado) ? "por correo" : $"a {Model.CorreoEnviado}") cuando tu cuenta esté validada; desde ese momento podrás entrar con tu correo y la contraseña que elegiste.</p>
+                    <ol class="rg-ok-pasos">
+                        <li class="hecho"><span><i class="bi bi-check-lg"></i></span><div><b>Solicitud recibida</b>Ya les avisamos a los administradores.</div></li>
+                        <li><span>2</span><div><b>Un administrador te asigna tu rol</b>Operaciones, Ventas, Finanzas u otro.</div></li>
+                        <li><span>3</span><div><b>Te avisamos y entras al ERP</b>Con tu correo y la contraseña que elegiste.</div></li>
+                    </ol>
+                    <div class="rg-ok-acciones">
+                        <a href="/Login" class="rg-btn"><i class="bi bi-box-arrow-in-right"></i> Ir a iniciar sesión</a>
+                        <a href="/" class="rg-btn rg-btn-sec"><i class="bi bi-house"></i> Volver al sitio</a>
+                    </div>
+                </div>
+            }
+            else
+            {
+                @if (User.Identity?.IsAuthenticated == true)
+                {
+                    bool esCliente = User.IsInRole("Cliente");
+                    <div class="rg-errores rg-sesion" role="note">
+                        <span>
+                            @if (esCliente)
+                            {
+                                <text>Tienes abierta la sesión de cliente de <b>@User.Identity.Name</b>. Para pedir una cuenta del equipo, primero cierra esa sesión.</text>
+                            }
+                            else
+                            {
+                                <text>Tienes una sesión abierta como <b>@User.Identity.Name</b>. Si estás pidiendo una cuenta para otra persona, cierra la sesión o completa el formulario con sus datos.</text>
+                            }
+                        </span>
+                        <a href="/Logout?vuelta=/RegistroEquipo" class="rg-sesion-btn"><i class="bi bi-box-arrow-right"></i> Cerrar sesión</a>
+                    </div>
+                }
+                <h1 class="rg-titulo">Solicita tu cuenta del equipo</h1>
+                <p class="rg-sub">Para personas que trabajan en Atilson Cargo. Si eres cliente, usa «Registra tu empresa».</p>
+
+                <form method="post" novalidate id="formRegistro">
+                    <div asp-validation-summary="All" class="rg-errores" role="alert"><strong>Revisa lo siguiente:</strong></div>
+
+                    <div class="rg-trampa" aria-hidden="true">
+                        <label>No completar <input asp-for="Form.SitioWeb" name="Form.SitioWeb" tabindex="-1" autocomplete="nope" /></label>
+                        <input type="hidden" asp-for="Form.Mostrado" />
+                    </div>
+
+                    <section class="rg-card">
+                        <h2><i class="bi bi-person-badge"></i> Tus datos</h2>
+                        <div class="rg-campos">
+                            <div class="rg-campo full">
+                                <label asp-for="Form.NombreCompleto">Nombre y apellido <span class="req">*</span></label>
+                                <input asp-for="Form.NombreCompleto" maxlength="100" autocomplete="name" required />
+                                <span asp-validation-for="Form.NombreCompleto" class="rg-error"></span>
+                            </div>
+                            <div class="rg-campo">
+                                <label asp-for="Form.Rut">RUT <span class="req">*</span></label>
+                                <input asp-for="Form.Rut" maxlength="12" placeholder="12.345.678-5" autocomplete="off" required />
+                                <span asp-validation-for="Form.Rut" class="rg-error"></span>
+                            </div>
+                            <div class="rg-campo">
+                                <label asp-for="Form.Telefono">Teléfono <span class="req">*</span></label>
+                                <input asp-for="Form.Telefono" maxlength="50" inputmode="tel" autocomplete="tel" placeholder="+56 9 1234 5678" required />
+                                <span asp-validation-for="Form.Telefono" class="rg-error"></span>
+                            </div>
+                            <div class="rg-campo">
+                                <label asp-for="Form.Correo">Correo <span class="req">*</span></label>
+                                <input asp-for="Form.Correo" type="email" maxlength="100" autocomplete="email" required />
+                                <span asp-validation-for="Form.Correo" class="rg-error"></span>
+                                <div class="rg-ayuda">Con este correo entrarás al ERP.</div>
+                            </div>
+                            <div class="rg-campo">
+                                <label asp-for="Form.Area">Área en la que trabajas</label>
+                                <select asp-for="Form.Area">
+                                    <option value="">Prefiero que lo defina el administrador</option>
+                                    @foreach (var a in AtilsonCargoSpa.Helpers.PermisosEquipo.Areas)
+                                    {
+                                        <option value="@a">@a</option>
+                                    }
+                                </select>
+                                <div class="rg-ayuda">Es solo una referencia: el rol lo asigna un administrador.</div>
+                            </div>
+                        </div>
+                    </section>
+
+                    <section class="rg-card">
+                        <h2><i class="bi bi-shield-lock"></i> Contraseña</h2>
+                        <div class="rg-campos">
+                            <div class="rg-campo">
+                                <label asp-for="Form.Password">Contraseña <span class="req">*</span></label>
+                                <input asp-for="Form.Password" type="password" autocomplete="new-password" required />
+                                <span asp-validation-for="Form.Password" class="rg-error"></span>
+                                <div class="rg-ayuda">Mínimo 8 caracteres, con letras y números.</div>
+                            </div>
+                            <div class="rg-campo">
+                                <label asp-for="Form.ConfirmarPassword">Repite la contraseña <span class="req">*</span></label>
+                                <input asp-for="Form.ConfirmarPassword" type="password" autocomplete="new-password" required />
+                                <span asp-validation-for="Form.ConfirmarPassword" class="rg-error"></span>
+                            </div>
+                        </div>
+                    </section>
+
+                    <div class="rg-pie">
+                        <p>Tu cuenta queda pendiente hasta que un administrador la valide.</p>
+                        <button type="submit" class="rg-btn" id="btnRegistro"><i class="bi bi-send"></i> <span>Enviar solicitud</span></button>
+                    </div>
+                </form>
+            }
+        </main>
+    </div>
+
+    <script>
+        (function () {
+            var f = document.getElementById('formRegistro');
+            if (f) f.addEventListener('submit', function () {
+                var b = document.getElementById('btnRegistro');
+                if (b) { b.disabled = true; b.querySelector('span').textContent = 'Enviando…'; }
+            });
+        })();
+    </script>
+</body>
+</html>

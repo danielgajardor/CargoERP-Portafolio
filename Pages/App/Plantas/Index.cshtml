@@ -1,0 +1,151 @@
+﻿@page
+@model AtilsonCargoSpa.Pages.App.Plantas.IndexModel
+@using AtilsonCargoSpa.Services
+@{
+    ViewData["Title"] = "Maestro de Plantas";
+}
+<link rel="stylesheet" href="~/css/maestros.css" asp-append-version="true" />
+
+<div class="container-fluid py-4 mx">
+    <header class="mx-cabecera">
+        <div>
+            <div class="mx-miga">Maestros</div>
+            <h1 class="mx-titulo">Plantas</h1>
+            <p class="mx-subtitulo">Plantas y packings de carga. La ciudad se usa para encontrar la tarifa de transporte.</p>
+        </div>
+        <div class="mx-acciones">
+            <a asp-page="./Edit" class="mx-btn mx-btn-primario"><i class="bi bi-plus-lg"></i> Nueva planta</a>
+        </div>
+    </header>
+
+    <div class="mx-barra">
+        <div class="mx-buscar">
+            <i class="bi bi-search" aria-hidden="true"></i>
+            <input type="search" data-mx-filtro value="@Model.Q" placeholder="Buscar por planta, cliente, ciudad o dirección…" aria-label="Buscar planta" autocomplete="off" />
+        </div>
+        <div class="mx-filtro-extra">
+            <select data-mx-filtro-extra data-buscador="si" aria-label="Filtrar por ciudad">
+                <option value="">Todas las ciudades</option>
+                @if (Model.SinCiudad > 0)
+                {
+                    <option value="sin-ciudad" selected="@(Model.F == "sin-ciudad")">Sin ciudad (@Model.SinCiudad)</option>
+                }
+                @foreach (var c in Model.OpcionesCiudad)
+                {
+                    <option value="@c.Valor" selected="@(Model.F == c.Valor)">@c.Texto</option>
+                }
+            </select>
+        </div>
+        <nav class="mx-segmentos" aria-label="Estado">
+            <a asp-route-estado="activos" class="@(Model.Estado == "activos" ? "activo" : "")">Activas<span class="mx-cuenta">@Model.TotalActivos</span></a>
+            <a asp-route-estado="inactivos" class="@(Model.Estado == "inactivos" ? "activo" : "")">Inactivas<span class="mx-cuenta">@Model.TotalInactivos</span></a>
+            @if (Model.PorValidar > 0 || Model.Estado == "porvalidar")
+            {
+                <a asp-route-estado="porvalidar" class="@(Model.Estado == "porvalidar" ? "activo" : "")">Por validar<span class="mx-cuenta">@Model.PorValidar</span></a>
+            }
+            <a asp-route-estado="todos" class="@(Model.Estado == "todos" ? "activo" : "")">Todas</a>
+        </nav>
+        <span class="mx-total" data-mx-total>@Model.Filas.Count registros</span>
+    </div>
+
+    @if (Model.SinCiudad > 0 && Model.Estado != "inactivos")
+    {
+        <div class="alert alert-warning d-flex align-items-center gap-2 py-2 px-3 mb-3" style="font-size:13px;border-radius:10px;">
+            <i class="bi bi-exclamation-triangle-fill"></i>
+            <span><strong>@Model.SinCiudad planta(s) sin ciudad.</strong> Sin ciudad no se puede encontrar la tarifa de transporte y el flete queda «Por asignar». Filtra por «Sin ciudad» para completarlas.</span>
+        </div>
+    }
+
+    <div class="mx-tabla-wrap">
+        <table class="mx-tabla" data-mx-tabla>
+            <thead>
+                <tr>
+                    <th>Planta</th>
+                    <th>Ciudad</th>
+                    <th>Cliente</th>
+                    <th>Última modificación</th>
+                    <th>Estado</th>
+                    <th class="mx-col-acciones"><span class="visually-hidden">Acciones</span></th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var f in Model.Filas)
+                {
+                    var p = f.Planta;
+                    <tr data-mx-texto="@p.Nombre @f.Ciudad @f.Cliente @p.Direccion @(p.RegistradaPorCliente ? "portal" : "")" data-mx-extra="@(f.Ciudad != null ? p.IdCiudad.ToString() : "sin-ciudad")"
+                        class="@(f.Activo ? "" : "mx-inactivo") @(Model.Resaltar == p.Id ? "mx-resaltado" : "")">
+                        <td>
+                            <a asp-page="./Edit" asp-route-id="@p.Id" class="mx-nombre text-decoration-none">@p.Nombre</a>
+                            <span class="mx-sec">
+                                @(string.IsNullOrWhiteSpace(p.Direccion) ? "Sin dirección" : p.Direccion)
+                                @if (!string.IsNullOrWhiteSpace(p.UrlGoogleMaps) && p.UrlGoogleMaps.StartsWith("http", StringComparison.OrdinalIgnoreCase))
+                                {
+                                    <a href="@p.UrlGoogleMaps" target="_blank" rel="noopener" class="ms-1" title="Ver en Google Maps"><i class="bi bi-geo-alt"></i> Mapa</a>
+                                }
+                            </span>
+                        </td>
+                        <td>
+                            @if (f.Ciudad != null)
+                            {
+                                @f.Ciudad
+                            }
+                            else
+                            {
+                                <span class="mx-pill mx-pill-warn"><i class="bi bi-exclamation-triangle"></i> Sin ciudad</span>
+                            }
+                        </td>
+                        <td>@(f.Cliente ?? "Todos los clientes")</td>
+                        <td class="mx-mod">
+                            @(string.IsNullOrWhiteSpace(p.UsuarioModificador) ? (string.IsNullOrWhiteSpace(p.UsuarioCreador) ? "—" : p.UsuarioCreador) : p.UsuarioModificador)
+                            <small>@MaestrosAuditoria.FormatoFecha(p.FechaModificacion ?? p.FechaCreacion)</small>
+                        </td>
+                        <td>
+                            @if (f.Activo && !p.Validada)
+                            {
+                                <span class="mx-pill mx-pill-warn" title="Registrada por el cliente en el portal">Por validar</span>
+                            }
+                            else if (f.Activo)
+                            {
+                                <span class="mx-pill mx-pill-ok">Activa</span>
+                            }
+                            else
+                            {
+                                <span class="mx-pill mx-pill-off">Inactiva</span>
+                            }
+                        </td>
+                        <td class="mx-col-acciones">
+                            @if (f.Activo && !p.Validada)
+                            {
+                                <form method="post" asp-page-handler="Validar" asp-route-id="@p.Id" asp-route-estado="@Model.Estado"
+                                      data-mx-confirmar="@($"¿Validar la planta «{p.Nombre}»? Revisa antes que el nombre, la ciudad y la ubicación estén correctos.")">
+                                    <button type="submit" class="mx-btn mx-btn-ok mx-btn-sm"><i class="bi bi-patch-check"></i> Validar</button>
+                                </form>
+                            }
+                            <a asp-page="./Edit" asp-route-id="@p.Id" class="mx-btn mx-btn-secundario mx-btn-sm"><i class="bi bi-pencil"></i> Editar</a>
+                            <form method="post" asp-page-handler="CambiarEstado" asp-route-id="@p.Id" asp-route-activar="@(!f.Activo)" asp-route-estado="@Model.Estado"
+                                  data-mx-confirmar="@(f.Activo ? $"¿Desactivar la planta «{p.Nombre}»? Dejará de aparecer al crear o editar operaciones." : $"¿Reactivar la planta «{p.Nombre}»?")">
+                                @if (f.Activo)
+                                {
+                                    <button type="submit" class="mx-btn mx-btn-peligro mx-btn-sm" title="Desactivar" aria-label="Desactivar"><i class="bi bi-slash-circle"></i></button>
+                                }
+                                else
+                                {
+                                    <button type="submit" class="mx-btn mx-btn-ok mx-btn-sm"><i class="bi bi-arrow-counterclockwise"></i> Reactivar</button>
+                                }
+                            </form>
+                        </td>
+                    </tr>
+                }
+                <tr data-mx-sin-coincidencias hidden><td colspan="6" class="mx-vacio"><i class="bi bi-search"></i>Ninguna planta coincide con la búsqueda.</td></tr>
+                @if (!Model.Filas.Any())
+                {
+                    <tr><td colspan="6" class="mx-vacio"><i class="bi bi-buildings"></i>No hay plantas @(Model.Estado == "inactivos" ? "inactivas" : "registradas").</td></tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+@section Scripts {
+    <script src="~/js/maestros.js" asp-append-version="true"></script>
+}

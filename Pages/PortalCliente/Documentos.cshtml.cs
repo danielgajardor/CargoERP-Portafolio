@@ -39,6 +39,7 @@ namespace AtilsonCargoSpa.Pages.PortalCliente
             }
 
             var query = _context.Operaciones
+                .AsNoTracking()
                 .Include(o => o.IdPuertoOrigenNavigation)
                 .Include(o => o.IdPuertoDestinoNavigation)
                 .Include(o => o.OperacionesDocumentales)
@@ -46,7 +47,10 @@ namespace AtilsonCargoSpa.Pages.PortalCliente
 
             if (!string.IsNullOrEmpty(SearchString))
             {
-                query = query.Where(o => o.NumeroBooking != null && o.NumeroBooking.Contains(SearchString));
+                string s = SearchString.Trim();
+                query = query.Where(o =>
+                    (o.NumeroBooking != null && o.NumeroBooking.Contains(s)) ||
+                    (o.NumeroContenedor != null && o.NumeroContenedor.Contains(s)));
             }
 
             OperacionesDocumentales = await query.OrderByDescending(o => o.Id).ToListAsync();

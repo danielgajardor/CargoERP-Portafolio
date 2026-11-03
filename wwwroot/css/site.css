@@ -1,6 +1,23 @@
 /* =========================================================================
    ATILSON CARGO - SISTEMA LOGÍSTICO (ESTILOS GLOBALES)
    ========================================================================= */
+/* NOTA (auditoría oct-2026): además de los tokens de abajo (sidebar/topbar/
+   botones, en uso desde el diseño original), la mayoría de las vistas más
+   nuevas (Operaciones, Comercial, Finanzas, PortalCliente, etc.) definen su
+   propio bloque ":root" local con otro set de tokens (--atilson-dark,
+   --atilson-purple, --txt-main, ...) en vez de usar este archivo. Entre esos
+   bloques locales hay inconsistencias reales (--atilson-dark con al menos 5
+   valores hex distintos entre archivos, --atilson-accent con 4, etc.) y dos
+   casos de bloques ":root" contradictorios dentro del mismo archivo
+   (Operaciones/Index.cshtml e Operaciones/Detalle.cshtml), que ya se
+   corrigieron en esta auditoría dejando un único bloque por archivo (sin
+   cambiar el color que realmente se renderiza).
+   Lo que queda — unificar TODOS los archivos a una sola paleta aquí en
+   site.css — es una decisión de diseño/negocio (cuál de los 5 tonos de
+   "dark" o los 4 de "accent" es el oficial), no solo una corrección técnica,
+   y cambiaría el color visible en decenas de pantallas sin forma de
+   verificarlo visualmente en este entorno. Se deja pendiente para revisión
+   con el equipo de diseño/negocio en vez de decidirlo unilateralmente aquí. */
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 
 :root {

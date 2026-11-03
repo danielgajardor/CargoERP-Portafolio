@@ -1,0 +1,138 @@
+@page
+@model AtilsonCargoSpa.Pages.App.SoporteModel
+@using AtilsonCargoSpa.Models
+@{
+    ViewData["Title"] = "Soporte clientes";
+    var es = new System.Globalization.CultureInfo("es-CL");
+    int N(string e) => Model.Conteos.TryGetValue(e, out int n) ? n : 0;
+    (string Clase, string Texto) Estado(string e) => e switch
+    {
+        TicketSoporte.EstadoAbierto => ("abierto", "Por responder"),
+        TicketSoporte.EstadoRespondido => ("respondido", "Respondida"),
+        _ => ("cerrado", "Cerrada")
+    };
+    string Hace(DateTime f)
+    {
+        var d = DateTime.Now - f;
+        if (d.TotalMinutes < 1) return "recién";
+        if (d.TotalMinutes < 60) return $"hace {(int)d.TotalMinutes} min";
+        if (d.TotalHours < 24) return $"hace {(int)d.TotalHours} h";
+        return $"hace {(int)d.TotalDays} d";
+    }
+    var a = Model.Actual;
+    string empresaActual = a?.IdCliente != null && Model.Empresas.TryGetValue(a.IdCliente.Value, out var rsA) ? rsA : "Cliente";
+    bool soloLista = Request.Query["lista"] == "true";
+}
+<link rel="stylesheet" href="~/css/soporte.css" asp-append-version="true" />
+
+<div class="so">
+    <header class="so-cab">
+        <div>
+            <h1>Soporte clientes</h1>
+            <p>Conversaciones con los clientes que escriben desde el portal. Cada respuesta les llega por correo y en su portal.</p>
+        </div>
+    </header>
+    @if (!Model.Disponible)
+    {
+        <div class="so-aviso error"><i class="bi bi-exclamation-triangle"></i><span>Falta correr Sql/2026-10_perfiles_soporte.sql en la base para recibir consultas.</span></div>
+    }
+    @if (!string.IsNullOrEmpty(Model.Aviso)) { <div class="so-aviso ok" role="status"><i class="bi bi-check-circle"></i><span>@Model.Aviso</span></div> }
+    @if (!string.IsNullOrEmpty(Model.AvisoError)) { <div class="so-aviso error" role="alert"><i class="bi bi-exclamation-circle"></i><span>@Model.AvisoError</span></div> }
+
+    <div class="so-app @(a != null && !soloLista ? "con-hilo" : "")">
+        <aside class="so-lista" aria-label="Consultas">
+            <div class="so-lista-top">
+                <nav class="so-tabs" aria-label="Estado">
+                    <a asp-route-vista="@TicketSoporte.EstadoAbierto" asp-route-lista="true" class="@(Model.Vista == TicketSoporte.EstadoAbierto ? "activo" : "")">Por responder <span class="n">@N(TicketSoporte.EstadoAbierto)</span></a>
+                    <a asp-route-vista="@TicketSoporte.EstadoRespondido" asp-route-lista="true" class="@(Model.Vista == TicketSoporte.EstadoRespondido ? "activo" : "")">Respondidas <span class="n">@N(TicketSoporte.EstadoRespondido)</span></a>
+                    <a asp-route-vista="@TicketSoporte.EstadoCerrado" asp-route-lista="true" class="@(Model.Vista == TicketSoporte.EstadoCerrado ? "activo" : "")">Cerradas <span class="n">@N(TicketSoporte.EstadoCerrado)</span></a>
+                </nav>
+            </div>
+            <div class="so-items">
+                @if (!Model.Tickets.Any())
+                {
+                    <div class="so-vacio-lista">@(Model.Vista == TicketSoporte.EstadoAbierto ? "No hay consultas por responder." : "No hay consultas en esta vista.")</div>
+                }
+                @foreach (var t in Model.Tickets)
+                {
+                    string empresa = t.IdCliente != null && Model.Empresas.TryGetValue(t.IdCliente.Value, out var rs) ? rs : "Cliente";
+                    Model.Ultimos.TryGetValue(t.Id, out var ult);
+                    <a class="so-item @(a?.Id == t.Id ? "activo" : "")" asp-route-t="@t.Id" asp-route-vista="@Model.Vista">
+                        <div class="so-item-l1"><b>@empresa</b><time title="@((t.UltimoMensaje ?? t.FechaCreacion).ToString("dd-MM-yyyy HH:mm"))">@Hace(t.UltimoMensaje ?? t.FechaCreacion)</time></div>
+                        <div class="so-item-l2">#@t.Id · @t.Tipo@(t.Referencia != null ? " · " + t.Referencia : "")</div>
+                        @if (ult != null)
+                        {
+                            <div class="so-item-prev"><em>@(ult.EsCliente ? ult.Nombre : "Tú/equipo"):</em> @ult.Texto</div>
+                        }
+                    </a>
+                }
+            </div>
+        </aside>
+
+        @if (a != null)
+        {
+            var e = Estado(a.Estado);
+            <section class="so-hilo" aria-label="Conversación">
+                <div class="so-hilo-cab">
+                    <div>
+                        <a href="?vista=@Model.Vista&lista=true" class="so-btn so-btn-sec so-btn-sm so-volver-movil mb-2"><i class="bi bi-arrow-left"></i> Consultas</a>
+                        <h2>@empresaActual · #@a.Id @a.Tipo</h2>
+                        <div class="meta">
+                            <span class="so-chip @e.Clase">@e.Texto</span>
+                            <span><i class="bi bi-person"></i> @a.NombreUsuario · <a href="mailto:@a.CorreoUsuario">@a.CorreoUsuario</a></span>
+                            @if (a.Referencia != null)
+                            {
+                                if (a.IdOperacion != null)
+                                {
+                                    <a asp-page="/Operaciones/Detalle" asp-route-id="@a.IdOperacion"><i class="bi bi-box-seam"></i> @a.Referencia</a>
+                                }
+                                else
+                                {
+                                    <span><i class="bi bi-hash"></i> @a.Referencia</span>
+                                }
+                            }
+                        </div>
+                    </div>
+                    @if (a.Estado != TicketSoporte.EstadoCerrado)
+                    {
+                        <form method="post" asp-page-handler="Estado" asp-route-id="@a.Id" asp-route-estado="@TicketSoporte.EstadoCerrado">
+                            <button type="submit" class="so-btn so-btn-sec so-btn-sm"><i class="bi bi-check2-all"></i> Cerrar sin responder</button>
+                        </form>
+                    }
+                    else
+                    {
+                        <form method="post" asp-page-handler="Estado" asp-route-id="@a.Id" asp-route-estado="@TicketSoporte.EstadoAbierto">
+                            <button type="submit" class="so-btn so-btn-sec so-btn-sm"><i class="bi bi-arrow-counterclockwise"></i> Reabrir</button>
+                        </form>
+                    }
+                </div>
+                <div class="so-mensajes" id="soMensajes" data-soy="equipo" data-url="?handler=Mensajes&t=@a.Id" data-ultimo="@(Model.Conversacion.Select(m => m.Id).DefaultIfEmpty(0).Max())">
+                    @foreach (var m in Model.Conversacion)
+                    {
+                        <div class="so-msg @(m.EsCliente ? "otro" : "mio")">
+                            <div class="burbuja">@m.Texto</div>
+                            <div class="pie">@m.Nombre · @m.Fecha.ToString("dd-MM HH:mm")</div>
+                        </div>
+                    }
+                </div>
+                <div class="so-escribir">
+                    <form method="post" asp-page-handler="Responder" asp-route-id="@a.Id">
+                        <label class="visually-hidden" for="soTexto">Respuesta</label>
+                        <textarea id="soTexto" name="respuesta" rows="1" maxlength="2000" required placeholder="Escribe la respuesta para el cliente…" data-foco="@(Model.T != null ? "si" : "no")"></textarea>
+                        <button type="submit" name="cerrar" value="true" class="so-btn so-btn-sec" title="Envía la respuesta y da la consulta por resuelta"><i class="bi bi-check2-all"></i> Responder y cerrar</button>
+                        <button type="submit" name="cerrar" value="false" class="so-btn"><i class="bi bi-send"></i> Responder</button>
+                    </form>
+                    <p class="ayuda">Enter envía · Shift + Enter para un salto de línea</p>
+                </div>
+            </section>
+        }
+        else
+        {
+            <section class="so-hilo"><div class="so-sin-seleccion"><i class="bi bi-chat-square-heart"></i>No hay conversaciones en esta vista.</div></section>
+        }
+    </div>
+</div>
+
+@section Scripts {
+    <script src="~/js/soporte.js" asp-append-version="true"></script>
+}

@@ -1,0 +1,115 @@
+/* ==========================================================================
+   Marca Atilson para las páginas de acceso (oct-2026)
+   Login, Registro de empresas y Solicitud de cuenta del equipo usan los
+   mismos colores, tipografía y globo de la landing (Pages/Index.cshtml).
+   ========================================================================== */
+:root {
+    --indigo: #443094;
+    --indigo-700: #33246f;
+    --lila: #c3b6f5;
+    --noche: #160e2f;
+    --niebla: #f4f2fa;
+    --tinta: #1e1835;
+    --gris: #5d5872;
+    --linea: #e3dfee;
+}
+
+.ac-body {
+    font-family: 'Archivo', system-ui, -apple-system, 'Segoe UI', sans-serif;
+    color: var(--tinta);
+    background: #fff;
+    -webkit-font-smoothing: antialiased;
+    margin: 0;
+}
+.ac-body :focus-visible { outline: 3px solid var(--lila); outline-offset: 3px; }
+.ac-titular { font-stretch: 118%; font-weight: 800; letter-spacing: -0.02em; line-height: 1.04; margin: 0; }
+
+/* Panel de marca (lado oscuro) */
+.ac-marca {
+    position: relative; overflow: hidden; isolation: isolate;
+    color: #fff;
+    background:
+        radial-gradient(900px 600px at 70% 75%, rgba(68,48,148,.6), transparent 65%),
+        linear-gradient(180deg, var(--noche) 0%, #1a1139 100%);
+}
+.ac-marca-logo { display: inline-block; line-height: 0; }
+.ac-marca-logo img { height: 56px; width: auto; }
+.ac-globo {
+    position: absolute; z-index: -1;
+    aspect-ratio: 1049 / 1072;
+    background: var(--indigo);
+    -webkit-mask: url("../img/marca/atilson-isotipo.svg") center / contain no-repeat;
+    mask: url("../img/marca/atilson-isotipo.svg") center / contain no-repeat;
+}
+.ac-globo img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; mix-blend-mode: luminosity; opacity: .9; }
+.ac-globo::after {
+    content: ""; position: absolute; inset: 0;
+    background: linear-gradient(200deg, rgba(195,182,245,.25) 0%, rgba(68,48,148,.05) 45%, rgba(22,14,47,.6) 100%);
+}
+
+/* Botones y campos */
+.ac-btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 10px;
+    background: var(--indigo); color: #fff;
+    border: 0; border-radius: 999px;
+    padding: 14px 26px; font-weight: 700; font-size: 16px; text-decoration: none;
+    transition: background-color .2s;
+}
+.ac-btn:hover { background: var(--indigo-700); color: #fff; }
+.ac-btn:disabled { opacity: .7; }
+.ac-volver { display: inline-flex; align-items: center; gap: 8px; color: var(--gris); font-weight: 600; font-size: 15px; text-decoration: none; padding: 8px 14px; border-radius: 999px; }
+.ac-volver:hover { color: var(--indigo); background: var(--niebla); }
+
+/* ---------- Registro de empresas y del equipo (mismas clases .rg-*) ---------- */
+.ac-registro {
+    --rg-brand: var(--indigo);
+    --rg-deep: var(--noche);
+    --rg-ink: var(--tinta);
+    --rg-muted: var(--gris);
+    --rg-line: var(--linea);
+    --rg-soft: var(--niebla);
+    font-family: 'Archivo', system-ui, -apple-system, 'Segoe UI', sans-serif;
+    background: var(--niebla);
+}
+.ac-registro .rg-lado {
+    background:
+        radial-gradient(700px 500px at 60% 95%, rgba(68,48,148,.65), transparent 65%),
+        linear-gradient(180deg, var(--noche) 0%, #1a1139 100%);
+    overflow: hidden; isolation: isolate;
+}
+.ac-registro .rg-lado img { filter: none; max-width: 190px; }
+.ac-registro .rg-lado::after {
+    content: ""; position: absolute; z-index: -1;
+    width: 420px; aspect-ratio: 1049 / 1072; right: -150px; bottom: -110px;
+    background: #fff; opacity: .07;
+    -webkit-mask: url("../img/marca/atilson-isotipo.svg") center / contain no-repeat; mask: url("../img/marca/atilson-isotipo.svg") center / contain no-repeat;
+}
+.ac-registro .rg-lado h1 { font-stretch: 118%; font-size: 30px; letter-spacing: -0.02em; line-height: 1.08; }
+.ac-registro .rg-lado p { color: #d6d0ec; font-size: 15px; }
+.ac-registro .rg-pasos li { color: #e6e1f7; font-size: 14.5px; }
+.ac-registro .rg-pasos b { background: rgba(195,182,245,.18); color: var(--lila); }
+.ac-registro .rg-titulo { font-stretch: 118%; font-size: 34px; letter-spacing: -0.02em; }
+.ac-registro .rg-sub { font-size: 15.5px; }
+.ac-registro .rg-card { border-radius: 16px; box-shadow: none; border-color: var(--linea); }
+.ac-registro .rg-card h2 { text-transform: none; letter-spacing: 0; font-size: 17px; font-weight: 700; }
+.ac-registro .rg-card h2 i { color: var(--indigo); }
+.ac-registro .rg-campo label { color: var(--tinta); font-size: 13.5px; font-weight: 600; }
+.ac-registro .rg-campo input, .ac-registro .rg-campo select { height: 46px; border-color: var(--linea); border-radius: 10px; font-size: 15px; }
+.ac-registro .rg-campo input:focus, .ac-registro .rg-campo select:focus { border-color: var(--indigo); box-shadow: 0 0 0 4px rgba(68,48,148,.14); }
+.ac-registro .rg-btn { border-radius: 999px; padding: 13px 26px; font-weight: 700; font-size: 15px; background: var(--indigo); }
+.ac-registro .rg-btn:hover { background: var(--indigo-700); color: #fff; }
+.ac-registro .rg-top a:hover { color: var(--indigo); }
+.ac-registro .rg-ok { border-radius: 20px; }
+.ac-registro .rg-ok h1 { font-stretch: 112%; }
+.ac-registro .select2-container .select2-selection--single { height: 46px; border-color: var(--linea); border-radius: 10px; }
+.ac-registro .select2-container .select2-selection--single .select2-selection__rendered { line-height: 44px; }
+.ac-registro .select2-container .select2-selection--single .select2-selection__arrow { height: 44px; }
+
+@media (max-width: 900px) {
+    .ac-registro .rg-lado { position: relative; }
+    .ac-registro .rg-lado::after { width: 260px; right: -90px; bottom: -80px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .ac-body *, .ac-body *::before, .ac-body *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+}

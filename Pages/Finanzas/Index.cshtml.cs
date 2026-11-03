@@ -1,4 +1,4 @@
-using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.EntityFrameworkCore;
 using AtilsonCargoSpa.Models;
@@ -52,6 +52,168 @@ namespace AtilsonCargoSpa.Pages.Finanzas
         public List<BookingBloqueosDTO> BookingsConBloqueos { get; set; } = new();
         public int TotalSolicitudesPendientes { get; set; }
 
+        // Traspaso Ops -> Finanzas (oct-2026): bookings que Operaciones finalizó y Finanzas
+        // aún no abre (NUEVO) y bookings reabiertos por Operaciones.
+        public List<Operacione> TraspasosOperaciones { get; set; } = new();
+        public Dictionary<int, (string Ruta, string Nombre)> RespaldosReapertura { get; set; } = new();
+        public int TraspasosNuevos => TraspasosOperaciones.Count(AtilsonCargoSpa.Services.TraspasoFinanzas.EsNuevaParaFinanzas);
+        public int TraspasosReabiertos => TraspasosOperaciones.Count(AtilsonCargoSpa.Services.TraspasoFinanzas.EstaReabierta);
+
+        // ===================== Panorama financiero (oct-2026) =====================
+        // Mismos números que "Resumen Operacional" de Control Financiero: suma de
+        // MontoNeto por tipo de movimiento, separada por moneda (no se convierte USD a CLP).
+        [BindProperty(SupportsGet = true)]
+        public string? Periodo { get; set; }
+
+        public static readonly (string Clave, string Texto)[] OpcionesPeriodo =
+        {
+            ("30d", "Últimos 30 días"),
+            ("90d", "Últimos 90 días"),
+            ("mes", "Mes actual"),
+            ("mesant", "Mes anterior"),
+            ("anio", "Este año"),
+            ("todo", "Todo el historial")
+        };
+
+        public string PeriodoTexto => OpcionesPeriodo.FirstOrDefault(o => o.Clave == Periodo).Texto ?? "Últimos 90 días";
+
+        public sealed class Montos
+        {
+            public decimal Clp { get; set; }
+            public decimal Usd { get; set; }
+            public bool Vacio => Clp == 0m && Usd == 0m;
+            public void Sumar(TransaccionesFinanciera t, decimal signo = 1m)
+            {
+                if (string.Equals(t.Moneda, "USD", StringComparison.OrdinalIgnoreCase)) Usd += signo * t.MontoNeto;
+                else Clp += signo * t.MontoNeto;
+            }
+            public static Montos Restar(Montos a, Montos b) => new() { Clp = a.Clp - b.Clp, Usd = a.Usd - b.Usd };
+        }
+
+        public sealed class FilaOperacion
+        {
+            public int Id { get; set; }
+            public string Booking { get; set; } = "";
+            public string Cliente { get; set; } = "";
+            public DateTime? Fecha { get; set; }
+            public Montos Ingresos { get; set; } = new();
+            public Montos Egresos { get; set; } = new();
+            public Montos Margen => Montos.Restar(Ingresos, Egresos);
+            public int SinValorizar { get; set; }
+            public Operacione Op { get; set; } = null!;
+        }
+
+        public sealed class FilaCliente
+        {
+            public string Cliente { get; set; } = "";
+            public int Operaciones { get; set; }
+            public Montos Ingresos { get; set; } = new();
+            public Montos Margen { get; set; } = new();
+        }
+
+        public Montos Ingresos { get; set; } = new();
+        public Montos Egresos { get; set; } = new();
+        public Montos Margen => Montos.Restar(Ingresos, Egresos);
+        public Montos PorCobrarSinFacturar { get; set; } = new();
+        public Montos PorCobrarFacturado { get; set; } = new();
+        public Montos PorPagar { get; set; } = new();
+        public int OperacionesEnPeriodo { get; set; }
+        public List<FilaOperacion> FilasOperaciones { get; set; } = new();
+        public List<FilaCliente> TopClientes { get; set; } = new();
+        public List<(string Estado, int Filas)> EstadosFilas { get; set; } = new();
+
+        private static readonly string[] EstadosCerrados = { "PAGADO", "CONCILIADO", "NO FACTURABLE" };
+
+        private (DateTime? Desde, DateTime? Hasta) RangoPeriodo()
+        {
+            var hoy = DateTime.Today;
+            var inicioMes = new DateTime(hoy.Year, hoy.Month, 1);
+            return Periodo switch
+            {
+                "30d" => (hoy.AddDays(-30), null),
+                "mes" => (inicioMes, inicioMes.AddMonths(1)),
+                "mesant" => (inicioMes.AddMonths(-1), inicioMes),
+                "anio" => (new DateTime(hoy.Year, 1, 1), null),
+                "todo" => (null, null),
+                _ => (hoy.AddDays(-90), null)
+            };
+        }
+
+        private async Task CargarPanoramaAsync()
+        {
+            if (!OpcionesPeriodo.Any(o => o.Clave == Periodo)) Periodo = "90d";
+            var (desde, hasta) = RangoPeriodo();
+
+            // Fecha de referencia de la operación: ETD (zarpe) o, si no tiene, la de creación.
+            var query = _context.Operaciones.AsNoTracking().AsSplitQuery()
+                .Where(o => !o.IsDeleted && o.TransaccionesFinancieras.Any());
+            if (desde.HasValue) query = query.Where(o => (o.EtdPol ?? o.FechaCreacion) >= desde.Value);
+            if (hasta.HasValue) query = query.Where(o => (o.EtdPol ?? o.FechaCreacion) < hasta.Value);
+            var ops = await query
+                .Include(o => o.IdClienteNavigation)
+                .Include(o => o.TransaccionesFinancieras)
+                .ToListAsync();
+
+            OperacionesEnPeriodo = ops.Count;
+            var estados = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            foreach (var o in ops)
+            {
+                var fila = new FilaOperacion
+                {
+                    Id = o.Id,
+                    Booking = string.IsNullOrWhiteSpace(o.NumeroBooking) ? $"OP-{o.Id}" : o.NumeroBooking!,
+                    Cliente = o.IdClienteNavigation?.RazonSocial ?? "Sin cliente",
+                    Fecha = o.EtdPol ?? o.FechaCreacion,
+                    Op = o
+                };
+                foreach (var t in o.TransaccionesFinancieras)
+                {
+                    string estado = (t.EstadoFila ?? "").Trim().ToUpperInvariant();
+                    if (estado == "PROVISION") estado = "PROVISIÓN";
+                    estados[estado] = estados.TryGetValue(estado, out var n) ? n + 1 : 1;
+                    if (estado == "PENDIENTE VALORIZAR") fila.SinValorizar++;
+                    bool cerrada = EstadosCerrados.Contains(estado);
+
+                    if (t.TipoMovimiento == "INGRESO")
+                    {
+                        fila.Ingresos.Sumar(t); Ingresos.Sumar(t);
+                        if (!cerrada) (estado == "FACTURADO" ? PorCobrarFacturado : PorCobrarSinFacturar).Sumar(t);
+                    }
+                    else if (t.TipoMovimiento == "EGRESO")
+                    {
+                        fila.Egresos.Sumar(t); Egresos.Sumar(t);
+                        if (!cerrada) PorPagar.Sumar(t);
+                    }
+                }
+                FilasOperaciones.Add(fila);
+            }
+
+            FilasOperaciones = FilasOperaciones
+                .OrderBy(f => AtilsonCargoSpa.Services.TraspasoFinanzas.PrioridadFinanzas(f.Op))
+                .ThenByDescending(f => f.Fecha)
+                .ThenByDescending(f => f.Id)
+                .ToList();
+
+            TopClientes = FilasOperaciones
+                .GroupBy(f => f.Cliente)
+                .Select(g => new FilaCliente
+                {
+                    Cliente = g.Key,
+                    Operaciones = g.Count(),
+                    Ingresos = new Montos { Clp = g.Sum(f => f.Ingresos.Clp), Usd = g.Sum(f => f.Ingresos.Usd) },
+                    Margen = new Montos { Clp = g.Sum(f => f.Margen.Clp), Usd = g.Sum(f => f.Margen.Usd) }
+                })
+                .OrderByDescending(c => c.Margen.Usd).ThenByDescending(c => c.Margen.Clp)
+                .Take(6)
+                .ToList();
+
+            string[] orden = { "PENDIENTE VALORIZAR", "PROVISIÓN", "FACTURADO", "PAGADO", "CONCILIADO", "NO FACTURABLE" };
+            EstadosFilas = estados
+                .OrderBy(kv => { int i = Array.IndexOf(orden, kv.Key); return i >= 0 ? i : 99; })
+                .Select(kv => (string.IsNullOrEmpty(kv.Key) ? "SIN ESTADO" : kv.Key, kv.Value))
+                .ToList();
+        }
+
         // Nombres visibles por certKey — todos pertenecen hoy al grupo Documental,
         // único módulo que implementa bloqueo por certificado (CertsBloqueados).
         // Si en el futuro se agrega bloqueo a Marítimo/Transporte/Gate, este mismo
@@ -76,7 +238,7 @@ namespace AtilsonCargoSpa.Pages.Finanzas
         public async Task OnGetAsync()
         {
             var operacionesConPendientes = await _context.Operaciones
-                .Where(o => !o.IsDeleted && o.TransaccionesFinancieras.Any(t => t.MontoNeto == 0m && !t.TarifaManual))
+                .Where(o => !o.IsDeleted && o.TransaccionesFinancieras.Any(t => t.MontoNeto == 0m && !t.TarifaManual && t.EstadoFila != "NO FACTURABLE" && (t.JustificacionManual == null || !t.JustificacionManual.StartsWith("Sin costo"))))
                 .Include(o => o.IdClienteNavigation)
                 .Include(o => o.TransaccionesFinancieras)
                 .OrderByDescending(o => o.Id)
@@ -88,7 +250,7 @@ namespace AtilsonCargoSpa.Pages.Finanzas
                 NumeroBooking = string.IsNullOrWhiteSpace(o.NumeroBooking) ? $"OP-{o.Id}" : o.NumeroBooking,
                 Cliente = o.IdClienteNavigation?.RazonSocial ?? "SIN MANDANTE",
                 ConceptosPendientes = o.TransaccionesFinancieras
-                    .Where(t => t.MontoNeto == 0m && !t.TarifaManual)
+                    .Where(t => t.MontoNeto == 0m && !t.TarifaManual && t.EstadoFila != "NO FACTURABLE" && (t.JustificacionManual == null || !t.JustificacionManual.StartsWith("Sin costo")))
                     .Select(t => t.Concepto)
                     .Distinct()
                     .ToList()
@@ -168,6 +330,28 @@ namespace AtilsonCargoSpa.Pages.Finanzas
             }
 
             TotalSolicitudesPendientes = BookingsConBloqueos.SelectMany(b => b.Conceptos).Count(c => c.SolicitudPendiente);
+
+            try
+            {
+                var candidatos = await _context.Operaciones.AsNoTracking()
+                    .Where(o => !o.IsDeleted && (o.EstadoTarea == AtilsonCargoSpa.Services.TraspasoFinanzas.EstadoReabierta
+                        || (o.EstadoTarea == AtilsonCargoSpa.Services.TraspasoFinanzas.EstadoFinalizada && o.FechaFinalizacionTarea != null
+                            && (o.FechaVistoFinanzas == null || o.FechaVistoFinanzas < o.FechaFinalizacionTarea))))
+                    .Include(o => o.IdClienteNavigation)
+                    .ToListAsync();
+                TraspasosOperaciones = candidatos
+                    .OrderBy(AtilsonCargoSpa.Services.TraspasoFinanzas.PrioridadFinanzas)
+                    .ThenByDescending(o => o.FechaFinalizacionTarea ?? o.FechaReaperturaTarea)
+                    .ToList();
+                RespaldosReapertura = await new AtilsonCargoSpa.Services.TraspasoFinanzasService(_context).RespaldosUltimaReaperturaAsync(
+                    TraspasosOperaciones.Where(AtilsonCargoSpa.Services.TraspasoFinanzas.EstaReabierta).Select(o => o.Id));
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Trace.TraceWarning($"Traspaso Ops->Finanzas: {ex.Message}");
+            }
+
+            await CargarPanoramaAsync();
         }
 
         public async Task<IActionResult> OnPostDesbloquearConceptoAsync(int idOperacion, int? idUnidadTecnica, string certKey)

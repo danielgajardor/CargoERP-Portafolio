@@ -1,0 +1,325 @@
+/* =========================================================================
+   DASHBOARD / CENTRO DE MANDO — CAPA PREMIUM (v2, pedido explícito del
+   usuario de llevarlo "a otro nivel" visualmente, más allá del ajuste
+   ligero anterior). Mismo lenguaje visual que el resto del sistema —
+   gradiente morado/violeta, Plus Jakarta Sans, sombras "glow", radios
+   grandes — pero con más presencia: cabecera más rica, tarjetas KPI con
+   más profundidad, chips de ícono en degradado, tabla y rail de accesos
+   pulidos.
+
+   Cero cambios de lógica/datos: ningún @Model.*, ningún dataset de los 3
+   gráficos Chart.js, ningún color SEMÁNTICO se tocó —
+     - Las barras de KPI (.kpi-bar-fill) y los valores coloreados inline
+       (ámbar = pendiente, rojo = cancelado/alerta, verde = sin alertas)
+       siguen exactamente como el backend los calcula.
+     - El badge de estado de cada operación reciente (estBg/estTxt/estBorder,
+       calculado en el .cshtml según EstadoWorkflow) no se tocó.
+     - El reloj en vivo y el fix de corner-case de datos del Chart.js
+       (colores de dataset) no se tocaron — solo se afinó el color de FONDO
+       del tooltip (un valor estético, no un dato) para que combine con la
+       nueva tinta de marca.
+
+   Acotado a .dash-premium porque .status-badge, .table-erp y .empty-state
+   son nombres de clase que se repiten en otras vistas (ej. Clientes/Edit
+   usa .table-erp y .empty-state es un componente global reutilizable).
+   ========================================================================= */
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@500;600&display=swap');
+
+/* ---------- 0. Tokens ---------- */
+.dash-premium {
+    --dash-brand: #6d2d9e;
+    --dash-brand-2: #8b5cf6;
+    --dash-ink: #140c26;
+    --dash-muted: #6b6880;
+    --dash-line: #ece8f3;
+    --dash-soft: #f8f7fc;
+    --dash-tint: #f4eefb;
+    --dash-shadow: 0 1px 2px rgba(20,12,38,.04), 0 18px 40px -26px rgba(44,27,77,.28);
+    --dash-shadow-lg: 0 28px 60px -22px rgba(44,27,77,.4);
+
+    font-family: 'Plus Jakarta Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+
+    /* Esta vista ya traía su propio --atilson-dark (#0f172a, slate) y
+       --atilson-dark-2 (#1e2338) — se realinean a la tinta violeta-oscura
+       que usa el resto de la familia premium, sin tocar los usos de la
+       variable repartidos en el archivo (header, ícono "Operaciones",
+       botón "Ver tabla completa"). */
+    --atilson-dark: #140c26;
+    --atilson-dark-2: #241539;
+    --txt-main: #140c26;
+    --txt-muted: #6b6880;
+    --border-soft: #ece8f3;
+    --bg-panel: #ffffff;
+}
+.dash-premium .tabular, .dash-premium .cmd-clock, .dash-premium .bkg-ref {
+    font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Consolas, monospace !important;
+}
+
+body:has(.dash-premium) {
+    background:
+        radial-gradient(1100px 460px at 100% -10%, rgba(139,92,246,.07), transparent 60%),
+        #f5f4f9;
+}
+
+/* ---------- 1. Cabecera — más presencia, mismo contenido ---------- */
+.dash-premium .cmd-header {
+    border-radius: 20px !important;
+    padding: 34px 38px !important;
+    box-shadow: 0 30px 70px -22px rgba(20,12,38,.55) !important;
+    background: linear-gradient(125deg, var(--atilson-dark) 0%, var(--atilson-dark-2) 55%, #5b2a8a 125%) !important;
+}
+.dash-premium .cmd-header::after {
+    content: ''; position: absolute; inset: 0; pointer-events: none;
+    background-image: radial-gradient(circle at 4% 125%, rgba(139,92,246,.3), transparent 55%);
+}
+.dash-premium .cmd-greeting { font-size: 27px !important; letter-spacing: -0.6px !important; }
+.dash-premium .cmd-route { opacity: .4 !important; width: 380px !important; }
+.dash-premium .cmd-clock { font-size: 28px !important; }
+
+/* ---------- 2. Rail de accesos rápidos ---------- */
+.dash-premium .qa-item {
+    border-radius: 16px !important;
+    box-shadow: var(--dash-shadow) !important;
+    transition: box-shadow .2s ease, transform .2s ease, border-color .2s ease !important;
+}
+.dash-premium .qa-item:hover {
+    box-shadow: var(--dash-shadow-lg) !important;
+    transform: translateY(-3px) !important;
+    border-color: var(--dash-brand-2) !important;
+}
+.dash-premium .qa-ico { border-radius: 12px !important; background: var(--dash-tint) !important; transition: transform .2s ease; }
+.dash-premium .qa-item.ops .qa-ico { background: linear-gradient(135deg, #2c1b4d, #5b2a8a) !important; }
+.dash-premium .qa-item:hover .qa-ico { transform: scale(1.06); }
+.dash-premium .qa-item:hover .qa-arrow { color: var(--dash-brand) !important; }
+
+/* ---------- 3. Tarjetas KPI y paneles de gráfico ---------- */
+.dash-premium .data-panel {
+    border-radius: 18px !important;
+    box-shadow: var(--dash-shadow) !important;
+    transition: box-shadow .2s ease, transform .2s ease, border-color .2s ease !important;
+}
+.dash-premium .data-panel:hover { box-shadow: var(--dash-shadow-lg) !important; transform: translateY(-2px) !important; }
+.dash-premium .kpi-value { letter-spacing: -1.8px !important; }
+.dash-premium .kpi-bar-track, .dash-premium .kpi-bar-fill { border-radius: 4px !important; }
+
+/* Panel con su propia cabecera (p-0, usada en "Operaciones Recientes") —
+   el radio exterior cambió de 16px a 18px, así que la cabecera interna
+   (que antes calzaba a mano con 16px) se realinea para seguir encajando
+   perfecto en la esquina superior, y se recorta el borde inferior para
+   que la última fila de la tabla respete el radio inferior también. */
+.dash-premium .data-panel.p-0 { overflow: hidden; }
+.dash-premium .data-panel.p-0 > .panel-header { border-radius: 18px 18px 0 0 !important; }
+
+/* Chip de ícono de cada panel — de tinte plano a degradado de marca. */
+.dash-premium .panel-icon-box {
+    border-radius: 10px !important;
+    background: linear-gradient(135deg, var(--dash-brand), var(--dash-brand-2)) !important;
+    color: #fff !important;
+    box-shadow: 0 8px 18px -8px rgba(109,45,158,.55);
+}
+
+/* Botón "Ver tabla completa" — mismo gradiente de marca que el resto del
+   sistema, en vez del color plano var(--atilson-dark) que traía inline. */
+.dash-premium .panel-header .btn {
+    background: linear-gradient(135deg, #2c1b4d, #5b2a8a) !important;
+    border: 0 !important;
+    border-radius: 9px !important;
+    box-shadow: 0 10px 22px -12px rgba(44,27,77,.85) !important;
+    transition: all .18s ease !important;
+}
+.dash-premium .panel-header .btn:hover { background: linear-gradient(135deg, #3a2363, #6d2d9e) !important; transform: translateY(-1px); }
+
+/* ---------- 4. Tabla de Operaciones Recientes ---------- */
+.dash-premium .table-erp th { letter-spacing: .6px !important; }
+.dash-premium .table-erp tr.data-row:hover td { background-color: var(--dash-tint) !important; }
+.dash-premium .status-badge { box-shadow: 0 1px 3px rgba(20,12,38,.08); }
+
+/* Estado vacío — ícono en chip circular tintado, igual al resto del sistema. */
+.dash-premium .empty-state i {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 56px; height: 56px; border-radius: 50%;
+    background: var(--dash-tint); color: var(--dash-brand);
+    font-size: 22px !important; opacity: 1 !important; margin-bottom: 14px;
+}
+
+/* ---------- 5. Botones genéricos y accesibilidad ---------- */
+.dash-premium .btn { transition: all .18s ease !important; }
+.dash-premium .btn:hover:not(:disabled) { transform: translateY(-1px); }
+
+@media (prefers-reduced-motion: reduce) {
+    .dash-premium .btn,
+    .dash-premium .qa-item,
+    .dash-premium .data-panel,
+    .dash-premium .qa-ico { transition: none !important; transform: none !important; }
+}
+
+/* =========================================================================
+   NAVES EN CURSO (oct-2026) — bookings agrupados por nave
+   ========================================================================= */
+.dash-premium .nv-panel:hover { transform: none !important; }
+
+.dash-premium .nv-sub {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--txt-muted);
+}
+
+.dash-premium .nv-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 14px;
+}
+
+.dash-premium .nv-card {
+    --nv-c: #6d2d9e;
+    display: flex;
+    flex-direction: column;
+    background: #fff;
+    border: 1px solid var(--border-soft);
+    border-top: 3px solid var(--nv-c);
+    border-radius: 14px;
+    padding: 14px 16px;
+}
+
+.dash-premium .nv-card__head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+}
+
+.dash-premium .nv-card__ico {
+    width: 34px;
+    height: 34px;
+    border-radius: 10px;
+    background: var(--nv-c);
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.dash-premium .nv-card__title { min-width: 0; }
+
+.dash-premium .nv-card__title strong {
+    display: block;
+    font-size: 13.5px;
+    font-weight: 900;
+    color: var(--txt-main);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.dash-premium .nv-card__title span {
+    display: block;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--txt-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.dash-premium .nv-card__dates {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 12px 0 10px;
+    font-size: 13px;
+    font-weight: 800;
+    color: var(--txt-main);
+    font-variant-numeric: tabular-nums;
+}
+
+    .dash-premium .nv-card__dates small {
+        font-size: 9.5px;
+        font-weight: 800;
+        color: var(--txt-muted);
+        margin-right: 4px;
+        letter-spacing: .4px;
+    }
+
+    .dash-premium .nv-card__dates > i { color: #c4bfd6; font-size: 11px; }
+
+.dash-premium .nv-card__count {
+    margin-left: auto;
+    font-size: 10px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: .3px;
+    color: var(--atilson-purple);
+    background: var(--dash-tint, #faf9fd);
+    border-radius: 6px;
+    padding: 3px 8px;
+}
+
+.dash-premium .nv-ops {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    border-top: 1px dashed var(--border-soft);
+}
+
+    .dash-premium .nv-ops li + li { border-top: 1px solid #f2f1f7; }
+
+    .dash-premium .nv-ops a {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 7px 2px;
+        text-decoration: none;
+        color: var(--txt-main);
+        min-width: 0;
+    }
+
+        .dash-premium .nv-ops a:hover { color: var(--atilson-purple); }
+
+.dash-premium .nv-ops__bkg {
+    font-family: 'SFMono-Regular', Consolas, monospace;
+    font-size: 11.5px;
+    font-weight: 800;
+    color: var(--atilson-purple);
+    flex-shrink: 0;
+}
+
+.dash-premium .nv-ops__cli {
+    font-size: 11.5px;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 0;
+}
+
+.dash-premium .nv-ops__tag {
+    margin-left: auto;
+    flex-shrink: 0;
+    font-size: 9.5px;
+    font-weight: 800;
+    text-transform: uppercase;
+    color: #475569;
+    background: #f1f5f9;
+    border-radius: 5px;
+    padding: 2px 6px;
+}
+
+.dash-premium .nv-card__foot {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 6px;
+    margin-top: auto;
+    padding-top: 10px;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--txt-muted);
+}
+
+.dash-premium .nv-portal {
+    color: #b45309;
+    text-decoration: none;
+}
+
+    .dash-premium .nv-portal:hover { color: #92400e; }

@@ -1,0 +1,12 @@
+@model string
+@* Selector entre las dos pantallas del módulo de respuesta al Portal Cliente
+   (minuta: "un módulo en Operaciones donde mismo se responden las cotizaciones,
+   para que el equipo cargue los itinerarios de naves"). *@
+<nav class="segmented-nav" aria-label="Portal Cliente">
+    <a class="segmented-nav__link @(Model == "cotizaciones" ? "active" : "")" asp-page="/Operaciones/Cotizaciones" aria-current="@(Model == "cotizaciones" ? "page" : null)">
+        <i class="bi bi-calculator"></i> Cotizaciones
+    </a>
+    <a class="segmented-nav__link @(Model == "itinerarios" ? "active" : "")" asp-page="/Operaciones/Itinerarios" aria-current="@(Model == "itinerarios" ? "page" : null)">
+        <i class="bi bi-calendar2-week"></i> Itinerarios de naves
+    </a>
+</nav>

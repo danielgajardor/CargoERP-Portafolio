@@ -68,7 +68,8 @@ public partial class AtilsonContext : DbContext
     public virtual DbSet<Usuario> Usuarios { get; set; }
 
     public virtual DbSet<Cotizacion> Cotizaciones { get; set; }
-
+    public virtual DbSet<ItinerarioNave> ItinerariosNaves { get; set; } = null!;
+    public virtual DbSet<ReglasTlc> ReglasTlc { get; set; } = null!;
     public virtual DbSet<TarifasMaestra> TarifasMaestras { get; set; }
     public virtual DbSet<TarifasCliente> TarifasClientes { get; set; } = default!;
 
@@ -77,6 +78,14 @@ public partial class AtilsonContext : DbContext
 
     public DbSet<HistorialCambiosComercial> HistorialCambiosComercial { get; set; }
     public virtual DbSet<TarifaGate> TarifasGate { get; set; }
+    public virtual DbSet<TarifaCollect> TarifasCollect { get; set; }
+    public virtual DbSet<OperacionTraspasoFinanzas> OperacionesTraspasoFinanzas { get; set; }
+    public virtual DbSet<SolicitudRegistroCliente> SolicitudesRegistroCliente { get; set; }
+
+    public virtual DbSet<SolicitudRegistroEquipo> SolicitudesRegistroEquipo { get; set; }
+    public virtual DbSet<PerfilUsuario> PerfilesUsuario { get; set; } // perfil de usuario (oct-2026)
+    public virtual DbSet<TicketSoporte> TicketsSoporte { get; set; } // soporte del portal (oct-2026)
+    public virtual DbSet<MensajeSoporte> MensajesSoporte { get; set; } // conversación de cada consulta (oct-2026)
     public virtual DbSet<AgenciasAduana> AgenciasAduanas { get; set; } = null!;
     public virtual DbSet<TarifaBl> TarifasBl { get; set; } = null!;
 
@@ -87,12 +96,7 @@ public partial class AtilsonContext : DbContext
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
 #warning To protect potentially sensitive information in your connection string, you should move it out of source code. You can avoid scaffolding the connection string by using the Name= syntax to read it from configuration - see https://go.microsoft.com/fwlink/?linkid=2131148. For more guidance on storing connection strings, see https://go.microsoft.com/fwlink/?LinkId=723263.
-    {
-        if (!optionsBuilder.IsConfigured)
-        {
-            optionsBuilder.UseSqlServer("Server=(localdb)\\MSSQLLocalDB;Database=CargoPortafolio;Trusted_Connection=True;MultipleActiveResultSets=true;TrustServerCertificate=True");
-        }
-    }
+        => optionsBuilder.UseSqlServer("Server=(localdb)\\MSSQLLocalDB;Database=CargoPortafolio;Trusted_Connection=True;MultipleActiveResultSets=true;TrustServerCertificate=True");
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -548,6 +552,9 @@ public partial class AtilsonContext : DbContext
             entity.Property(e => e.EvidenciaMatriz)
                 .HasMaxLength(500)
                 .IsUnicode(false);
+            entity.Property(e => e.NumeroBL)
+                .HasMaxLength(50)
+                .IsUnicode(false);
             entity.Property(e => e.FechaCreacion)
                 .HasDefaultValueSql("(getdate())")
                 .HasColumnType("datetime");
@@ -818,6 +825,7 @@ public partial class AtilsonContext : DbContext
             entity.Property(e => e.Pol).HasMaxLength(100);
             entity.Property(e => e.RutaRespaldo).HasMaxLength(255);
             entity.Property(e => e.TarifaUsd).HasColumnType("decimal(18, 2)");
+            entity.Property(e => e.RebateUsd).HasColumnType("decimal(18, 2)");
 
             // --- AQUI ESTA LA MAGIA: LA RELACION CON NAVIERAS QUE FALTABA ---
             entity.HasOne(d => d.IdNavieraNavigation)

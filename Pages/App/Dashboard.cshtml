@@ -1,0 +1,410 @@
+@page
+@model AtilsonCargoSpa.Pages.App.DashboardModel
+@{
+    ViewData["Title"] = "Centro de mando";
+    var es = new System.Globalization.CultureInfo("es-CL");
+    var hoy = DateTime.Today;
+    string nombre = (User.Identity?.Name ?? "Equipo Atilson").Split(' ')[0];
+    string saludo = DateTime.Now.Hour < 12 ? "Buenos días" : DateTime.Now.Hour < 20 ? "Buenas tardes" : "Buenas noches";
+    string fechaLarga = hoy.ToString("dddd d 'de' MMMM", es);
+    fechaLarga = char.ToUpper(fechaLarga[0]) + fechaLarga.Substring(1);
+    bool esJefatura = AtilsonCargoSpa.Helpers.PermisosEquipo.EsJefatura(User);
+    int totalMix = Math.Max(1, Model.CountIntegral + Model.CountMaritimo + Model.CountTerrestre + Model.CountDocumental);
+        string DiaAgenda(DateTime d) => d.Date == hoy ? "Hoy" : d.Date == hoy.AddDays(1) ? "Mañana" : d.ToString("dddd d", es);
+    string Cliente(AtilsonCargoSpa.Models.Operacione o) => o.IdClienteNavigation?.NombreCliente ?? o.IdClienteNavigation?.RazonSocial ?? "Sin cliente";
+    string Ruta(AtilsonCargoSpa.Models.Operacione o) => $"{o.IdPuertoOrigenNavigation?.NombrePuerto ?? "—"} → {o.IdPuertoDestinoNavigation?.NombrePuerto ?? "—"}";
+    string ClaseTipo(string t) => t switch { "Stacking" => "stk", "Cut-off matriz" => "mtz", "Zarpe" => "etd", _ => "eta" };
+    // KPIs del mes
+    var mesAct = hoy.ToString("MMMM", es);
+    var mesAnt = hoy.AddMonths(-1).ToString("MMMM", es);
+    int diaTramo = Math.Min(hoy.Day, DateTime.DaysInMonth(hoy.AddMonths(-1).Year, hoy.AddMonths(-1).Month));
+    string tramoAnt = $"1–{diaTramo} de {mesAnt}";
+    (string Texto, string Clase, string Icono) Delta(decimal act, decimal ant)
+    {
+        if (ant == 0) return act > 0 ? ($"Sin registros del {tramoAnt}", "igual", "bi-dash") : ($"Igual que el {tramoAnt}", "igual", "bi-dash");
+        var pct = Math.Round((act - ant) * 100 / ant);
+        if (pct == 0) return ($"Igual que el {tramoAnt}", "igual", "bi-dash");
+        return ($"{(pct > 0 ? "+" : "−")}{Math.Abs(pct)}% vs {tramoAnt}", pct > 0 ? "sube" : "baja", pct > 0 ? "bi-arrow-up-right" : "bi-arrow-down-right");
+    }
+    var dOps = Delta(Model.OpsMes, Model.OpsMesAnterior);
+    var dZar = Delta(Model.ZarpadosMes, Model.ZarpadosMesAnterior);
+    var dTon = Delta(Model.ToneladasMes, Model.ToneladasMesAnterior);
+    int maxCreadas = Math.Max(1, Model.Tendencia.Select(t => t.Creadas).DefaultIfEmpty(0).Max());
+    int maxZarpes = Math.Max(1, Model.Tendencia.Select(t => t.Zarpes).DefaultIfEmpty(0).Max());
+    int maxTend = Math.Max(maxCreadas, maxZarpes);
+    double anilloC = 2 * Math.PI * 26;
+    string Inv(double v) => v.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
+    string MesCorto(DateTime m) { var t = m.ToString("MMM", es).TrimEnd('.'); return char.ToUpper(t[0]) + t.Substring(1); }
+    int maxCli = Math.Max(1, Model.TopClientes.Select(r => r.Cantidad).DefaultIfEmpty(0).Max());
+    int maxNav = Math.Max(1, Model.TopNavieras.Select(r => r.Cantidad).DefaultIfEmpty(0).Max());
+}
+<link rel="stylesheet" href="~/css/dashboard.css" asp-append-version="true" />
+
+<div class="cm">
+    <!-- Cabecera con los KPIs del mes -->
+    <header class="cm-hero">
+        <div class="cm-hero-top">
+            <div>
+                <p class="cm-fecha">@fechaLarga</p>
+                <h1>@saludo, @nombre</h1>
+                <p class="cm-resumen">
+                    @if (Model.Pendientes.Any())
+                    {
+                        <span>Tienes <b>@Model.Pendientes.Sum(p => p.Cantidad)</b> @(Model.Pendientes.Sum(p => p.Cantidad) == 1 ? "pendiente" : "pendientes") y <b>@Model.Agenda.Count(e => e.Fecha.Date == hoy)</b> @(Model.Agenda.Count(e => e.Fecha.Date == hoy) == 1 ? "hito" : "hitos") para hoy.</span>
+                    }
+                    else
+                    {
+                        <span>Todo al día. Hoy hay <b>@Model.Agenda.Count(e => e.Fecha.Date == hoy)</b> @(Model.Agenda.Count(e => e.Fecha.Date == hoy) == 1 ? "hito" : "hitos") en la agenda.</span>
+                    }
+                </p>
+            </div>
+            <nav class="cm-acciones" aria-label="Accesos rápidos">
+                <a href="/Operaciones/Create" class="cm-btn cm-btn-claro"><i class="bi bi-plus-lg"></i> Nueva operación</a>
+                <a href="/Operaciones/Index" class="cm-btn"><i class="bi bi-kanban"></i> Main Board</a>
+                @if (esJefatura)
+                {
+                    <a href="/Finanzas/ControlFinanciero" class="cm-btn"><i class="bi bi-wallet2"></i> Control Financiero</a>
+                    <a href="/Comercial/Index" class="cm-btn"><i class="bi bi-tags"></i> Tarifas</a>
+                }
+            </nav>
+        </div>
+
+        <section class="cm-hk-fila" aria-label="Indicadores de @mesAct">
+            <a class="cm-hk" href="/Operaciones/Index">
+                <span class="cm-hk-etq">Operaciones nuevas en @mesAct</span>
+                <span class="cm-hk-num">@Model.OpsMes.ToString("N0", es)</span>
+                <span class="cm-delta @dOps.Clase"><i class="bi @dOps.Icono" aria-hidden="true"></i> @dOps.Texto</span>
+                <svg class="cm-spark" viewBox="0 0 132 34" role="img" aria-label="Operaciones nuevas por mes: @string.Join(", ", Model.Tendencia.Select(t => $"{MesCorto(t.Mes)} {t.Creadas}"))">
+                    @for (int k = 0; k < Model.Tendencia.Count; k++)
+                    {
+                        var t = Model.Tendencia[k];
+                        double h = Math.Max(2, t.Creadas * 30.0 / maxCreadas);
+                        <rect x="@(k * 22)" y="@Inv(34 - h)" width="16" height="@Inv(h)" rx="3" class="@(k == Model.Tendencia.Count - 1 ? "act" : "")"><title>@MesCorto(t.Mes): @t.Creadas</title></rect>
+                    }
+                </svg>
+            </a>
+            <a class="cm-hk" href="/Operaciones/Index">
+                <span class="cm-hk-etq">Contenedores zarpados en @mesAct</span>
+                <span class="cm-hk-num">@Model.ZarpadosMes.ToString("N0", es)</span>
+                <span class="cm-delta @dZar.Clase"><i class="bi @dZar.Icono" aria-hidden="true"></i> @dZar.Texto</span>
+                <svg class="cm-spark" viewBox="0 0 132 34" role="img" aria-label="Contenedores zarpados por mes: @string.Join(", ", Model.Tendencia.Select(t => $"{MesCorto(t.Mes)} {t.Zarpes}"))">
+                    @for (int k = 0; k < Model.Tendencia.Count; k++)
+                    {
+                        var t = Model.Tendencia[k];
+                        double h = Math.Max(2, t.Zarpes * 30.0 / maxZarpes);
+                        <rect x="@(k * 22)" y="@Inv(34 - h)" width="16" height="@Inv(h)" rx="3" class="@(k == Model.Tendencia.Count - 1 ? "act" : "")"><title>@MesCorto(t.Mes): @t.Zarpes</title></rect>
+                    }
+                </svg>
+            </a>
+            <a class="cm-hk" href="/Operaciones/Index">
+                <span class="cm-hk-etq">Toneladas embarcadas en @mesAct</span>
+                @if (Model.HayPesos)
+                {
+                    <span class="cm-hk-num">@Model.ToneladasMes.ToString("N1", es) <small>t</small></span>
+                    <span class="cm-delta @dTon.Clase"><i class="bi @dTon.Icono" aria-hidden="true"></i> @dTon.Texto</span>
+                }
+                else
+                {
+                    <span class="cm-hk-num">—</span>
+                    <span class="cm-delta igual">Ingresa los kilos en cada operación para verlo</span>
+                }
+                <span class="cm-hk-pie">Peso bruto de los contenedores que ya zarparon</span>
+            </a>
+            <a class="cm-hk cm-hk-anillo" href="/Operaciones/Index">
+                <span class="cm-hk-etq">Ingreso a puerto a tiempo</span>
+                <span class="cm-hk-num">@Model.PctATiempo<small>%</small></span>
+                <span class="cm-delta @(Model.CountMaritimoConLAR > 0 ? "baja" : "sube")">
+                    @if (Model.CountMaritimoConLAR > 0) { <text><i class="bi bi-exclamation-circle" aria-hidden="true"></i> @Model.CountMaritimoConLAR con Late Arrival</text> }
+                    else { <text><i class="bi bi-check2" aria-hidden="true"></i> Sin Late Arrival</text> }
+                </span>
+                <svg class="cm-anillo" viewBox="0 0 64 64" aria-hidden="true">
+                    <circle cx="32" cy="32" r="26" class="fondo" />
+                    <circle cx="32" cy="32" r="26" class="valor" stroke-dasharray="@Inv(anilloC * Model.PctATiempo / 100) @Inv(anilloC)" transform="rotate(-90 32 32)" />
+                </svg>
+                <span class="cm-hk-pie">@Model.CountMaritimoATiempo de @(Model.CountMaritimoATiempo + Model.CountMaritimoConLAR) operaciones marítimas activas</span>
+            </a>
+        </section>
+    </header>
+
+    <!-- Salud operativa -->
+    <section class="cm-kpis" aria-label="Salud operativa">
+        <a class="cm-kpi" href="/Operaciones/Documental">
+            <span class="cm-kpi-ico"><i class="bi bi-file-earmark-check"></i></span>
+            <span class="cm-kpi-num">@Model.PctConfirmadas<small>%</small></span>
+            <span class="cm-kpi-txt">Matrices confirmadas (@Model.CountMatricesConfirmadas de @Model.TotalMatrices)</span>
+            <span class="cm-kpi-barra" aria-hidden="true"><span style="width:@Model.PctConfirmadas%"></span></span>
+        </a>
+        <a class="cm-kpi" href="/Operaciones/Index">
+            <span class="cm-kpi-ico"><i class="bi bi-patch-check"></i></span>
+            @if (Model.CountConfirmadoCliente + Model.CountPendienteNaviera == 0)
+            {
+                <span class="cm-kpi-num">—</span>
+                <span class="cm-kpi-txt">Bookings confirmados con la naviera (ninguno en curso)</span>
+            }
+            else
+            {
+                <span class="cm-kpi-num">@Model.PctBookingsConfirmados<small>%</small></span>
+                <span class="cm-kpi-txt">Bookings confirmados con la naviera (@Model.CountConfirmadoCliente de @(Model.CountConfirmadoCliente + Model.CountPendienteNaviera))</span>
+            }
+            <span class="cm-kpi-barra" aria-hidden="true"><span style="width:@Model.PctBookingsConfirmados%"></span></span>
+        </a>
+        <a class="cm-kpi" href="#agenda">
+            <span class="cm-kpi-ico"><i class="bi bi-water"></i></span>
+            <span class="cm-kpi-num">@Model.ZarpesSemana</span>
+            <span class="cm-kpi-txt">Zarpes en los próximos 7 días</span>
+        </a>
+        <a class="cm-kpi" href="/App/Clientes/Index">
+            <span class="cm-kpi-ico"><i class="bi bi-buildings"></i></span>
+            <span class="cm-kpi-num">@Model.ClientesConOperaciones</span>
+            <span class="cm-kpi-txt">Clientes con operaciones vigentes (@Model.TotalBookings activas)</span>
+        </a>
+    </section>
+
+    <div class="cm-grid">
+        <!-- Para atender -->
+        <section class="cm-panel" aria-labelledby="tPend">
+            <div class="cm-panel-cab">
+                <h2 id="tPend"><i class="bi bi-lightning-charge"></i> Para atender</h2>
+            </div>
+            @if (!Model.Pendientes.Any())
+            {
+                <div class="cm-vacio"><i class="bi bi-check2-circle"></i><b>Todo al día</b><span>No hay vencimientos ni solicitudes esperando.</span></div>
+            }
+            else
+            {
+                <ul class="cm-pend">
+                    @foreach (var p in Model.Pendientes)
+                    {
+                        <li>
+                            <a href="@p.Url" class="cm-pend-item @p.Tono">
+                                <span class="cm-pend-ico"><i class="bi @p.Icono"></i></span>
+                                <span class="cm-pend-txt"><b>@p.Titulo</b><small>@p.Detalle</small></span>
+                                <span class="cm-pend-n">@p.Cantidad</span>
+                                <i class="bi bi-chevron-right cm-pend-go" aria-hidden="true"></i>
+                            </a>
+                        </li>
+                    }
+                </ul>
+            }
+        </section>
+
+        <!-- Agenda -->
+        <section class="cm-panel" id="agenda" aria-labelledby="tAgenda">
+            <div class="cm-panel-cab">
+                <h2 id="tAgenda"><i class="bi bi-calendar-week"></i> Próximos 7 días</h2>
+                <div class="cm-leyenda" aria-label="Tipos de hito">
+                    <span class="stk">Stacking</span><span class="mtz">Cut-off matriz</span><span class="etd">Zarpe</span><span class="eta">Arribo</span>
+                </div>
+            </div>
+            @if (!Model.Agenda.Any())
+            {
+                <div class="cm-vacio"><i class="bi bi-calendar2-check"></i><b>Semana despejada</b><span>No hay stacking, cut-offs, zarpes ni arribos en los próximos 7 días.</span></div>
+            }
+            else
+            {
+                <div class="cm-agenda">
+                    @foreach (var dia in Model.Agenda.GroupBy(e => e.Fecha.Date))
+                    {
+                        <div class="cm-dia @(dia.Key == hoy ? "hoy" : "")">
+                            <h3>@DiaAgenda(dia.Key) <small>@dia.Count() @(dia.Count() == 1 ? "hito" : "hitos")</small></h3>
+                            <ul>
+                                @foreach (var e in dia.Take(8))
+                                {
+                                    <li>
+                                        <a href="/Operaciones/Detalle/@e.Op.Id" class="cm-evento">
+                                            <span class="cm-tipo @ClaseTipo(e.Tipo)"><i class="bi @e.Icono"></i> @e.Tipo</span>
+                                            <span class="cm-bkg">@e.Op.NumeroBooking</span>
+                                            <span class="cm-cli">@Cliente(e.Op)</span>
+                                            <span class="cm-ruta">@Ruta(e.Op)@(string.IsNullOrWhiteSpace(e.Op.Nave) ? "" : " · " + e.Op.Nave)</span>
+                                            @if (e.Fecha.TimeOfDay != TimeSpan.Zero)
+                                            {
+                                                <span class="cm-hora">@e.Fecha.ToString("HH:mm")</span>
+                                            }
+                                        </a>
+                                    </li>
+                                }
+                            </ul>
+                            @if (dia.Count() > 8)
+                            {
+                                <p class="cm-mas">y @(dia.Count() - 8) más en el Main Board</p>
+                            }
+                        </div>
+                    }
+                </div>
+            }
+        </section>
+    </div>
+
+    <!-- Actividad -->
+    <div class="cm-grid cm-grid-act">
+        <section class="cm-panel" aria-labelledby="tAct">
+            <div class="cm-panel-cab">
+                <h2 id="tAct"><i class="bi bi-bar-chart-line"></i> Actividad de los últimos 6 meses</h2>
+                <div class="cm-leyenda-act" aria-hidden="true"><span class="c">Operaciones nuevas</span><span class="z">Contenedores zarpados</span></div>
+            </div>
+            <svg class="cm-tend" viewBox="0 0 640 230" role="img" aria-label="Operaciones nuevas y contenedores zarpados por mes: @string.Join("; ", Model.Tendencia.Select(t => $"{MesCorto(t.Mes)}: {t.Creadas} nuevas, {t.Zarpes} zarpados"))">
+                @for (int g = 1; g <= 3; g++)
+                {
+                    double y = 190 - g * 160.0 / 3;
+                    <line x1="0" x2="640" y1="@Inv(y)" y2="@Inv(y)" class="guia" />
+                }
+                <line x1="0" x2="640" y1="190" y2="190" class="base" />
+                @for (int k2 = 0; k2 < Model.Tendencia.Count; k2++)
+                {
+                    var t = Model.Tendencia[k2];
+                    double cx = 53 + k2 * 106.6;
+                    double hc = t.Creadas * 160.0 / maxTend, hz = t.Zarpes * 160.0 / maxTend;
+                    bool actual = k2 == Model.Tendencia.Count - 1;
+                    <g class="@(actual ? "actual" : "")">
+                        <rect x="@Inv(cx - 31)" y="@Inv(190 - hc)" width="28" height="@Inv(hc)" rx="4" class="c"><title>@MesCorto(t.Mes): @t.Creadas operaciones nuevas</title></rect>
+                        <rect x="@Inv(cx + 3)" y="@Inv(190 - hz)" width="28" height="@Inv(hz)" rx="4" class="z"><title>@MesCorto(t.Mes): @t.Zarpes contenedores zarpados</title></rect>
+                        <text x="@Inv(cx - 17)" y="@Inv(184 - hc)" class="v">@t.Creadas</text>
+                        <text x="@Inv(cx + 17)" y="@Inv(184 - hz)" class="v">@t.Zarpes</text>
+                        <text x="@Inv(cx)" y="214" class="m">@MesCorto(t.Mes)@(actual ? " (en curso)" : "")</text>
+                    </g>
+                }
+            </svg>
+        </section>
+
+        <section class="cm-panel" aria-labelledby="tCli">
+            <div class="cm-panel-cab">
+                <h2 id="tCli"><i class="bi bi-trophy"></i> Clientes con más operaciones</h2>
+                <span class="cm-sub">Últimos 90 días</span>
+            </div>
+            @if (!Model.TopClientes.Any())
+            {
+                <div class="cm-vacio"><i class="bi bi-buildings"></i><b>Sin operaciones recientes</b></div>
+            }
+            else
+            {
+                <ol class="cm-rank">
+                    @foreach (var r in Model.TopClientes)
+                    {
+                        <li><span class="nom">@r.Nombre</span><span class="n">@r.Cantidad</span><span class="barra"><span style="width:@(r.Cantidad * 100 / maxCli)%"></span></span></li>
+                    }
+                </ol>
+            }
+        </section>
+
+        <section class="cm-panel" aria-labelledby="tNav">
+            <div class="cm-panel-cab">
+                <h2 id="tNav"><i class="bi bi-flag"></i> Operaciones por naviera</h2>
+                <span class="cm-sub">Últimos 90 días</span>
+            </div>
+            @if (!Model.TopNavieras.Any())
+            {
+                <div class="cm-vacio"><i class="bi bi-flag"></i><b>Sin operaciones recientes</b></div>
+            }
+            else
+            {
+                <ol class="cm-rank cm-rank-nav">
+                    @foreach (var r in Model.TopNavieras)
+                    {
+                        <li style="--nv:@r.Color"><span class="nom"><i aria-hidden="true"></i>@r.Nombre</span><span class="n">@r.Cantidad</span><span class="barra"><span style="width:@(r.Cantidad * 100 / maxNav)%"></span></span></li>
+                    }
+                </ol>
+            }
+        </section>
+    </div>
+
+    <!-- Naves en curso -->
+    <section class="cm-panel" aria-labelledby="tNaves">
+        <div class="cm-panel-cab">
+            <h2 id="tNaves"><i class="bi bi-water"></i> Naves en curso</h2>
+            <span class="cm-sub">Bookings agrupados por nave · zarpes de los próximos 60 días</span>
+        </div>
+        @if (!Model.NavesEnCurso.Any())
+        {
+            <div class="cm-vacio"><i class="bi bi-water"></i><b>Sin naves asignadas</b><span>Cuando las operaciones tengan nave, aparecerán aquí agrupadas.</span></div>
+        }
+        else
+        {
+            <div class="cm-naves">
+                @foreach (var nave in Model.NavesEnCurso)
+                {
+                    <article class="cm-nave" style="--nv:@nave.Color">
+                        <header>
+                            <b>@nave.Nave</b>
+                            <span>@(nave.Naviera ?? "Naviera por confirmar")</span>
+                        </header>
+                        <p class="cm-nave-ruta">@nave.Ruta</p>
+                        <div class="cm-nave-fechas">
+                            <span><small>ETD</small>@(nave.Etd?.ToString("dd MMM", es) ?? "—")</span>
+                            <i class="bi bi-arrow-right" aria-hidden="true"></i>
+                            <span><small>ETA</small>@(nave.Eta?.ToString("dd MMM", es) ?? "—")</span>
+                            <span class="cm-nave-n">@nave.Operaciones.Count booking@(nave.Operaciones.Count == 1 ? "" : "s")</span>
+                        </div>
+                        <ul>
+                            @foreach (var op in nave.Operaciones.Take(4))
+                            {
+                                <li><a href="/Operaciones/Detalle/@op.Id"><span class="cm-bkg">@op.NumeroBooking</span><span class="cm-cli">@Cliente(op)</span></a></li>
+                            }
+                        </ul>
+                        @if (nave.Operaciones.Count > 4 || nave.SolicitudesPortal > 0)
+                        {
+                            <footer>
+                                @if (nave.Operaciones.Count > 4) { <span>+ @(nave.Operaciones.Count - 4) más</span> }
+                                @if (nave.SolicitudesPortal > 0) { <a href="/Operaciones/Cotizaciones?filtro=pendientes"><i class="bi bi-bell-fill"></i> @nave.SolicitudesPortal del portal por crear</a> }
+                            </footer>
+                        }
+                    </article>
+                }
+            </div>
+        }
+    </section>
+
+    <div class="cm-grid cm-grid-2">
+        <!-- Mix de servicios -->
+        <section class="cm-panel" aria-labelledby="tMix">
+            <div class="cm-panel-cab"><h2 id="tMix"><i class="bi bi-diagram-3"></i> Operaciones por servicio</h2></div>
+            <ul class="cm-barras">
+                @foreach (var (etq, n) in new[] { ("Integral", Model.CountIntegral), ("Marítimo", Model.CountMaritimo), ("Transporte", Model.CountTerrestre), ("Documental", Model.CountDocumental) })
+                {
+                    <li><span class="etq">@etq</span><span class="barra"><span style="width:@(n * 100 / totalMix)%"></span></span><span class="n">@n</span></li>
+                }
+            </ul>
+        </section>
+
+        <!-- Estado de bookings -->
+        <section class="cm-panel" aria-labelledby="tWf">
+            <div class="cm-panel-cab"><h2 id="tWf"><i class="bi bi-signpost-2"></i> Estado de bookings</h2></div>
+            <ul class="cm-wf">
+                <li><span>Por confirmar con naviera</span><b>@Model.CountPendienteNaviera</b></li>
+                <li><span>Confirmados al cliente</span><b>@Model.CountConfirmadoCliente</b></li>
+                <li><span>Cancelados (histórico)</span><b>@Model.CountCanceladas</b></li>
+            </ul>
+        </section>
+    </div>
+
+    <!-- Recientes -->
+    <section class="cm-panel" aria-labelledby="tRec">
+        <div class="cm-panel-cab">
+            <h2 id="tRec"><i class="bi bi-clock-history"></i> Operaciones recientes</h2>
+            <a href="/Operaciones/Index" class="cm-link">Ver todas <i class="bi bi-arrow-right"></i></a>
+        </div>
+        @if (!Model.UltimasOperaciones.Any())
+        {
+            <div class="cm-vacio"><i class="bi bi-inbox"></i><b>Aún no hay operaciones</b><span><a href="/Operaciones/Create">Crea la primera</a>.</span></div>
+        }
+        else
+        {
+            <div class="table-responsive">
+                <table class="cm-tabla">
+                    <thead><tr><th>Booking</th><th>Cliente</th><th>Destino</th><th>Estado</th><th>ETD</th></tr></thead>
+                    <tbody>
+                        @foreach (var op in Model.UltimasOperaciones)
+                        {
+                            <tr>
+                                <td><a href="/Operaciones/Detalle/@op.Id" class="cm-bkg">@op.NumeroBooking</a></td>
+                                <td>@Cliente(op)</td>
+                                <td>@(op.IdPuertoDestinoNavigation?.NombrePuerto ?? "Por definir")</td>
+                                <td><span class="cm-estado">@(op.EstadoWorkflow ?? "En proceso")</span></td>
+                                <td>@(op.EtdPol?.ToString("dd MMM", es) ?? "—")</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </section>
+</div>

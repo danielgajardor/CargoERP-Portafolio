@@ -1,11 +1,43 @@
 ﻿using AtilsonCargoSpa.Models;
 using System;
 using System.Linq;
+using System.Text.RegularExpressions;
 
 namespace AtilsonCargoSpa.Helpers
 {
     public static class DocumentalHelpers
     {
+        // Los campos "Log*" (LogOrigen, LogFitosanitario, etc.) guardan HTML real
+        // (divs/spans con estilos) generado por el JS del panel documental, y se
+        // muestran luego con @Html.Raw en _PanelDocumental.cshtml — por diseño, no
+        // se re-escapan al mostrarlos, porque llevan formato intencional.
+        // Eso significa que, aunque el flujo normal de la UI nunca mete texto libre
+        // sin escapar ahí, cualquier usuario interno autenticado podría enviar un
+        // POST manual con un valor arbitrario en "docUpdates.LogXxx" y quedaría
+        // guardado y visible para todos los que abran esa operación (XSS persistente).
+        // Esta sanitización defensiva mínima bloquea los vectores más directos
+        // (scripts, atributos de evento inline, URLs javascript:) sin tocar el
+        // formato HTML legítimo que ya usa el panel. No es un sanitizador HTML
+        // completo (no cubre todas las variantes de mutation-XSS); si en el futuro
+        // se agrega la librería HtmlSanitizer (o similar) conviene reemplazar esto
+        // por un allowlist real de tags/atributos.
+        public static string? SanitizarLogHtml(string? raw)
+        {
+            if (string.IsNullOrEmpty(raw)) return raw;
+
+            string limpio = Regex.Replace(raw, @"<\s*script\b[^>]*>.*?<\s*/\s*script\s*>", "",
+                RegexOptions.IgnoreCase | RegexOptions.Singleline);
+            limpio = Regex.Replace(limpio, @"<\s*/?\s*(script|iframe|object|embed|link|meta|form)\b[^>]*>", "",
+                RegexOptions.IgnoreCase);
+            // Atributos de evento inline: onclick=, onerror=, onload=, etc.
+            limpio = Regex.Replace(limpio, @"\s+on\w+\s*=\s*(""[^""]*""|'[^']*'|[^\s>]+)", "",
+                RegexOptions.IgnoreCase);
+            // URLs javascript: dentro de href/src/etc.
+            limpio = Regex.Replace(limpio, @"javascript\s*:", "", RegexOptions.IgnoreCase);
+
+            return limpio;
+        }
+
         public static string GetProDot(bool? aplica, string? log)
         {
             if (aplica == false) return "bg-secondary opacity-25";

@@ -1,0 +1,40 @@
+@model AtilsonCargoSpa.Pages.PortalCliente.SalidasSelectorVm
+@using AtilsonCargoSpa.Helpers
+@using AtilsonCargoSpa.Models
+@* Selector de nave de Solicitar Reserva: tarjetas de las próximas salidas de
+   la ruta elegida + la opción "no veo mi salida" (fecha tentativa). Lo devuelve
+   SolicitarReserva?handler=Salidas por fetch. El radio se llama igual que la
+   propiedad del modelo para que el binder lo tome directo. *@
+@{
+    const string radio = "NuevaCotizacion.IdItinerario";
+    bool haySeleccion = Model.Seleccionada != null && Model.Salidas.Any(s => s.Id == Model.Seleccionada);
+}
+@if (!Model.RutaElegida)
+{
+    <p class="sel-hint"><i class="bi bi-arrow-up-circle"></i> Elige el puerto de origen y el de destino para ver las naves disponibles.</p>
+}
+else
+{
+    if (Model.Salidas.Any())
+    {
+        <p class="sel-hint"><i class="bi bi-calendar2-week"></i> @Model.Salidas.Count salida@(Model.Salidas.Count == 1 ? "" : "s") en las próximas @ItinerarioNave.SemanasHorizonte semanas. Elige la que te sirve.</p>
+        <div class="sel-list" role="radiogroup" aria-label="Salidas disponibles">
+            @foreach (var s in Model.Salidas)
+            {
+                <partial name="_SalidaCard" model="@(new SalidaCardVm { Salida = s, RadioName = radio, Seleccionada = Model.Seleccionada == s.Id, Compacta = true })" />
+            }
+        </div>
+    }
+    else
+    {
+        <p class="sel-hint sel-hint--empty"><i class="bi bi-info-circle"></i> Todavía no tenemos salidas publicadas para esta ruta. Indícanos tu fecha tentativa y te confirmamos la nave.</p>
+    }
+
+    <div class="sel-otra">
+        <input type="radio" class="sel-otra__radio" name="@radio" id="salidaOtra" value="" checked="@(!haySeleccion)" />
+        <label for="salidaOtra" class="sel-otra__label">
+            <i class="bi bi-calendar-plus"></i>
+            <span><strong>@(Model.Salidas.Any() ? "No veo mi salida" : "Indicar fecha tentativa")</strong><small>Te confirmamos la nave disponible para esa fecha.</small></span>
+        </label>
+    </div>
+}

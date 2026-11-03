@@ -97,6 +97,15 @@ public partial class Operacione
 
     public DateTime? EtaPod { get; set; }
 
+    public DateTime? EtdReal { get; set; }
+    public DateTime? EtaReal { get; set; }
+
+    public string? TipoCorreccionBl { get; set; }
+    public string? CorreccionBlNuevoValor { get; set; }
+    public string? CorreccionBlComentario { get; set; }
+    public string? EvidenciaCorreccionBl { get; set; }
+    public string? LogCorreccionBl { get; set; }
+
     public int? IdNave { get; set; }
 
     public string? CondicionReefer { get; set; }
@@ -116,7 +125,17 @@ public partial class Operacione
     public string? EvidenciaLar { get; set; }
 
     public bool ContenedorIngresado { get; set; }
+
+    // Ciclo de cierre en destino (Arribado → Retirado → Vacío Devuelto): cada
+    // hito guarda su fecha REAL (la que informó el cliente/depósito) y quién/
+    // cuándo la ingresó en el sistema, separado de FechaModificacion/
+    // UsuarioModificador que solo reflejan el último guardado general.
+    public DateTime? FechaArriboDestino { get; set; }
+    public string? UsuarioArriboDestino { get; set; }
     public DateTime? FechaRetiroDestino { get; set; }
+    public string? UsuarioRetiroDestino { get; set; }
+    public DateTime? FechaDevolucionVacio { get; set; }
+    public string? UsuarioDevolucionVacio { get; set; }
     public string? TerminalPortuario { get; set; }
 
     public decimal? Kilos { get; set; }
@@ -125,6 +144,47 @@ public partial class Operacione
 
     public decimal? Vgm { get; set; }
     public string? TipoTarifaMaritima { get; set; } // "SPOT" o "CONTRATO"
+
+    // Titularidad de la tarifa (oct-2026, minuta Portal Web de Clientes).
+    // Obligatorio en operaciones sin tramo marítimo, junto con Booking/Naviera/Nave.
+    // Columna agregada vía Sql/2026-10_itinerarios_y_reserva.sql.
+    public string? PropietarioContrato { get; set; }
+
+    // Texto libre cuando PropietarioContrato = "OTROS".
+    // Columna agregada vía Sql/2026-10_propietario_contrato_emision_bl.sql.
+    public string? PropietarioContratoOtro { get; set; }
+
+    // Quién es dueño de la tarifa/acuerdo usado en el embarque (no siempre es el
+    // contrato propio). Presente en todos los servicios. Oct-2026 (25-10): solo
+    // Atilson, Agunsa u Otro (Cliente); "Otro" admite un texto opcional (ej. el
+    // cliente o recibidor). Los valores antiguos Depósito / Naviera / Cliente se leen
+    // como "Otro" (Sql/2026-10_cobro_agencia_propietario.sql los migra y deja el
+    // nombre antiguo en el texto).
+    public static readonly (string Valor, string Texto)[] OpcionesPropietarioContrato =
+    {
+        ("ATILSON", "Atilson"),
+        ("AGUNSA", "Agunsa"),
+        ("OTROS", "Otro (Cliente)")
+    };
+
+    public static string? NormalizarPropietarioContrato(string? valor)
+    {
+        var v = (valor ?? "").Trim().ToUpperInvariant();
+        if (v == "OTRO" || v == "DEPOSITO" || v == "DEPÓSITO" || v == "NAVIERA" || v == "CLIENTE") v = "OTROS";
+        return OpcionesPropietarioContrato.Any(o => o.Valor == v) ? v : null;
+    }
+
+    // Texto para mostrar: "Naviera", "Otros: XYZ"...
+    public static string TextoPropietarioContrato(string? valor, string? otro)
+    {
+        var v = NormalizarPropietarioContrato(valor);
+        if (v == null) return string.IsNullOrWhiteSpace(valor) ? "" : valor!;
+        if (v == "OTROS") return string.IsNullOrWhiteSpace(otro) ? "Otro (Cliente)" : $"Otro: {otro}";
+        return OpcionesPropietarioContrato.First(o => o.Valor == v).Texto;
+    }
+
+    [System.ComponentModel.DataAnnotations.Schema.NotMapped]
+    public string PropietarioContratoTexto => TextoPropietarioContrato(PropietarioContrato, PropietarioContratoOtro);
     public virtual ICollection<RoleoCancelacion> RoleosCancelaciones { get; set; } = new List<RoleoCancelacion>();
 
     public DateTime? ElarDate { get; set; }
@@ -146,6 +206,12 @@ public partial class Operacione
     public bool GateBloqueado { get; set; }
 
     public string? ModalidadCertificado { get; set; } = "GRUPAL";
+
+    // Cobro al cliente de Honorarios de Agencia y Legalización/Emisión DUS (oct-2026).
+    // La AGA los cobra siempre por contenedor; a cliente se cobran igual ("INDIVIDUAL",
+    // valor por defecto cuando es NULL) o en un solo cobro por booking ("GRUPAL").
+    // Columna agregada vía Sql/2026-10_cobro_agencia_propietario.sql.
+    public string? ModalidadCobroAgencia { get; set; }
 
     public virtual ICollection<ExtracostosOperacion> ExtracostosOperacions { get; set; } = new List<ExtracostosOperacion>();
 
@@ -200,4 +266,19 @@ public partial class Operacione
 
     // Opcional: Para saber exactamente cuándo se mandó la última versión
     public DateTime? FechaUltimoEnvioCorreo { get; set; }
+
+    // Traspaso Operaciones -> Finanzas (oct-2026): Operaciones "finaliza la tarea"
+    // cuando los contenedores están embarcados y la nave zarpó; desde ahí Finanzas
+    // toma el booking (alerta NUEVO) y los cambios de costos/cobros quedan bloqueados
+    // hasta que Operaciones lo reabra con un motivo. Ver Services/TraspasoFinanzasService.
+    // Requiere Sql/2026-10_traspaso_ops_finanzas.sql.
+    public string? EstadoTarea { get; set; }
+    public DateTime? FechaFinalizacionTarea { get; set; }
+    public string? UsuarioFinalizacionTarea { get; set; }
+    public int VecesFinalizadaTarea { get; set; }
+    public DateTime? FechaReaperturaTarea { get; set; }
+    public string? UsuarioReaperturaTarea { get; set; }
+    public string? MotivoReaperturaTarea { get; set; }
+    public DateTime? FechaVistoFinanzas { get; set; }
+    public string? UsuarioVistoFinanzas { get; set; }
 }

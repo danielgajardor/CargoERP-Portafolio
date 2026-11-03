@@ -1,0 +1,102 @@
+@page
+@model AtilsonCargoSpa.Pages.App.Agencias.IndexModel
+@using AtilsonCargoSpa.Services
+@{
+    ViewData["Title"] = "Maestro de Agencias de Aduana";
+}
+<link rel="stylesheet" href="~/css/maestros.css" asp-append-version="true" />
+
+<div class="container-fluid py-4 mx">
+    <header class="mx-cabecera">
+        <div>
+            <div class="mx-miga">Maestros</div>
+            <h1 class="mx-titulo">Agencias de aduana</h1>
+            <p class="mx-subtitulo">Agencias que tramitan la documentación (DUS, honorarios, legalizaciones).</p>
+        </div>
+        <div class="mx-acciones">
+            <a asp-page="./Edit" class="mx-btn mx-btn-primario"><i class="bi bi-plus-lg"></i> Nueva agencia</a>
+        </div>
+    </header>
+
+    <div class="mx-barra">
+        <div class="mx-buscar">
+            <i class="bi bi-search" aria-hidden="true"></i>
+            <input type="search" data-mx-filtro value="@Model.Q" placeholder="Buscar por nombre, RUT, contacto o correo…" aria-label="Buscar agencia" autocomplete="off" />
+        </div>
+        <nav class="mx-segmentos" aria-label="Estado">
+            <a asp-route-estado="activos" class="@(Model.Estado == "activos" ? "activo" : "")">Activas<span class="mx-cuenta">@Model.TotalActivos</span></a>
+            <a asp-route-estado="inactivos" class="@(Model.Estado == "inactivos" ? "activo" : "")">Inactivas<span class="mx-cuenta">@Model.TotalInactivos</span></a>
+            <a asp-route-estado="todos" class="@(Model.Estado == "todos" ? "activo" : "")">Todas</a>
+        </nav>
+        <span class="mx-total" data-mx-total>@Model.Agencias.Count registros</span>
+    </div>
+
+    <div class="mx-tabla-wrap">
+        <table class="mx-tabla" data-mx-tabla>
+            <thead>
+                <tr>
+                    <th>Agencia</th>
+                    <th>RUT</th>
+                    <th>Contacto</th>
+                    <th>Última modificación</th>
+                    <th>Estado</th>
+                    <th class="mx-col-acciones"><span class="visually-hidden">Acciones</span></th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var a in Model.Agencias)
+                {
+                    bool activa = a.Activo == 1;
+                    <tr data-mx-texto="@a.NombreAgencia @a.Rut @a.Contacto @a.CorreoContacto" class="@(activa ? "" : "mx-inactivo") @(Model.Resaltar == a.Id ? "mx-resaltado" : "")">
+                        <td><a asp-page="./Edit" asp-route-id="@a.Id" class="mx-nombre text-decoration-none">@a.NombreAgencia</a></td>
+                        <td>@(string.IsNullOrWhiteSpace(a.Rut) ? "—" : a.Rut)</td>
+                        <td>
+                            @(string.IsNullOrWhiteSpace(a.Contacto) ? "—" : a.Contacto)
+                            @if (!string.IsNullOrWhiteSpace(a.CorreoContacto))
+                            {
+                                <span class="mx-sec">@a.CorreoContacto</span>
+                            }
+                        </td>
+                        <td class="mx-mod">
+                            @(a.UsuarioModificador ?? a.UsuarioCreador ?? "—")
+                            <small>@MaestrosAuditoria.FormatoFecha(a.FechaModificacion ?? a.FechaCreacion)</small>
+                        </td>
+                        <td>
+                            @if (activa)
+                            {
+                                <span class="mx-pill mx-pill-ok">Activa</span>
+                            }
+                            else
+                            {
+                                <span class="mx-pill mx-pill-off">Inactiva</span>
+                            }
+                        </td>
+                        <td class="mx-col-acciones">
+                            <a asp-page="./Edit" asp-route-id="@a.Id" class="mx-btn mx-btn-secundario mx-btn-sm"><i class="bi bi-pencil"></i> Editar</a>
+                            <form method="post" asp-page-handler="CambiarEstado" asp-route-id="@a.Id" asp-route-activar="@(!activa)" asp-route-estado="@Model.Estado"
+                                  data-mx-confirmar="@(activa ? $"¿Desactivar la agencia «{a.NombreAgencia}»?" : $"¿Reactivar la agencia «{a.NombreAgencia}»?")">
+                                @if (activa)
+                                {
+                                    <button type="submit" class="mx-btn mx-btn-peligro mx-btn-sm" title="Desactivar" aria-label="Desactivar"><i class="bi bi-slash-circle"></i></button>
+                                }
+                                else
+                                {
+                                    <button type="submit" class="mx-btn mx-btn-ok mx-btn-sm"><i class="bi bi-arrow-counterclockwise"></i> Reactivar</button>
+                                }
+                            </form>
+                        </td>
+                    </tr>
+                }
+                <tr data-mx-sin-coincidencias hidden><td colspan="6" class="mx-vacio"><i class="bi bi-search"></i>Ninguna agencia coincide con la búsqueda.</td></tr>
+                @if (!Model.Agencias.Any())
+                {
+                    <tr><td colspan="6" class="mx-vacio"><i class="bi bi-file-earmark-text"></i>No hay agencias @(Model.Estado == "inactivos" ? "inactivas" : "registradas").</td></tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+@section Scripts {
+    <script src="~/js/maestros.js" asp-append-version="true"></script>
+}

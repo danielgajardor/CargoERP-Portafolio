@@ -1,0 +1,139 @@
+@page
+@model AtilsonCargoSpa.Pages.PortalCliente.SoporteModel
+@using AtilsonCargoSpa.Models
+@{
+    ViewData["Title"] = "Soporte";
+    Layout = "_LayoutCliente";
+    var es = new System.Globalization.CultureInfo("es-CL");
+    (string Clase, string Texto) Estado(string e) => e switch
+    {
+        TicketSoporte.EstadoAbierto => ("abierto", "Esperando respuesta"),
+        TicketSoporte.EstadoRespondido => ("respondido", "Respondida"),
+        _ => ("cerrado", "Resuelta")
+    };
+    string Cuando(DateTime f) => f.Date == DateTime.Today ? f.ToString("HH:mm") : f.Date == DateTime.Today.AddDays(-1) ? "Ayer" : f.ToString("d MMM", es);
+    var a = Model.Actual;
+    bool soloLista = Request.Query["lista"] == "true";
+}
+<link rel="stylesheet" href="~/css/soporte.css" asp-append-version="true" />
+
+<div class="so">
+    <header class="so-cab">
+        <div>
+            <h1>Soporte</h1>
+            <p>Escríbenos sobre un embarque, un documento o una factura. Te respondemos aquí y a tu correo.</p>
+        </div>
+        <a asp-route-nueva="true" class="so-btn"><i class="bi bi-plus-lg"></i> Nueva consulta</a>
+    </header>
+
+    @if (!Model.Disponible)
+    {
+        <div class="so-aviso error"><i class="bi bi-exclamation-triangle"></i><span>El soporte en línea aún no está activo. Mientras tanto escríbenos a contacto@cargoflow-demo.cl.</span></div>
+    }
+    @if (!string.IsNullOrEmpty(Model.Aviso)) { <div class="so-aviso ok" role="status"><i class="bi bi-check-circle"></i><span>@Model.Aviso</span></div> }
+    @if (!string.IsNullOrEmpty(Model.AvisoError)) { <div class="so-aviso error" role="alert"><i class="bi bi-exclamation-circle"></i><span>@Model.AvisoError</span></div> }
+
+    <div class="so-app @((a != null || Model.MostrarNueva) && !soloLista ? "con-hilo" : "")">
+        <aside class="so-lista" aria-label="Mis consultas">
+            <div class="so-items">
+                @if (!Model.Tickets.Any())
+                {
+                    <div class="so-vacio-lista">Aún no nos has escrito. Tus consultas aparecerán aquí.</div>
+                }
+                @foreach (var t in Model.Tickets)
+                {
+                    var e = Estado(t.Estado);
+                    Model.Ultimos.TryGetValue(t.Id, out var ult);
+                    <a class="so-item @(a?.Id == t.Id && !Model.MostrarNueva ? "activo" : "")" asp-route-t="@t.Id">
+                        <div class="so-item-l1"><b>#@t.Id · @t.Tipo</b><time>@Cuando(t.UltimoMensaje ?? t.FechaCreacion)</time></div>
+                        <div class="so-item-l2"><span class="so-chip @e.Clase">@e.Texto</span>@(t.Referencia != null ? "  " + t.Referencia : "")</div>
+                        @if (ult != null)
+                        {
+                            <div class="so-item-prev"><em>@(ult.EsCliente ? "Tú" : ult.Nombre):</em> @ult.Texto</div>
+                        }
+                        @if (Model.NoLeida(t)) { <span class="so-punto" title="Respuesta nueva"></span> }
+                    </a>
+                }
+            </div>
+        </aside>
+
+        @if (Model.MostrarNueva)
+        {
+            <section class="so-hilo">
+                <div class="so-nueva">
+                    @if (Model.Tickets.Any()) { <a href="?lista=true" class="so-btn so-btn-sec so-btn-sm so-volver-movil mb-3"><i class="bi bi-arrow-left"></i> Mis consultas</a> }
+                    <h2>Nueva consulta</h2>
+                    <p class="intro">Si es sobre un embarque, indica el booking: así el equipo lo ve de inmediato.</p>
+                    @if (Model.Error != null) { <div class="so-aviso error" role="alert"><i class="bi bi-exclamation-circle"></i><span>@Model.Error</span></div> }
+                    <form method="post" asp-page-handler="Crear" class="so-campos">
+                        <div class="so-campo">
+                            <label for="spRef">Booking o referencia (opcional)</label>
+                            <input id="spRef" name="Referencia" value="@Model.Referencia" maxlength="60" list="spBookings" placeholder="Ej.: @(Model.Bookings.FirstOrDefault() ?? "BK123456")" autocomplete="off" />
+                            <datalist id="spBookings">@foreach (var b in Model.Bookings) { <option value="@b"></option> }</datalist>
+                        </div>
+                        <div class="so-campo">
+                            <label for="spTipo">Tipo de consulta</label>
+                            <select id="spTipo" name="Tipo" required class="@(Model.CampoError == "Tipo" ? "error" : "")">
+                                <option value="">Elige el tipo…</option>
+                                @foreach (var t in TicketSoporte.Tipos) { <option value="@t" selected="@(t == Model.Tipo)">@t</option> }
+                            </select>
+                        </div>
+                        <div class="so-campo full">
+                            <label for="spDetalle">Tu consulta</label>
+                            <textarea id="spDetalle" name="Detalle" rows="6" maxlength="2000" required class="@(Model.CampoError == "Detalle" ? "error" : "")" placeholder="Cuéntanos qué necesitas">@Model.Detalle</textarea>
+                        </div>
+                        <div class="so-campo full"><button type="submit" class="so-btn" @(Model.Disponible ? "" : "disabled")><i class="bi bi-send"></i> Enviar consulta</button></div>
+                    </form>
+                </div>
+            </section>
+        }
+        else if (a != null)
+        {
+            var e = Estado(a.Estado);
+            <section class="so-hilo" aria-label="Conversación">
+                <div class="so-hilo-cab">
+                    <div>
+                        <a href="?lista=true" class="so-btn so-btn-sec so-btn-sm so-volver-movil mb-2"><i class="bi bi-arrow-left"></i> Mis consultas</a>
+                        <h2>#@a.Id · @a.Tipo</h2>
+                        <div class="meta"><span class="so-chip @e.Clase">@e.Texto</span>@if (a.Referencia != null) { <span><i class="bi bi-box-seam"></i> @a.Referencia</span> }<span>Abierta el @a.FechaCreacion.ToString("d 'de' MMMM", es)</span></div>
+                    </div>
+                    @if (a.Estado != TicketSoporte.EstadoCerrado)
+                    {
+                        <form method="post" asp-page-handler="Cerrar" asp-route-id="@a.Id">
+                            <button type="submit" class="so-btn so-btn-sec so-btn-sm"><i class="bi bi-check2-circle"></i> Marcar como resuelta</button>
+                        </form>
+                    }
+                </div>
+                <div class="so-mensajes" id="soMensajes" data-soy="cliente" data-url="?handler=Mensajes&t=@a.Id" data-ultimo="@(Model.Conversacion.Select(m => m.Id).DefaultIfEmpty(0).Max())">
+                    @foreach (var m in Model.Conversacion)
+                    {
+                        <div class="so-msg @(m.EsCliente ? "mio" : "otro")">
+                            <div class="burbuja">@m.Texto</div>
+                            <div class="pie">@(m.EsCliente ? "Tú" : m.Nombre + " · Atilson") · @m.Fecha.ToString("dd-MM HH:mm")</div>
+                        </div>
+                    }
+                    @if (a.Estado == TicketSoporte.EstadoAbierto)
+                    {
+                        <div class="so-separador">El equipo ya recibió tu mensaje y te responderá aquí.</div>
+                    }
+                </div>
+                <div class="so-escribir">
+                    @if (a.Estado == TicketSoporte.EstadoCerrado)
+                    {
+                        <div class="so-nota-cerrada">Esta consulta está resuelta. Si escribes, se reabre.</div>
+                    }
+                    <form method="post" asp-page-handler="Escribir" asp-route-id="@a.Id">
+                        <label class="visually-hidden" for="soTexto">Mensaje</label>
+                        <textarea id="soTexto" name="texto" rows="1" maxlength="2000" required placeholder="Escribe un mensaje…" data-foco="@(Model.T != null ? "si" : "no")"></textarea>
+                        <button type="submit" class="so-btn" @(Model.Disponible ? "" : "disabled")><i class="bi bi-send"></i> Enviar</button>
+                    </form>
+                    <p class="ayuda">Enter envía · Shift + Enter para un salto de línea</p>
+                </div>
+            </section>
+        }
+    </div>
+</div>
+
+@section Scripts {
+    <script src="~/js/soporte.js" asp-append-version="true"></script>
+}

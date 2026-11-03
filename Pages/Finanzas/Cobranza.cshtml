@@ -5,22 +5,28 @@
 }
 
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<link rel="stylesheet" href="~/css/cobranza-premium.css" asp-append-version="true" />
 
-<div class="container-fluid py-4">
+<div class="container-fluid py-4 cob-premium">
     <form id="antiForgeryFormCobranza">@Html.AntiForgeryToken()</form>
 
-    <div class="d-flex justify-content-between align-items-center mb-4 pb-2 border-bottom">
-        <div>
-            <h1 style="font-size: 22px; font-weight: 900; color: #0f172a; margin: 0;">COBRANZA — CONSOLIDADO CLIENTE</h1>
-            <p class="text-muted small m-0 fw-medium mt-1">Cuenta corriente por cliente: facturado, pagado, saldo neto y suscripción de recordatorio semanal.</p>
+    <partial name="/Pages/Finanzas/_FinanzasNav.cshtml" model='"Cobranza"' />
+
+    <div class="page-header">
+        <div class="page-header__title-row">
+            <div class="page-header__icon"><i class="bi bi-wallet2"></i></div>
+            <div>
+                <h1>Cobranza</h1>
+                <p class="page-header__subtitle">Cuenta corriente por cliente: facturado, pagado, saldo neto y suscripción de recordatorio semanal.</p>
+            </div>
         </div>
     </div>
 
     @if (!Model.ClientesConMovimiento.Any())
     {
-        <div class="text-center text-muted py-5 bg-white rounded border">
-            <i class="bi bi-inbox fs-1 opacity-25"></i>
-            <p class="mt-2 fw-bold">No hay clientes con movimientos financieros registrados.</p>
+        <div class="empty-state">
+            <i class="bi bi-inbox"></i>
+            <p>No hay clientes con movimientos financieros registrados.</p>
         </div>
     }
     else
@@ -31,61 +37,61 @@
                 bool tieneSaldoAFavor = c.SaldoUsd < 0 || c.SaldoClp < 0;
                 bool tieneDeuda = c.SaldoUsd > 0 || c.SaldoClp > 0;
                 <div class="col-md-6 col-lg-4">
-                    <div class="p-3 bg-white rounded border shadow-sm h-100 d-flex flex-column" id="card-cliente-@c.IdCliente">
+                    <div class="erp-card erp-card--hover h-100 d-flex flex-column" id="card-cliente-@c.IdCliente">
                         <div class="d-flex justify-content-between align-items-start mb-2">
                             <div>
-                                <span class="fw-bold text-dark d-block" style="font-size:13px;">@c.NombreCliente</span>
-                                <span class="text-muted" style="font-size:10px;">@c.CantidadOperaciones operación(es) con movimiento</span>
+                                <span class="fw-bold d-block" style="font-size:13px; color:var(--ink-900);">@c.NombreCliente</span>
+                                <span style="font-size:10px; color:var(--ink-600);">@c.CantidadOperaciones operación(es) con movimiento</span>
                             </div>
                             @if (c.SuscripcionActiva)
                             {
-                                <span class="badge bg-success bg-opacity-10 text-success border border-success" style="font-size:9px;"><i class="bi bi-check-circle-fill me-1"></i>SUSCRITO</span>
+                                <span class="badge-status badge-status--success"><i class="bi bi-check-circle-fill me-1"></i>Suscrito</span>
                             }
                         </div>
 
-                        <div class="p-2 rounded mb-2" style="background:#f8fafc;">
+                        <div class="p-2 rounded mb-2" style="background:var(--surface-sunken);">
                             <div class="d-flex justify-content-between" style="font-size:10px;">
-                                <span class="text-muted">Facturado</span>
-                                <span class="fw-bold text-dark">@(c.TotalFacturadoUsd > 0 ? $"USD {c.TotalFacturadoUsd:N0}" : "")@(c.TotalFacturadoClp > 0 ? $" · CLP {c.TotalFacturadoClp:N0}" : "")</span>
+                                <span style="color:var(--ink-600);">Facturado</span>
+                                <span class="fw-bold" style="color:var(--ink-900);">@(c.TotalFacturadoUsd > 0 ? $"USD {c.TotalFacturadoUsd:N0}" : "")@(c.TotalFacturadoClp > 0 ? $" · CLP {c.TotalFacturadoClp:N0}" : "")</span>
                             </div>
                             <div class="d-flex justify-content-between" style="font-size:10px;">
-                                <span class="text-muted">Pagado</span>
-                                <span class="fw-bold text-success">@(c.TotalPagadoUsd > 0 ? $"USD {c.TotalPagadoUsd:N0}" : "")@(c.TotalPagadoClp > 0 ? $" · CLP {c.TotalPagadoClp:N0}" : "")</span>
+                                <span style="color:var(--ink-600);">Pagado</span>
+                                <span class="fw-bold" style="color:var(--success);">@(c.TotalPagadoUsd > 0 ? $"USD {c.TotalPagadoUsd:N0}" : "")@(c.TotalPagadoClp > 0 ? $" · CLP {c.TotalPagadoClp:N0}" : "")</span>
                             </div>
                         </div>
 
                         <div class="mb-2">
                             @if (tieneDeuda)
                             {
-                                <span class="fw-bold d-block" style="font-size:9px; color:#dc2626; text-transform:uppercase;">Saldo pendiente</span>
+                                <span class="fw-bold d-block" style="font-size:9px; color:var(--danger); text-transform:uppercase;">Saldo pendiente</span>
                                 @if (c.SaldoUsd > 0)
                                 {
-                                    <span class="fw-bold d-block" style="font-size:18px; color:#dc2626;">USD $@c.SaldoUsd.ToString("N0")</span>
+                                    <span class="fw-bold d-block" style="font-size:18px; color:var(--danger);">USD $@c.SaldoUsd.ToString("N0")</span>
                                 }
                                 @if (c.SaldoClp > 0)
                                 {
-                                    <span class="fw-bold d-block" style="font-size:14px; color:#dc2626;">CLP $@c.SaldoClp.ToString("N0")</span>
+                                    <span class="fw-bold d-block" style="font-size:14px; color:var(--danger);">CLP $@c.SaldoClp.ToString("N0")</span>
                                 }
                             }
                             else if (tieneSaldoAFavor)
                             {
-                                <span class="fw-bold d-block" style="font-size:9px; color:#16a34a; text-transform:uppercase;">Saldo a favor del cliente</span>
+                                <span class="fw-bold d-block" style="font-size:9px; color:var(--success); text-transform:uppercase;">Saldo a favor del cliente</span>
                                 @if (c.SaldoUsd < 0)
                                 {
-                                    <span class="fw-bold d-block" style="font-size:18px; color:#16a34a;">USD $@Math.Abs(c.SaldoUsd).ToString("N0")</span>
+                                    <span class="fw-bold d-block" style="font-size:18px; color:var(--success);">USD $@Math.Abs(c.SaldoUsd).ToString("N0")</span>
                                 }
                                 @if (c.SaldoClp < 0)
                                 {
-                                    <span class="fw-bold d-block" style="font-size:14px; color:#16a34a;">CLP $@Math.Abs(c.SaldoClp).ToString("N0")</span>
+                                    <span class="fw-bold d-block" style="font-size:14px; color:var(--success);">CLP $@Math.Abs(c.SaldoClp).ToString("N0")</span>
                                 }
                             }
                             else
                             {
-                                <span class="badge bg-secondary bg-opacity-10 text-secondary border" style="font-size:9px;">CUENTA AL DÍA</span>
+                                <span class="badge-status badge-status--neutral">Cuenta al día</span>
                             }
                         </div>
 
-                        <div class="text-muted mb-3" style="font-size:10px;">
+                        <div class="mb-3" style="font-size:10px; color:var(--ink-600);">
                             @if (c.UltimoRecordatorio.HasValue)
                             {
                                 <span>Último recordatorio: @c.UltimoRecordatorio.Value.ToString("dd/MM/yyyy")</span>
@@ -99,7 +105,7 @@
                         <div class="mt-auto d-flex flex-column gap-2">
                             @if (string.IsNullOrWhiteSpace(c.Correo))
                             {
-                                <span class="badge bg-secondary bg-opacity-10 text-secondary border" style="font-size:9px;">Sin correo registrado</span>
+                                <span class="badge-status badge-status--neutral">Sin correo registrado</span>
                             }
                             else
                             {

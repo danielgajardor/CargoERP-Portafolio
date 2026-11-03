@@ -20,6 +20,8 @@ public partial class ExtracostosOperacion
                                                     // "Responsable" ya existe y hoy funciona como "quién paga" (Cliente/Atilson)
 
     public string? GrupoOperativo { get; set; }
+    // Proveedor del costo (oct-2026, ventana "Reportar extracosto"). Ver Sql/2026-10_reapertura_extracostos.sql.
+    public int? IdProveedor { get; set; }
     public string Evidencia { get; set; } = null!;
 
     public DateTime FechaCreacion { get; set; }

@@ -1,0 +1,141 @@
+@page
+@model AtilsonCargoSpa.Pages.App.Clientes.SolicitudesModel
+@using AtilsonCargoSpa.Models
+@using AtilsonCargoSpa.Services
+@{
+    ViewData["Title"] = "Solicitudes de registro";
+}
+<link rel="stylesheet" href="~/css/maestros.css" asp-append-version="true" />
+<style>
+    .sr-lista { display: grid; gap: 14px; }
+    .sr-card { background: #fff; border: 1px solid var(--mx-line); border-radius: 12px; box-shadow: var(--mx-shadow); }
+    .sr-cab { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 14px 18px; border-bottom: 1px solid var(--mx-line); }
+    .sr-cab h2 { font-size: 16px; font-weight: 800; margin: 0; color: var(--mx-brand-dark); }
+    .sr-cab small { color: var(--mx-muted); font-size: 12px; }
+    .sr-cuerpo { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px 20px; padding: 16px 18px; }
+    @@media (max-width: 900px) { .sr-cuerpo { grid-template-columns: 1fr; } }
+    .sr-dato strong { display: block; font-size: 10.5px; font-weight: 800; text-transform: uppercase; letter-spacing: .5px; color: var(--mx-muted); margin-bottom: 2px; }
+    .sr-dato span, .sr-dato a { font-size: 13.5px; color: var(--mx-ink); overflow-wrap: anywhere; }
+    .sr-acciones { display: flex; justify-content: flex-end; align-items: flex-start; gap: 8px; flex-wrap: wrap; padding: 12px 18px 16px; border-top: 1px dashed var(--mx-line); }
+    .sr-rechazo { display: flex; gap: 8px; flex: 1 1 380px; }
+    .sr-rechazo input { flex: 1; min-width: 0; height: 36px; border: 1px solid #cbd5e1; border-radius: 8px; padding: 0 10px; font-size: 13px; }
+    .sr-bloqueo { margin: 0 18px 4px; }
+</style>
+
+<div class="container-fluid py-4 mx">
+    <header class="mx-cabecera">
+        <div>
+            <div class="mx-miga"><a asp-page="./Index">Maestros › Clientes</a></div>
+            <h1 class="mx-titulo">Solicitudes de registro</h1>
+            <p class="mx-subtitulo">Empresas que se registraron en el portal. Al aprobar se crean el cliente y su usuario del portal (y su planta, si la solicitud la trae).</p>
+        </div>
+        <div class="mx-acciones">
+            <form method="post" asp-page-handler="ProbarCorreo" class="d-inline">
+                <button type="submit" class="mx-btn mx-btn-secundario" title="Envía un correo de prueba a tu correo para revisar la configuración"><i class="bi bi-envelope-check"></i> Probar envío de correos</button>
+            </form>
+            <a asp-page="./Index" class="mx-btn mx-btn-secundario"><i class="bi bi-arrow-left"></i> Volver a clientes</a>
+        </div>
+    </header>
+
+    <p class="mx-subtitulo" style="margin:-8px 0 14px;"><i class="bi bi-envelope"></i> Cada solicitud nueva envía una confirmación a la empresa y un aviso a <strong>@(Model.CorreoAviso ?? "— (sin correo configurado)")</strong>. Al aprobar o rechazar, la empresa recibe un correo.</p>
+
+    <div class="mx-barra">
+        <nav class="mx-segmentos" aria-label="Estado">
+            <a asp-route-estado="pendientes" class="@(Model.Estado == "pendientes" ? "activo" : "")">Pendientes<span class="mx-cuenta">@Model.Pendientes</span></a>
+            <a asp-route-estado="revisadas" class="@(Model.Estado == "revisadas" ? "activo" : "")">Revisadas</a>
+        </nav>
+    </div>
+
+    @if (!Model.Filas.Any())
+    {
+        <div class="mx-tabla-wrap"><div class="mx-vacio"><i class="bi bi-inbox"></i>@(Model.Estado == "pendientes" ? "No hay solicitudes pendientes." : "Aún no hay solicitudes revisadas.")</div></div>
+    }
+
+    <div class="sr-lista">
+        @foreach (var f in Model.Filas)
+        {
+            var s = f.Solicitud;
+                        bool pendiente = s.Estado == SolicitudRegistroCliente.EstadoPendiente;
+            string textoPlanta = string.IsNullOrWhiteSpace(s.NombrePlanta) ? "." : $", más la planta «{s.NombrePlanta}».";
+            <article class="sr-card" id="sol-@s.Id">
+                <div class="sr-cab">
+                    <div>
+                        <h2>@s.RazonSocial</h2>
+                        <small>RUT @s.Rut · solicitado el @MaestrosAuditoria.FormatoFecha(s.FechaSolicitud)</small>
+                    </div>
+                    <div>
+                        @if (pendiente)
+                        {
+                            <span class="mx-pill mx-pill-warn">Pendiente</span>
+                        }
+                        else if (s.Estado == SolicitudRegistroCliente.EstadoAprobada)
+                        {
+                            <span class="mx-pill mx-pill-ok">Aprobada</span>
+                            <small class="d-block mt-1">@s.UsuarioRevision · @MaestrosAuditoria.FormatoFecha(s.FechaRevision)</small>
+                        }
+                        else
+                        {
+                            <span class="mx-pill mx-pill-off">Rechazada</span>
+                            <small class="d-block mt-1">@s.UsuarioRevision · @MaestrosAuditoria.FormatoFecha(s.FechaRevision)</small>
+                        }
+                    </div>
+                </div>
+                <div class="sr-cuerpo">
+                    <div class="sr-dato"><strong>Contacto</strong><span>@s.NombreContacto</span></div>
+                    <div class="sr-dato"><strong>Teléfono</strong><span>@s.Telefono</span></div>
+                    <div class="sr-dato"><strong>Correo (usuario del portal)</strong><span>@s.Correo</span></div>
+                    <div class="sr-dato"><strong>Dirección oficina</strong><span>@s.DireccionOficina</span></div>
+                                        @if (!string.IsNullOrWhiteSpace(s.NombrePlanta))
+                    {
+                    <div class="sr-dato"><strong>Planta</strong><span>@s.NombrePlanta</span></div>
+                    <div class="sr-dato"><strong>Zona (comuna)</strong><span>@(f.Comuna ?? "—")</span></div>
+                    <div class="sr-dato"><strong>Dirección planta</strong><span>@s.DireccionPlanta</span></div>
+                    <div class="sr-dato">
+                        <strong>Google Maps</strong>
+                        @if (s.UrlGoogleMapsPlanta?.StartsWith("http", StringComparison.OrdinalIgnoreCase) == true)
+                        {
+                            <a href="@s.UrlGoogleMapsPlanta" target="_blank" rel="noopener"><i class="bi bi-geo-alt"></i> Ver ubicación</a>
+                        }
+                        else
+                        {
+                            <span>@s.UrlGoogleMapsPlanta</span>
+                        }
+                    </div>
+}
+                    @if (!string.IsNullOrWhiteSpace(s.MotivoRechazo))
+                    {
+                        <div class="sr-dato"><strong>Motivo del rechazo</strong><span>@s.MotivoRechazo</span></div>
+                    }
+                </div>
+                @if (pendiente && f.Bloqueo != null)
+                {
+                    <div class="alert alert-warning py-2 px-3 sr-bloqueo" style="font-size:13px;"><i class="bi bi-exclamation-triangle-fill"></i> @f.Bloqueo</div>
+                }
+                @if (pendiente)
+                {
+                    <div class="sr-acciones">
+                        <form method="post" asp-page-handler="Rechazar" asp-route-id="@s.Id" class="sr-rechazo"
+                              data-mx-confirmar="@($"¿Rechazar la solicitud de «{s.RazonSocial}»? Se le enviará el motivo por correo.")">
+                            <input type="text" name="motivo" maxlength="500" placeholder="Motivo del rechazo (lo verá el cliente)" aria-label="Motivo del rechazo" required />
+                            <button type="submit" class="mx-btn mx-btn-peligro"><i class="bi bi-x-lg"></i> Rechazar</button>
+                        </form>
+                        <form method="post" asp-page-handler="Aprobar" asp-route-id="@s.Id"
+                              data-mx-confirmar="@($"¿Aprobar a «{s.RazonSocial}»? Se crearán el cliente y su usuario ({s.Correo}){textoPlanta}")">
+                            <button type="submit" class="mx-btn mx-btn-primario" disabled="@(f.Bloqueo != null)"><i class="bi bi-check2"></i> Aprobar y crear cliente</button>
+                        </form>
+                    </div>
+                }
+                else if (s.IdClienteCreado.HasValue)
+                {
+                    <div class="sr-acciones">
+                        <a asp-page="./Edit" asp-route-id="@s.IdClienteCreado" class="mx-btn mx-btn-secundario mx-btn-sm"><i class="bi bi-box-arrow-up-right"></i> Ver ficha del cliente</a>
+                    </div>
+                }
+            </article>
+        }
+    </div>
+</div>
+
+@section Scripts {
+    <script src="~/js/maestros.js" asp-append-version="true"></script>
+}

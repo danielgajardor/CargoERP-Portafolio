@@ -30,7 +30,7 @@ namespace AtilsonCargoSpa.Pages.Finanzas
 
         public async Task OnGetAsync()
         {
-            var clientes = await _context.Clientes.Where(c => c.Activo == 1).OrderBy(c => c.RazonSocial).ToListAsync();
+            var clientes = await _context.Clientes.AsNoTracking().Where(c => c.Activo == 1).OrderBy(c => c.RazonSocial).ToListAsync();
             ListaClientes = new SelectList(clientes, "Id", "RazonSocial", IdCliente);
 
             if (IdCliente.HasValue && Desde.HasValue && Hasta.HasValue)
@@ -61,10 +61,13 @@ namespace AtilsonCargoSpa.Pages.Finanzas
         // individual ya fue pagada o facturada.
         private async Task<ConsolidadoClienteDto?> ConstruirAsync(int idCliente, DateTime desde, DateTime hasta)
         {
-            var cliente = await _context.Clientes.FindAsync(idCliente);
+            // Solo lectura (esto solo arma un reporte/export): AsNoTracking evita que EF Core
+            // arme el change-tracker para estas entidades.
+            var cliente = await _context.Clientes.AsNoTracking().FirstOrDefaultAsync(c => c.Id == idCliente);
             if (cliente == null) return null;
 
             var operaciones = await _context.Operaciones
+                .AsNoTracking()
                 .Where(o => o.IdCliente == idCliente && !o.IsDeleted &&
                             o.FechaCreacion.HasValue && o.FechaCreacion.Value >= desde && o.FechaCreacion.Value <= hasta)
                 .Include(o => o.TransaccionesFinancieras)

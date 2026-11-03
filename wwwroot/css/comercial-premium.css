@@ -1,0 +1,166 @@
+/* =========================================================================
+   MÓDULO COMERCIAL (Index.cshtml) — CAPA PREMIUM
+   Mismo criterio que wwwroot/css/detalle-premium.css para Detalle de
+   Operación: una capa aparte, solo propiedades visuales (nada de
+   display/pointer-events/overflow de los que ya controlan el scroll
+   horizontal de las pestañas o el colapso de filas), acotada a
+   .com-premium para no afectar ninguna otra vista que use colores o
+   nombres de clase parecidos.
+   ========================================================================= */
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+
+/* ---------- 0. Tokens ---------- */
+.com-premium {
+    --cp-brand: #6d2d9e;
+    --cp-brand-2: #8b5cf6;
+    --cp-deep: #2c1b4d;
+    --cp-ink: #140c26;
+    --cp-muted: #6b6880;
+    --cp-faint: #a19eb3;
+    --cp-line: #ece8f3;
+    --cp-soft: #f8f7fc;
+    --cp-tint: #f4eefb;
+    --cp-grad: linear-gradient(135deg, #6d2d9e 0%, #8b5cf6 55%, #60a5fa 100%);
+    --cp-shadow: 0 1px 2px rgba(20,12,38,.04), 0 18px 40px -26px rgba(44,27,77,.28);
+    --cp-shadow-lg: 0 30px 70px -30px rgba(44,27,77,.4);
+
+    /* Variables que ya usa este archivo (comercial-index.css): se reajustan
+       al mismo sistema premium que ya tiene Detalle de Operación, igual
+       truco que se usó ahí con --atilson-purple/--border-soft. */
+    --dark-bg: #140c26;
+    --border-color: #ece8f3;
+    --text-main: #1e1b2e;
+    --text-muted: #6b6880;
+    /* --atilson-dark ya era #2c1b4d — coincide con el morado profundo del
+       degradé premium, se deja igual. */
+
+    font-family: 'Plus Jakarta Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+body:has(.com-premium) {
+    background:
+        radial-gradient(1200px 500px at 100% -10%, rgba(139,92,246,.07), transparent 60%),
+        #f5f4f9 !important;
+}
+.com-premium .table-erp { font-family: 'Plus Jakarta Sans', system-ui, sans-serif; }
+
+/* ---------- 1. Cabecera y botones ---------- */
+.com-premium h1 { font-weight: 800 !important; letter-spacing: -.7px !important; color: var(--cp-ink) !important; }
+.com-premium .btn { border-radius: 11px !important; }
+.com-premium .btn-dark {
+    background: linear-gradient(135deg, #2c1b4d, #5b2a8a) !important; border: 0 !important;
+    box-shadow: 0 10px 22px -12px rgba(44,27,77,.85);
+}
+.com-premium .btn-dark:hover:not(:disabled) { background: linear-gradient(135deg, #3a2363, #6d2d9e) !important; transform: translateY(-1px); }
+.com-premium .btn-outline-secondary { border-radius: 11px !important; }
+.com-premium .dropdown-menu { border-radius: 14px !important; box-shadow: var(--cp-shadow) !important; }
+.com-premium .dropdown-item:hover, .com-premium .dropdown-item:focus { background: var(--cp-tint) !important; }
+
+/* ---------- 2. PESTAÑAS NIVEL 1 — Proveedores / Clientes (barra flotante) ---------- */
+.com-premium #mainTabs {
+    position: sticky; top: 10px; z-index: 30;
+    gap: 4px !important; padding: 6px !important; margin-bottom: 24px !important;
+    background: rgba(255,255,255,.86) !important;
+    backdrop-filter: blur(16px) saturate(160%); -webkit-backdrop-filter: blur(16px) saturate(160%);
+    border: 1px solid var(--cp-line) !important; border-bottom: 1px solid var(--cp-line) !important;
+    border-radius: 16px;
+    box-shadow: 0 14px 34px -22px rgba(44,27,77,.4);
+}
+.com-premium .nav-tabs-main::-webkit-scrollbar-thumb { background: #d8d4e6; }
+.com-premium .nav-tabs-main .nav-link {
+    border-radius: 11px !important; padding: 11px 20px !important; font-size: 12px !important;
+    font-weight: 800 !important; letter-spacing: .4px !important; color: var(--cp-muted) !important;
+    border-bottom: 0 !important; margin-bottom: 0 !important;
+}
+.com-premium .nav-tabs-main .nav-link:not(:last-child)::after { display: none; }
+.com-premium .nav-tabs-main .nav-link:hover { background: var(--cp-tint) !important; color: var(--cp-brand) !important; }
+.com-premium .nav-tabs-main .nav-link.active {
+    background: linear-gradient(135deg, #2c1b4d, #5b2a8a) !important; color: #fff !important;
+    box-shadow: 0 10px 22px -12px rgba(44,27,77,.9) !important;
+}
+
+/* ---------- 3. PESTAÑAS NIVEL 2 — Marítimo / Terrestre / Documental... ---------- */
+.com-premium .nav-tabs-custom {
+    background: var(--cp-soft) !important; border: 1px solid var(--cp-line) !important; border-radius: 14px !important;
+    box-shadow: inset 0 1px 2px rgba(20,12,38,.05);
+}
+.com-premium .nav-tabs-custom::-webkit-scrollbar-thumb { background: #d8d4e6; }
+.com-premium .nav-tabs-custom .nav-link { border-radius: 10px !important; font-weight: 800 !important; color: var(--cp-muted) !important; }
+.com-premium .nav-tabs-custom .nav-link:hover { color: var(--cp-brand) !important; background: #fff !important; }
+.com-premium .nav-tabs-custom .nav-link.active {
+    background: var(--cp-grad) !important; color: #fff !important;
+    box-shadow: 0 8px 18px -10px rgba(109,45,158,.6) !important;
+}
+
+/* ---------- 4. PESTAÑAS NIVEL 3 — Dry / Reefer / Rebate / Otros ---------- */
+.com-premium .sub-tabs { border-bottom-color: var(--cp-line) !important; }
+.com-premium .sub-tabs .nav-link { color: var(--cp-faint) !important; font-weight: 700 !important; }
+.com-premium .sub-tabs .nav-link:hover { color: var(--cp-brand) !important; border-bottom-color: var(--cp-line) !important; }
+.com-premium .sub-tabs .nav-link.active, .com-premium .sub-tabs .nav-link.active:hover {
+    color: var(--cp-brand) !important; border-bottom-color: var(--cp-brand) !important;
+}
+/* Rebate/Collect conserva su acento ámbar (es una modalidad de pago, no un
+   tipo de equipo) — a propósito no se tocan sus colores. */
+.com-premium .sub-tabs .nav-link.pill-rebate::before { background: var(--cp-line); }
+
+/* ---------- 5. Toolbar de filtros ---------- */
+.com-premium .filtro-toolbar { border-color: var(--cp-line) !important; box-shadow: var(--cp-shadow) !important; }
+.com-premium .filtro-toolbar:has(.subtabs-row) > div:last-child:not(.subtabs-row) { border-top-color: var(--cp-line) !important; }
+.com-premium .select2-container--default .select2-selection--single { border-radius: 10px !important; border-color: var(--cp-line) !important; }
+.com-premium .select2-container--default.select2-container--open .select2-selection--single { border-color: var(--cp-brand) !important; }
+/* El panel desplegado de Select2 se inserta directo en <body> (no hay
+   dropdownParent configurado en comercial-index.js), fuera de .com-premium
+   — por eso estas dos reglas van SIN ese prefijo, igual que ya estaban
+   sin acotar en comercial-index.css. Esta hoja solo la carga esta misma
+   página, así que sigue sin afectar ninguna otra vista. */
+.select2-dropdown { border-radius: 0 0 10px 10px !important; border-color: #6d2d9e !important; box-shadow: 0 1px 2px rgba(20,12,38,.04), 0 18px 40px -26px rgba(44,27,77,.28) !important; }
+.select2-results__option--highlighted { background-color: #6d2d9e !important; }
+
+/* ---------- 6. Tablas ---------- */
+.com-premium .table-container { border-radius: 16px !important; border-color: var(--cp-line) !important; box-shadow: var(--cp-shadow) !important; }
+.com-premium .table-erp th { color: var(--cp-faint) !important; border-color: var(--cp-line) !important; background: var(--cp-soft) !important; }
+.com-premium .table-erp td { border-color: var(--cp-line) !important; }
+.com-premium .table-erp tbody tr:hover { background-color: var(--cp-soft) !important; }
+.com-premium .main-row:hover { background-color: var(--cp-soft) !important; }
+.com-premium .detail-row td { background-color: #fbfaff !important; border-color: var(--cp-line) !important; }
+.com-premium .inline-form-row { background-color: var(--cp-tint) !important; border-bottom-color: #e4d8fb !important; }
+.com-premium .badge-dry, .com-premium .badge-reefer { border-radius: 999px !important; }
+
+/* ---------- 7. Formulario "Nuevo..." (faf-*) ---------- */
+.com-premium .faf-card { border-radius: 16px !important; border-color: #e4d8fb !important; box-shadow: var(--cp-shadow) !important; background: linear-gradient(180deg, #fff 0%, #fbfaff 100%) !important; }
+.com-premium .faf-actions { border-top-color: #e4d8fb !important; }
+.com-premium .form-control, .com-premium .form-select, .com-premium .form-control-xs, .com-premium .form-select-xs {
+    border-radius: 9px !important; border-color: var(--cp-line) !important;
+}
+.com-premium .form-control:focus, .com-premium .form-select:focus {
+    border-color: var(--cp-brand-2) !important; box-shadow: 0 0 0 4px rgba(139,92,246,.12) !important;
+}
+
+/* ---------- 8. Avisos y detalles menores ---------- */
+.com-premium .section-hint { border-radius: 14px !important; }
+.com-premium .info-mod-icon:hover { color: var(--cp-brand) !important; }
+.com-premium .btn-delete:hover { background: #fff0f0 !important; }
+
+/* ---------- 9. Modales ---------- */
+/* Las ventanas modales viven como hermanas de .com-premium (después de
+   cerrar el container-fluid, antes de @section Scripts) — por eso el
+   selector de hermano general en vez de un descendiente. Ojo: varios
+   modales (Detalle de Acuerdo, Historial) YA tienen cabecera oscura con
+   .text-white/.btn-close-white propios — acá solo se toca radio/sombra/
+   color de borde, nunca el color del título ni del botón de cerrar, para
+   no romper el contraste que esos modales ya resuelven por su cuenta. */
+.com-premium ~ .modal .modal-content { border-radius: 18px !important; box-shadow: var(--cp-shadow-lg) !important; overflow: hidden; }
+.com-premium ~ .modal .modal-header { border-bottom-color: var(--cp-line) !important; }
+.com-premium ~ .modal .modal-footer { border-top-color: var(--cp-line) !important; }
+
+/* ---------- 10. Responsive ---------- */
+@media (max-width: 991.98px) {
+    .com-premium #mainTabs { position: static; }
+}
+@media (max-width: 767.98px) {
+    .com-premium .nav-tabs-main .nav-link { padding: 10px 14px !important; font-size: 11px !important; }
+    .com-premium .nav-tabs-custom .nav-link { padding: 9px 14px !important; font-size: 10.5px !important; }
+    .com-premium h1 { font-size: 19px !important; }
+}
+@media (prefers-reduced-motion: reduce) {
+    .com-premium * { transition: none !important; }
+}

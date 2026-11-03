@@ -9,6 +9,7 @@ using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.AspNetCore.Mvc.Rendering;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -19,6 +20,30 @@ using AtilsonCargoSpa.Services;
 
 namespace AtilsonCargoSpa.Pages.Operaciones
 {
+    // NOTA (auditoría oct-2026): este archivo comparte ~20 handlers "OnPost*" de nombre
+    // idéntico con Pages/Operaciones/Detalle.cshtml.cs (OnPostQuickEditCourierAsync,
+    // OnPostGuardarAlmacenamientoAsync, OnPostRegistrarRoleoCancelacionAsync, etc.) — el
+    // mismo riesgo que ya causó una vez el bug de RequiereSag/RequiereSernapesca (un fix
+    // se aplica en un archivo y se olvida en el otro).
+    //
+    // Se comparó línea por línea el cuerpo de los 20 handlers contra su copia en
+    // Detalle.cshtml.cs. Ninguno es un duplicado byte a byte: todos difieren al menos en
+    // el destino del redirect tras el POST (aquí "RedirectToPage()" porque esta página se
+    // queda en el listado/modal; en Detalle.cshtml.cs "RedirectToPage(new { id =
+    // IdOperacion })" porque esa página ES la operación), en el "nameof(...)" de los logs
+    // de error, y en varios casos en el estilo (aquí con "if (op != null) { ... }"
+    // anidado, en Detalle.cshtml.cs con "if (op == null) return NotFound();" temprano) —
+    // pero la lógica de negocio dentro de cada par es la misma. No se encontró ningún caso
+    // del patrón "fix aplicado en un archivo, olvidado en el otro" al revisar esta vez.
+    //
+    // No se hizo la unificación real (una clase base o un servicio inyectado del que ambas
+    // páginas deleguen, parametrizando el redirect/respuesta) en esta auditoría: son ~20
+    // handlers que suben archivos, asignan responsabilidad financiera, registran
+    // roleos/cancelaciones y gestionan certificados — mutan datos reales de producción. Sin
+    // poder compilar ni ejecutar este proyecto en este entorno, migrarlos a ciegas arriesga
+    // romper alguno de forma silenciosa (compila pero guarda/valida distinto). Queda como
+    // recomendación para una sesión dedicada, con compilador disponible, migrando handler
+    // por handler y verificando cada uno antes de pasar al siguiente.
     public class IndexModel : PageModel, AtilsonCargoSpa.Models.IOperacionesConsultaPageModel
     {
         private readonly AtilsonContext _context;
@@ -26,14 +51,16 @@ namespace AtilsonCargoSpa.Pages.Operaciones
         private readonly EmailService _emailService;
         private readonly IServiceScopeFactory _scopeFactory;
         private readonly FinanzasSyncService _finanzasSync;
+        private readonly ILogger<IndexModel> _logger;
 
-        public IndexModel(AtilsonContext context, IWebHostEnvironment env, EmailService emailService, IServiceScopeFactory scopeFactory, FinanzasSyncService finanzasSync)
+        public IndexModel(AtilsonContext context, IWebHostEnvironment env, EmailService emailService, IServiceScopeFactory scopeFactory, FinanzasSyncService finanzasSync, ILogger<IndexModel> logger)
         {
             _context = context;
             _env = env;
             _emailService = emailService;
             _scopeFactory = scopeFactory;
             _finanzasSync = finanzasSync;
+            _logger = logger;
         }
 
         public IList<Operacione> Operaciones { get; set; } = default!;
@@ -42,18 +69,54 @@ namespace AtilsonCargoSpa.Pages.Operaciones
         public class NotificacionPortalDto
         {
             public string Tipo { get; set; } = ""; // COTIZACION o ROLEO
+            // true = cotización real (se responde en Operaciones/Cotizaciones);
+            // false = solicitud de reserva (se aprueba hacia Create).
+            public bool CotEsCotizacionReal { get; set; }
             public DateTime Fecha { get; set; }
             public string Titulo { get; set; } = "";
             public string Subtitulo { get; set; } = "";
             public string Detalle { get; set; } = "";
             public int? IdReferencia { get; set; }
             public int? IdOperacion { get; set; }
+            public string? CotCliente { get; set; }
+            public string? CotCorreoCliente { get; set; }
             public string? CotTipoServicio { get; set; }
             public string? CotTipoCarga { get; set; }
             public string? CotOrigen { get; set; }
             public string? CotDestino { get; set; }
             public string? CotMercancia { get; set; }
             public string? CotComentarios { get; set; }
+            public string? CotPlantaCarga { get; set; }
+            public string? CotDepositoRetiro { get; set; }
+            public string? CotZonaCarga { get; set; }
+            public DateTime? CotFechaCarga { get; set; }
+            public int? CotCantidadContenedores { get; set; }
+            public DateTime? CotFechaTentativaEmbarque { get; set; }
+            public bool? CotRequiereSeguro { get; set; }
+            public string? CotTipoCertificado { get; set; }
+            public string? CotPaisDestinoFinal { get; set; }
+            public bool? CotRequiereSag { get; set; }
+            public bool? CotRequiereSernapesca { get; set; }
+            // oct-2026: datos de contenedor/reefer que ahora exige SolicitarReserva
+            // (ver Sql/2026-10_cotizacion_contenedor_reefer.sql) — se muestran en el
+            // modal de revisión para que el ejecutivo los vea antes de aprobar.
+            public string? CotTipoContenedor { get; set; }
+            public string? CotCondicionReefer { get; set; }
+            public decimal? CotTemperatura { get; set; }
+            public int? CotHumedad { get; set; }
+            public string? CotVentilacion { get; set; }
+            public string? CotPol { get; set; }
+            public string? CotPod { get; set; }
+            public string? CotPuertoTerrestre { get; set; }
+            public string? CotZonaEntrega { get; set; }
+            public string? CotNaviera { get; set; }
+            public string? CotNave { get; set; }
+            public string? CotBooking { get; set; }
+            public string? CotInstructivo { get; set; }
+            public DateTime? CotCorteDocumental { get; set; }
+            public DateTime? CotEtaItinerario { get; set; }
+            public bool CotDesdeItinerario { get; set; }
+            public int? CotIdCotizacionOrigen { get; set; }
         }
 
         public List<NotificacionPortalDto> NotificacionesPendientes { get; set; } = new();
@@ -81,7 +144,7 @@ namespace AtilsonCargoSpa.Pages.Operaciones
             var tx = op.TransaccionesFinancieras?
                 .FirstOrDefault(t => t.TipoMovimiento == "EGRESO" && (t.Concepto ?? "").Contains(conceptoBusqueda));
             if (tx == null) return (null, null, false, conceptoBusqueda);
-            bool pendiente = tx.MontoNeto == 0m && !tx.TarifaManual;
+            bool pendiente = AtilsonCargoSpa.Helpers.TransaccionesHelper.EsTarifaPendiente(tx);
             return (tx.ResponsablePago, tx.Responsable, pendiente, tx.Concepto);
         }
 
@@ -92,7 +155,7 @@ namespace AtilsonCargoSpa.Pages.Operaciones
         {
             if (op.TransaccionesFinancieras == null) return false;
             return conceptosBusqueda.Any(cb => op.TransaccionesFinancieras.Any(t =>
-                t.TipoMovimiento == "EGRESO" && (t.Concepto ?? "").Contains(cb) && t.MontoNeto == 0m && !t.TarifaManual));
+                t.TipoMovimiento == "EGRESO" && (t.Concepto ?? "").Contains(cb) && AtilsonCargoSpa.Helpers.TransaccionesHelper.EsTarifaPendiente(t)));
         }
 
         // Overloads para modalidad INDIVIDUAL: exigen coincidencia EXACTA con el sufijo
@@ -104,7 +167,7 @@ namespace AtilsonCargoSpa.Pages.Operaciones
             string conceptoExacto = $"{conceptoBusqueda} (U{idUnidadTecnica})";
             var tx = op.TransaccionesFinancieras?.FirstOrDefault(t => t.TipoMovimiento == "EGRESO" && t.Concepto == conceptoExacto);
             if (tx == null) return (null, null, false, conceptoExacto);
-            bool pendiente = tx.MontoNeto == 0m && !tx.TarifaManual;
+            bool pendiente = AtilsonCargoSpa.Helpers.TransaccionesHelper.EsTarifaPendiente(tx);
             return (tx.ResponsablePago, tx.Responsable, pendiente, tx.Concepto);
         }
 
@@ -114,7 +177,7 @@ namespace AtilsonCargoSpa.Pages.Operaciones
             return conceptosBusqueda.Any(cb =>
             {
                 string conceptoExacto = $"{cb} (U{idUnidadTecnica})";
-                return op.TransaccionesFinancieras.Any(t => t.TipoMovimiento == "EGRESO" && t.Concepto == conceptoExacto && t.MontoNeto == 0m && !t.TarifaManual);
+                return op.TransaccionesFinancieras.Any(t => t.TipoMovimiento == "EGRESO" && t.Concepto == conceptoExacto && AtilsonCargoSpa.Helpers.TransaccionesHelper.EsTarifaPendiente(t));
             });
         }
 
@@ -128,7 +191,7 @@ namespace AtilsonCargoSpa.Pages.Operaciones
         {
             var tx = op.TransaccionesFinancieras?.FirstOrDefault(t => t.TipoMovimiento == "EGRESO" && t.Concepto == conceptoExacto);
             if (tx == null) return (null, null, false, conceptoExacto);
-            bool pendiente = tx.MontoNeto == 0m && !tx.TarifaManual;
+            bool pendiente = AtilsonCargoSpa.Helpers.TransaccionesHelper.EsTarifaPendiente(tx);
             return (tx.ResponsablePago, tx.Responsable, pendiente, tx.Concepto);
         }
 
@@ -171,28 +234,42 @@ namespace AtilsonCargoSpa.Pages.Operaciones
             "cap" => !string.IsNullOrWhiteSpace(x.NumCap1),
             _ => false
         };
+        // Tablero: por defecto oculta las operaciones con el vacío devuelto hace más de
+        // DiasCerradasVisibles días; ?Historial=true las muestra todas.
+        public const int DiasCerradasVisibles = 30;
+        [BindProperty(SupportsGet = true)]
+        public bool Historial { get; set; }
+        public int CerradasOcultas { get; set; }
+
         public async Task OnGetAsync()
         {
-            Operaciones = await _context.Operaciones
-.AsNoTracking()
-.AsSplitQuery()
-.Where(o => o.IsDeleted == false)
-.Include(o => o.IdClienteNavigation)
-.Include(o => o.IdNavieraNavigation)
-    .Include(o => o.IdPuertoOrigenNavigation)
-    .Include(o => o.IdPuertoDestinoNavigation)
-        .Include(o => o.RoleosCancelaciones)
-    .Include(o => o.OperacionesTerrestres)
-    .Include(o => o.OperacionesDocumentales)
-        .Include(o => o.Unidadestecnicas)
-        .Include(o => o.ExtracostosOperacions)
-        .Include(o => o.TransaccionesFinancieras)
-    .Include(o => o.SolicitudesDesbloqueos)
-        .Include(o => o.OperacionesAlmacenamientos)
-        .ThenInclude(a => a.IdProveedorNavigation)
-    .Include(o => o.GestionTransbordo)
-    .OrderByDescending(o => o.Id)
-    .ToListAsync();
+            // Rendimiento (oct-2026): el tablero solo carga lo que muestra. Antes traía también
+            // TransaccionesFinancieras, Extracostos, Solicitudes de desbloqueo y Almacenamiento
+            // de TODAS las operaciones, sin usarlos en esta vista. Además, las operaciones con el
+            // vacío devuelto hace más de 30 días se ocultan salvo que se pida el historial.
+            var limiteCerradas = DateTime.Now.AddDays(-DiasCerradasVisibles);
+            var consulta = _context.Operaciones.AsNoTracking().Where(o => o.IsDeleted == false);
+            if (!Historial)
+            {
+                var cerradasAntiguas = consulta.Where(o => o.FechaDevolucionVacio != null && o.FechaDevolucionVacio < limiteCerradas
+                    && o.Unidadestecnicas.All(u => u.FechaDevolucionVacio != null && u.FechaDevolucionVacio < limiteCerradas));
+                CerradasOcultas = await cerradasAntiguas.CountAsync();
+                consulta = consulta.Where(o => !(o.FechaDevolucionVacio != null && o.FechaDevolucionVacio < limiteCerradas
+                    && o.Unidadestecnicas.All(u => u.FechaDevolucionVacio != null && u.FechaDevolucionVacio < limiteCerradas)));
+            }
+            Operaciones = await consulta
+                .AsSplitQuery()
+                .Include(o => o.IdClienteNavigation)
+                .Include(o => o.IdNavieraNavigation)
+                .Include(o => o.IdPuertoOrigenNavigation)
+                .Include(o => o.IdPuertoDestinoNavigation)
+                .Include(o => o.RoleosCancelaciones)
+                .Include(o => o.OperacionesTerrestres)
+                .Include(o => o.OperacionesDocumentales)
+                .Include(o => o.Unidadestecnicas)
+                .Include(o => o.GestionTransbordo)
+                .OrderByDescending(o => o.Id)
+                .ToListAsync();
             ViewData["IdNaviera"] = new SelectList(_context.Navieras.Where(n => n.Activo == 1), "Id", "NombreNaviera");
             ViewData["IdPuertoOrigen"] = new SelectList(_context.Puertos.Where(p => p.Activo == 1), "Id", "NombrePuerto");
             ViewData["IdTipoServicio"] = new SelectList(_context.Subparametros.Where(p => p.Parametro.Categoria == "TipoMovimiento"), "Id", "Valor");
@@ -208,8 +285,15 @@ namespace AtilsonCargoSpa.Pages.Operaciones
             ViewData["TarifasMaritimo"] = await _context.TarifasMaestras.Where(t => t.EsActiva && t.Categoria == "Marítimo").OrderBy(t => t.Concepto).ToListAsync();
             ViewData["TarifasTerrestre"] = await _context.TarifasMaestras.Where(t => t.EsActiva && t.Categoria == "Terrestre").OrderBy(t => t.Concepto).ToListAsync();
             ViewData["TarifasDocumental"] = await _context.TarifasMaestras.Where(t => t.EsActiva && t.Categoria == "Documental").OrderBy(t => t.Concepto).ToListAsync();
+            await ExtracostoFormulario.CargarListasAsync(_context, ViewData);
 
             NuevasCotizaciones = await _context.Cotizaciones
+    .Include(c => c.IdClienteNavigation)
+    .Include(c => c.IdPuertoOrigenNavigation)
+    .Include(c => c.IdPuertoDestinoNavigation)
+    .Include(c => c.IdPuertoTerrestreNavigation)
+    .Include(c => c.IdItinerarioNavigation)
+    .Include(c => c.IdNavieraNavigation)
     .Where(c => c.Estado == "NUEVA SOLICITUD" && c.Activo == true)
     .OrderByDescending(c => c.FechaSolicitud)
     .ToListAsync();
@@ -225,16 +309,55 @@ namespace AtilsonCargoSpa.Pages.Operaciones
             {
                 Tipo = "COTIZACION",
                 Fecha = c.FechaSolicitud ?? DateTime.Now,
-                Titulo = $"Nueva cotización: {c.TipoServicio}",
-                Subtitulo = $"{c.Origen} → {c.Destino}",
-                Detalle = string.IsNullOrEmpty(c.Mercancia) ? "Sin mercancía especificada" : c.Mercancia,
+                // oct-2026: la misma tabla trae dos flujos. Las cotizaciones reales
+                // se responden en Operaciones/Cotizaciones; las solicitudes de
+                // reserva siguen yendo a Create precargado.
+                CotEsCotizacionReal = c.EsCotizacion,
+                Titulo = c.EsCotizacion ? $"Cotización solicitada: {c.TipoServicio}" : $"Solicitud de reserva: {c.TipoServicio}",
+                Subtitulo = c.EsCotizacion || c.IdPuertoOrigenNavigation != null || c.ZonaEntrega != null
+                    ? CotizacionesModel.ResumenRuta(c)
+                    : $"{c.Origen} → {c.Destino}",
+                Detalle = c.EsCotizacion
+                    ? (string.IsNullOrWhiteSpace(c.Comentarios) ? "Sin comentarios" : c.Comentarios)
+                    : (string.IsNullOrEmpty(c.Mercancia) ? "Sin mercancía especificada" : c.Mercancia),
                 IdReferencia = c.Id,
+                CotCliente = !string.IsNullOrWhiteSpace(c.IdClienteNavigation?.NombreCliente) ? c.IdClienteNavigation.NombreCliente : c.IdClienteNavigation?.RazonSocial,
+                CotCorreoCliente = c.IdClienteNavigation?.Correo,
                 CotTipoServicio = c.TipoServicio,
                 CotTipoCarga = c.TipoCarga,
                 CotOrigen = c.Origen,
                 CotDestino = c.Destino,
                 CotMercancia = c.Mercancia,
-                CotComentarios = c.Comentarios
+                CotComentarios = c.Comentarios,
+                CotPlantaCarga = c.PlantaCarga,
+                CotDepositoRetiro = c.DepositoRetiro,
+                CotZonaCarga = c.ZonaCarga,
+                CotFechaCarga = c.FechaCarga,
+                CotCantidadContenedores = c.CantidadContenedores,
+                CotFechaTentativaEmbarque = c.FechaTentativaEmbarque,
+                CotRequiereSeguro = c.RequiereSeguro,
+                CotTipoCertificado = c.TipoCertificado,
+                CotPaisDestinoFinal = c.PaisDestinoFinal,
+                CotRequiereSag = c.RequiereSag,
+                CotRequiereSernapesca = c.RequiereSernapesca,
+                CotTipoContenedor = c.TipoContenedor,
+                CotCondicionReefer = c.CondicionReefer,
+                CotTemperatura = c.Temperatura,
+                CotHumedad = c.Humedad,
+                CotVentilacion = c.Ventilacion,
+                // Solicitud de Reserva completa (oct-2026)
+                CotPol = c.IdPuertoOrigenNavigation?.NombrePuerto,
+                CotPod = c.IdPuertoDestinoNavigation?.NombrePuerto,
+                CotPuertoTerrestre = c.IdPuertoTerrestreNavigation?.NombrePuerto,
+                CotZonaEntrega = c.ZonaEntrega,
+                CotNaviera = c.IdNavieraNavigation?.NombreNaviera,
+                CotNave = c.Nave,
+                CotBooking = c.NumeroBooking,
+                CotInstructivo = c.NumeroInstructivo,
+                CotCorteDocumental = c.FechaCorteDocumental ?? c.IdItinerarioNavigation?.CorteDocumental,
+                CotEtaItinerario = c.IdItinerarioNavigation?.Eta.ToDateTime(TimeOnly.MinValue),
+                CotDesdeItinerario = c.IdItinerario != null,
+                CotIdCotizacionOrigen = c.IdCotizacionOrigen
             }));
             NotificacionesPendientes.AddRange(solicitudesRoleoPendientes.Select(r => new NotificacionPortalDto
             {
@@ -248,18 +371,8 @@ namespace AtilsonCargoSpa.Pages.Operaciones
             }));
             NotificacionesPendientes = NotificacionesPendientes.OrderByDescending(n => n.Fecha).ToList();
 
-            // Misma lista filtrada/deduplicada que usa Create para Empresa Transporte
-            // (IdTipoProveedor 2 y 10 son ambos "Transportista"; se excluyen Depósitos
-            // y otros tipos).
-            var proveedoresTransporteRaw = await _context.Proveedores
-                .Where(p => p.Activo == 1 && (p.IdTipoProveedor == 2 || p.IdTipoProveedor == 10))
-                .ToListAsync();
-            ViewData["ProveedoresTransporteList"] = proveedoresTransporteRaw
-    .Where(p => !string.IsNullOrWhiteSpace(p.NombreProveedor))
-    .GroupBy(p => p.NombreProveedor.Trim().ToUpper())
-    .Select(g => g.First())
-    .OrderBy(p => p.NombreProveedor)
-    .ToList();
+            // Transportistas: todos los proveedores activos menos los depósitos (tipo 12).
+            ViewData["ProveedoresTransporteList"] = await AtilsonCargoSpa.Helpers.TransportistaHelper.ListarAsync(_context);
 
             // --- ALMACENAMIENTO: depósitos (IdTipoProveedor 12) y choferes recientes ---
             var cadenasAlmacen = await _context.Proveedores
@@ -295,6 +408,10 @@ namespace AtilsonCargoSpa.Pages.Operaciones
 
         public async Task<IActionResult> OnPostDeleteAsync(int id)
         {
+            // Bookings cancelados: nunca se eliminan (minuta Roleos/Cancelaciones oct-2026).
+            if (await AtilsonCargoSpa.Helpers.BookingCanceladoHelper.EstaCanceladoAsync(_context, id))
+                return new JsonResult(new { success = false, message = AtilsonCargoSpa.Helpers.BookingCanceladoHelper.MensajeNoEliminar });
+
             var operacion = await _context.Operaciones.FindAsync(id);
             if (operacion != null)
             {
@@ -572,10 +689,12 @@ DateTime? LateArrival, DateTime? ElarDate)
                 }
 
                 docDb.ZonaCourier = docDb.TipoCourier == "Internacional" ? CourierZonas.ObtenerZona(docDb.PaisCourier) : null;
-                docDb.EmpresaCourier = Request.Form["docUpdates.EmpresaCourier"].FirstOrDefault();
+                docDb.EmpresaCourier = AtilsonCargoSpa.Helpers.CourierHelper.Normalizar(Request.Form["docUpdates.EmpresaCourier"].FirstOrDefault());
                 docDb.TrackingCourier = Request.Form["docUpdates.TrackingCourier"].FirstOrDefault();
                 string baseConcept = docDb.TipoCourier == "Internacional" ? $"COURIER INTERNACIONAL {docDb.ZonaCourier}" : "COURIER NACIONAL";
-                var tarifaCourier = await _context.TarifasMaestras.FirstOrDefaultAsync(t => t.EsActiva && t.Categoria == "Courier" && t.Concepto.ToUpper() == baseConcept.ToUpper());
+                // Tarifa de la empresa de courier asignada (DHL/FedEx/Chilexpress); si no hay, la general.
+                var tarifasCourierConcepto = await _context.TarifasMaestras.Where(t => t.EsActiva && t.Categoria == "Courier" && t.Concepto.ToUpper() == baseConcept.ToUpper()).ToListAsync();
+                var tarifaCourier = AtilsonCargoSpa.Helpers.CourierHelper.ElegirTarifaCosto(tarifasCourierConcepto, baseConcept, docDb.EmpresaCourier);
                 docDb.ValorCourier = tarifaCourier?.ValorNeto;
 
                 // Full Set y DHL: evidencia documental del envío físico, ahora se
@@ -585,9 +704,9 @@ DateTime? LateArrival, DateTime? ElarDate)
                 if (Request.Form.ContainsKey("docUpdates.TrackingDhl"))
                     docDb.TrackingDhl = Request.Form["docUpdates.TrackingDhl"].FirstOrDefault();
                 if (Request.Form.ContainsKey("docUpdates.LogFullSet"))
-                    docDb.LogFullSet = Request.Form["docUpdates.LogFullSet"].FirstOrDefault();
+                    docDb.LogFullSet = DocumentalHelpers.SanitizarLogHtml(Request.Form["docUpdates.LogFullSet"].FirstOrDefault());
                 if (Request.Form.ContainsKey("docUpdates.LogDhl"))
-                    docDb.LogDhl = Request.Form["docUpdates.LogDhl"].FirstOrDefault();
+                    docDb.LogDhl = DocumentalHelpers.SanitizarLogHtml(Request.Form["docUpdates.LogDhl"].FirstOrDefault());
 
                 string uploadsFolderCourier = Path.Combine(_env.WebRootPath, "uploads", "documentos");
                 if (!Directory.Exists(uploadsFolderCourier)) Directory.CreateDirectory(uploadsFolderCourier);
@@ -716,7 +835,7 @@ DateTime? LateArrival, DateTime? ElarDate)
                 docDb.LogFactura = F("docUpdates.LogFactura");
                 docDb.LogPacking = F("docUpdates.LogPacking");
                 docDb.LogExtra = F("docUpdates.LogExtra");
-                docDb.LogLibreVenta = Request.Form["docUpdates.LogLibreVenta"].FirstOrDefault();
+                docDb.LogLibreVenta = DocumentalHelpers.SanitizarLogHtml(Request.Form["docUpdates.LogLibreVenta"].FirstOrDefault());
 
                 docDb.NumCap1 = F("docUpdates.NumCap1"); docDb.NumCap2 = F("docUpdates.NumCap2"); docDb.NumCap3 = F("docUpdates.NumCap3"); docDb.NumCap4 = F("docUpdates.NumCap4");
                 docDb.NumCoa1 = F("docUpdates.NumCoa1"); docDb.NumDt1 = F("docUpdates.NumDt1");
@@ -776,15 +895,15 @@ DateTime? LateArrival, DateTime? ElarDate)
 
                 docDb.ObsOrigen = F("docUpdates.ObsOrigen");
                 docDb.ObsCaptura = F("docUpdates.ObsCaptura");
-                docDb.LogOrigen = Request.Form["docUpdates.LogOrigen"].FirstOrDefault();
-                docDb.LogFitosanitario = Request.Form["docUpdates.LogFitosanitario"].FirstOrDefault();
-                docDb.LogSanitario = Request.Form["docUpdates.LogSanitario"].FirstOrDefault();
-                docDb.LogCaptura = Request.Form["docUpdates.LogCaptura"].FirstOrDefault();
-                docDb.LogCoa = Request.Form["docUpdates.LogCoa"].FirstOrDefault();
-                docDb.LogDt = Request.Form["docUpdates.LogDt"].FirstOrDefault();
-                docDb.LogCodaut = Request.Form["docUpdates.LogCodaut"].FirstOrDefault();
-                docDb.LogClave = Request.Form["docUpdates.LogClave"].FirstOrDefault();
-                docDb.LogNeppex = Request.Form["docUpdates.LogNeppex"].FirstOrDefault();
+                docDb.LogOrigen = DocumentalHelpers.SanitizarLogHtml(Request.Form["docUpdates.LogOrigen"].FirstOrDefault());
+                docDb.LogFitosanitario = DocumentalHelpers.SanitizarLogHtml(Request.Form["docUpdates.LogFitosanitario"].FirstOrDefault());
+                docDb.LogSanitario = DocumentalHelpers.SanitizarLogHtml(Request.Form["docUpdates.LogSanitario"].FirstOrDefault());
+                docDb.LogCaptura = DocumentalHelpers.SanitizarLogHtml(Request.Form["docUpdates.LogCaptura"].FirstOrDefault());
+                docDb.LogCoa = DocumentalHelpers.SanitizarLogHtml(Request.Form["docUpdates.LogCoa"].FirstOrDefault());
+                docDb.LogDt = DocumentalHelpers.SanitizarLogHtml(Request.Form["docUpdates.LogDt"].FirstOrDefault());
+                docDb.LogCodaut = DocumentalHelpers.SanitizarLogHtml(Request.Form["docUpdates.LogCodaut"].FirstOrDefault());
+                docDb.LogClave = DocumentalHelpers.SanitizarLogHtml(Request.Form["docUpdates.LogClave"].FirstOrDefault());
+                docDb.LogNeppex = DocumentalHelpers.SanitizarLogHtml(Request.Form["docUpdates.LogNeppex"].FirstOrDefault());
 
                 if (sagModalidadCambio)
                 {
@@ -806,6 +925,7 @@ DateTime? LateArrival, DateTime? ElarDate)
             }
             catch (Exception ex)
             {
+                _logger.LogError(ex, "Error no controlado en {Clase}", nameof(IndexModel));
                 if (Request.Headers["X-Requested-With"] == "XMLHttpRequest")
                     return new JsonResult(new { success = false, message = ex.Message });
                 TempData["ErrorMsg"] = "Error al guardar: " + ex.Message;
@@ -815,9 +935,14 @@ DateTime? LateArrival, DateTime? ElarDate)
 
         public async Task<IActionResult> OnPostGuardarResponsabilidadAsync(int idOperacion, string concepto, string pagadoPor, string responsable)
         {
-            var transacciones = await _context.TransaccionesFinancieras
-                .Where(t => t.IdOperacion == idOperacion && t.Concepto == concepto)
-                .ToListAsync();
+            // El flete marítimo va por contenedor (oct-2026): "Flete Marítimo (MSC)" aplica también a
+            // "Flete Marítimo (Uxx) (MSC)" de los demás contenedores.
+            bool esFleteMar = (concepto ?? "").StartsWith("Flete Marítimo");
+            var transacciones = (await _context.TransaccionesFinancieras
+                .Where(t => t.IdOperacion == idOperacion && (t.Concepto == concepto || (esFleteMar && t.Concepto.StartsWith("Flete Marítimo"))))
+                .ToListAsync())
+                .Where(t => t.Concepto == concepto || System.Text.RegularExpressions.Regex.Replace(t.Concepto ?? "", @"\s*\(U\d+\)", "") == concepto)
+                .ToList();
 
             if (!transacciones.Any())
                 return new JsonResult(new { success = false, message = "No se encontró el concepto." });
@@ -870,6 +995,55 @@ DateTime? LateArrival, DateTime? ElarDate)
                 TempData["SuccessMsg"] = $"La operación {operacion.NumeroBooking} se ha enviado a Finanzas y su pestaña documental ha sido bloqueada.";
             }
             return RedirectToPage();
+        }
+
+        // Traspaso Ops -> Finanzas (oct-2026). Los usa el tablero y el Detalle (fetch).
+        public async Task<IActionResult> OnPostFinalizarTareaAsync(int id)
+        {
+            var r = await new TraspasoFinanzasService(_context).FinalizarAsync(id, User.Identity?.Name);
+            return new JsonResult(new { success = r.Ok, message = r.Mensaje });
+        }
+
+        public async Task<IActionResult> OnPostReabrirTareaAsync(int id, string? motivo, string? comentario, IFormFile? respaldo)
+        {
+            var servicio = new TraspasoFinanzasService(_context);
+            string? ruta = null, nombre = null, rutaFisica = null;
+            if (respaldo != null && respaldo.Length > 0)
+            {
+                // Primero se valida todo; el archivo se guarda solo si la reapertura procede.
+                string? error = TraspasoFinanzasService.ValidarRespaldo(respaldo.FileName, respaldo.Length)
+                                ?? await servicio.PuedeReabrirAsync(id, motivo, comentario);
+                if (error != null) return new JsonResult(new { success = false, message = error });
+
+                nombre = Path.GetFileName(respaldo.FileName);
+                string ext = Path.GetExtension(nombre).ToLowerInvariant();
+                string baseSegura = new string(Path.GetFileNameWithoutExtension(nombre)
+                    .Select(c => char.IsLetterOrDigit(c) || c == '-' || c == '_' ? c : '_').ToArray());
+                if (baseSegura.Length > 60) baseSegura = baseSegura.Substring(0, 60);
+                string archivo = $"{id}_{DateTime.Now:yyyyMMddHHmmss}_{Guid.NewGuid().ToString("N").Substring(0, 6)}_{baseSegura}{ext}";
+                string carpeta = Path.Combine(_env.WebRootPath ?? Path.Combine(Directory.GetCurrentDirectory(), "wwwroot"), "uploads", "respaldos-reapertura");
+                Directory.CreateDirectory(carpeta);
+                rutaFisica = Path.Combine(carpeta, archivo);
+                await using (var fs = new FileStream(rutaFisica, FileMode.CreateNew))
+                    await respaldo.CopyToAsync(fs);
+                ruta = $"/uploads/respaldos-reapertura/{archivo}";
+            }
+
+            TraspasoFinanzasService.Resultado r;
+            try
+            {
+                r = await servicio.ReabrirAsync(id, motivo, comentario, User.Identity?.Name, ruta, nombre);
+            }
+            catch (DbUpdateException ex) when (ruta != null)
+            {
+                _logger.LogError(ex, "No se pudo reabrir la operación {Id} con respaldo", id);
+                r = new TraspasoFinanzasService.Resultado { Ok = false, Mensaje = "No se pudo guardar la reapertura con el respaldo. ¿Se corrió el script Sql/2026-10_reapertura_extracostos.sql?" };
+            }
+            if (!r.Ok && rutaFisica != null)
+            {
+                try { System.IO.File.Delete(rutaFisica); } catch { /* sin efecto */ }
+            }
+            return new JsonResult(new { success = r.Ok, message = r.Mensaje });
         }
 
         public async Task<IActionResult> OnPostGuardarCertificadoAsync(
@@ -1124,16 +1298,23 @@ DateTime? LateArrival, DateTime? ElarDate)
                 var docDb = op.OperacionesDocumentales.OrderBy(x => x.Id).FirstOrDefault();
                 if (docDb == null) { docDb = new OperacionesDocumentale { FechaCreacion = DateTime.Now, UsuarioCreador = User.Identity?.Name ?? "Sistema", Activo = true }; op.OperacionesDocumentales.Add(docDb); }
                 docDb.MatrizPresentada = MatrizPresentada;
-                if (Request.Form.ContainsKey("docUpdates.LogMatriz")) docDb.LogMatriz = Request.Form["docUpdates.LogMatriz"].FirstOrDefault();
+                if (!string.IsNullOrWhiteSpace(NumeroBL)) docDb.NumeroBL = NumeroBL.Trim();
+                if (Request.Form.ContainsKey("docUpdates.LogMatriz")) docDb.LogMatriz = DocumentalHelpers.SanitizarLogHtml(Request.Form["docUpdates.LogMatriz"].FirstOrDefault());
 
                 // Checkboxes: si el marcador llegó, se toma el estado actual de la lista
                 // (incluye el caso de "todos desmarcados", que un checkbox solo no reporta).
+                // Mismo catálogo y reglas que Detalle (EmisionBlHelper).
                 if (Request.Form.ContainsKey("TipoEmisionBlMarker"))
                 {
-                    var seleccionadosBl = Request.Form["TipoEmisionBl"].Where(v => !string.IsNullOrWhiteSpace(v)).ToArray();
-                    op.TipoEmisionBl = seleccionadosBl.Any() ? string.Join(",", seleccionadosBl) : null;
-                    op.TipoEmisionBlOtro = seleccionadosBl.Contains("OTRO") ? Request.Form["TipoEmisionBlOtro"].ToString()?.Trim() : null;
-                    op.UbicacionOriginalesDestino = seleccionadosBl.Contains("ORIGINALES_DESTINO") ? Request.Form["UbicacionOriginalesDestino"].ToString()?.Trim() : null;
+                    var emisionBl = AtilsonCargoSpa.Helpers.EmisionBlHelper.LeerFormulario(Request.Form);
+                    var errEmisionBl = AtilsonCargoSpa.Helpers.EmisionBlHelper.Validar(emisionBl, tipoObligatorio: true);
+                    if (errEmisionBl != null)
+                    {
+                        if (Request.Headers["X-Requested-With"] == "XMLHttpRequest") return new JsonResult(new { success = false, message = errEmisionBl });
+                        TempData["ErrorMsg"] = errEmisionBl;
+                        return RedirectToPage();
+                    }
+                    AtilsonCargoSpa.Helpers.EmisionBlHelper.Aplicar(op, emisionBl);
                 }
 
                 string uploadsFolder = Path.Combine(_env.WebRootPath, "uploads", "evidencias");
@@ -1155,6 +1336,28 @@ DateTime? LateArrival, DateTime? ElarDate)
             return RedirectToPage();
         }
 
+        public string? ObtenerAcuerdoSugerido(Operacione op)
+        {
+            // Esta sugerencia (y el "no cobro" que implica) es una condición comercial
+            // exclusiva del cliente especial (Promar) — nunca se ofrece a un cliente
+            // estándar, aunque el puerto de destino coincida con una regla de ReglasTlc.
+            if (op.IdClienteNavigation?.EsClienteEspecial != true) return null;
+
+            string? pais = op.IdPuertoDestinoNavigation?.Pais?.Trim().ToUpper();
+            if (string.IsNullOrEmpty(pais)) return null;
+
+            string? puerto = op.IdPuertoDestinoNavigation?.NombrePuerto?.Trim().ToUpper();
+
+            var reglas = _context.ReglasTlc
+                .Where(r => r.EsActiva && r.Pais.ToUpper() == pais)
+                .ToList();
+
+            // Prioriza una regla específica de puerto sobre una regla general de país.
+            var reglaEspecifica = reglas.FirstOrDefault(r => !string.IsNullOrEmpty(r.Puerto) && r.Puerto.Trim().ToUpper() == puerto);
+            var reglaGeneral = reglas.FirstOrDefault(r => string.IsNullOrEmpty(r.Puerto));
+
+            return (reglaEspecifica ?? reglaGeneral)?.AcuerdoOrigenKey;
+        }
         public async Task<IActionResult> OnPostUpdateLarAsync(int IdOperacion, int? IdUnidadTecnica, string? EstadoLar, DateTime? LateArrival, DateTime? ElarDate, bool ContenedorIngresado, DateTime? LlegadaPuertoReal, IFormFile? EvidenciaLar)
         {
             var op = await _context.Operaciones.Include(o => o.ExtracostosOperacions).Include(o => o.OperacionesTerrestres).Include(o => o.Unidadestecnicas).FirstOrDefaultAsync(o => o.Id == IdOperacion);
@@ -1215,12 +1418,23 @@ DateTime? LateArrival, DateTime? ElarDate)
                     string elarMsg = ElarDate.HasValue ? $" | ELAR: {ElarDate.Value.ToString("dd/MM/yyyy HH:mm")}" : "";
                     if (costoLar == null)
                     {
-                        op.ExtracostosOperacions.Add(new ExtracostosOperacion { TipoCosto = "Late Arrival (LAR)", Motivo = $"LAR {(EstadoLar == "AUTORIZADO LAR" ? "Autorizado" : "Ingresado")}. Nuevo Cut-Off: {LateArrival?.ToString("dd/MM/yyyy HH:mm") ?? "N/A"}{elarMsg}", Monto = 0, Moneda = "USD", Evidencia = evidenciaGuardada ?? op.EvidenciaLar ?? "Generado automáticamente por sistema", FechaCreacion = DateTime.Now, UsuarioCreador = User.Identity?.Name ?? "Sistema" });
+                        // Fase 2: precarga el monto desde el catálogo de recargos por naviera si
+                        // hay un match claro (naviera + tipo de contenedor, cuando se conoce);
+                        // si no, queda en 0 igual que antes, para que alguien lo complete a mano.
+                        string? tipoContenedorLar = IdUnidadTecnica.HasValue
+                            ? op.Unidadestecnicas.FirstOrDefault(u => u.Id == IdUnidadTecnica.Value)?.TipoContenedor
+                            : null;
+                        var sugerenciaLar = await RecargoNavieraHelper.SugerirLateArrivalAsync(_context, op.IdNaviera, tipoContenedorLar);
+                        string motivoLar = $"LAR {(EstadoLar == "AUTORIZADO LAR" ? "Autorizado" : "Ingresado")}. Nuevo Cut-Off: {LateArrival?.ToString("dd/MM/yyyy HH:mm") ?? "N/A"}{elarMsg}";
+                        if (sugerenciaLar != null) motivoLar += $" | {sugerenciaLar.NotaCatalogo}";
+                        op.ExtracostosOperacions.Add(new ExtracostosOperacion { TipoCosto = "Late Arrival (LAR)", Motivo = motivoLar, Monto = sugerenciaLar?.Monto ?? 0, Moneda = sugerenciaLar?.Moneda ?? "USD", Evidencia = evidenciaGuardada ?? op.EvidenciaLar ?? "Generado automáticamente por sistema", FechaCreacion = DateTime.Now, UsuarioCreador = User.Identity?.Name ?? "Sistema" });
                     }
                     else if (ElarDate.HasValue && !costoLar.Motivo.Contains("ELAR"))
                     {
                         costoLar.Motivo += elarMsg;
                     }
+                    // ELAR: además del aviso en el LAR, genera su propio cobro Marítimo.
+                    await RecargoNavieraHelper.AsegurarExtraLateArrivalAsync(_context, op, ElarDate, evidenciaGuardada ?? op.EvidenciaLar, User.Identity?.Name ?? "Sistema");
                 }
 
                 op.FechaModificacion = DateTime.Now; op.CorreoClienteEnviado = false;
@@ -1446,7 +1660,7 @@ DateTime? LateArrival, DateTime? ElarDate)
             else
             {
                 operacion.EstadoWorkflow = estado;
-                contenedorLabel = operacion.NumeroContenedor ?? "Contenedor Principal";
+                contenedorLabel = operacion.NumeroContenedor ?? "1° Contenedor";
             }
 
             // Los estados con fecha/hora (Arribado a Planta, Salida de Planta, En Puerto,
@@ -1476,24 +1690,67 @@ DateTime? LateArrival, DateTime? ElarDate)
                 }
             }
 
-            // Cierre del ciclo logístico: se registra la fecha exacta de retiro del vacío
-            // en destino. No se sobreescribe si ya estaba guardada (evita perder el dato
-            // real si alguien vuelve a hacer clic en el mismo estado).
-            if (estado == "Contenedor Retirado")
+            // Hitos del ciclo de cierre en destino (Arribado → Retirado → Vacío
+            // Devuelto): cada uno guarda su fecha REAL (la que ingresó el
+            // operador en el prompt del dropdown, no necesariamente "ahora
+            // mismo") junto con quién y cuándo quedó registrado. No se
+            // sobreescribe si ya estaba guardado, para no perder el dato real
+            // si alguien repite el clic. El fallback a DateTime.Now es solo una
+            // red de seguridad — el dropdown ya obliga a ingresar la fecha.
+            string usuarioHito = User.Identity?.Name ?? "Sistema";
+            if (estado == "Arribado")
             {
-                var ahoraRetiro = DateTime.Now;
+                if (idUnidadTecnica.HasValue)
+                {
+                    var unidadArribo = operacion.Unidadestecnicas.FirstOrDefault(u => u.Id == idUnidadTecnica.Value);
+                    if (unidadArribo != null && !unidadArribo.FechaArriboDestino.HasValue)
+                    {
+                        unidadArribo.FechaArriboDestino = fechaAsociada ?? DateTime.Now;
+                        unidadArribo.UsuarioArriboDestino = usuarioHito;
+                    }
+                }
+                else if (!operacion.FechaArriboDestino.HasValue)
+                {
+                    operacion.FechaArriboDestino = fechaAsociada ?? DateTime.Now;
+                    operacion.UsuarioArriboDestino = usuarioHito;
+                }
+            }
+            else if (estado == "Contenedor Retirado")
+            {
                 if (idUnidadTecnica.HasValue)
                 {
                     var unidadRetiro = operacion.Unidadestecnicas.FirstOrDefault(u => u.Id == idUnidadTecnica.Value);
-                    if (unidadRetiro != null && !unidadRetiro.FechaRetiroDestino.HasValue) unidadRetiro.FechaRetiroDestino = ahoraRetiro;
+                    if (unidadRetiro != null && !unidadRetiro.FechaRetiroDestino.HasValue)
+                    {
+                        unidadRetiro.FechaRetiroDestino = fechaAsociada ?? DateTime.Now;
+                        unidadRetiro.UsuarioRetiroDestino = usuarioHito;
+                    }
                 }
-                else
+                else if (!operacion.FechaRetiroDestino.HasValue)
                 {
-                    if (!operacion.FechaRetiroDestino.HasValue) operacion.FechaRetiroDestino = ahoraRetiro;
+                    operacion.FechaRetiroDestino = fechaAsociada ?? DateTime.Now;
+                    operacion.UsuarioRetiroDestino = usuarioHito;
+                }
+            }
+            else if (estado == "Vacío Devuelto")
+            {
+                if (idUnidadTecnica.HasValue)
+                {
+                    var unidadDevol = operacion.Unidadestecnicas.FirstOrDefault(u => u.Id == idUnidadTecnica.Value);
+                    if (unidadDevol != null && !unidadDevol.FechaDevolucionVacio.HasValue)
+                    {
+                        unidadDevol.FechaDevolucionVacio = fechaAsociada ?? DateTime.Now;
+                        unidadDevol.UsuarioDevolucionVacio = usuarioHito;
+                    }
+                }
+                else if (!operacion.FechaDevolucionVacio.HasValue)
+                {
+                    operacion.FechaDevolucionVacio = fechaAsociada ?? DateTime.Now;
+                    operacion.UsuarioDevolucionVacio = usuarioHito;
                 }
             }
 
-            RegistrarHito(operacion, "GENERAL", $"Estado ({contenedorLabel}) cambiado a: {estado}" + (fechaAsociada.HasValue ? $" — Fecha evento: {fechaAsociada.Value:dd/MM/yyyy HH:mm}" : "") + (estado == "Contenedor Retirado" ? " — Ciclo logístico cerrado." : ""));
+            RegistrarHito(operacion, "GENERAL", $"Estado ({contenedorLabel}) cambiado a: {estado}" + (fechaAsociada.HasValue ? $" — Fecha evento: {fechaAsociada.Value:dd/MM/yyyy HH:mm}" : "") + (estado == "Vacío Devuelto" ? " — Ciclo logístico cerrado." : ""));
             operacion.FechaModificacion = DateTime.Now; operacion.CorreoClienteEnviado = false;
 
             await _context.SaveChangesAsync();
@@ -1504,45 +1761,22 @@ DateTime? LateArrival, DateTime? ElarDate)
 
         public async Task<IActionResult> OnPostAddCostoAsync(int id)
         {
+            // Ventana "Reportar extracosto" (oct-2026): lectura y validación en ExtracostoFormulario.
             bool isAjax = Request.Headers["X-Requested-With"] == "XMLHttpRequest";
-            string nombreUsuario = User.Identity?.Name ?? "Sistema";
-            var tipo = Request.Form["NuevoCosto.TipoCosto"];
-            var motivo = Request.Form["NuevoCosto.Motivo"];
-            var responsable = Request.Form["NuevoCosto.Responsable"];
-            var responsableGestion = Request.Form["NuevoCosto.ResponsableGestion"];
-            var grupoOperativo = Request.Form["NuevoCosto.GrupoOperativo"];
-            var monedaForm = Request.Form["NuevoCosto.Moneda"];
-            decimal.TryParse(Request.Form["NuevoCosto.Monto"], System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out decimal montoForm);
-            var file = Request.Form.Files.GetFile("NuevoCosto.Evidencia");
-
-            if (!string.IsNullOrEmpty(tipo) && file != null && file.Length > 0 && montoForm > 0)
+            var r = await ExtracostoFormulario.CrearAsync(_context, _env, Request.Form, id, User.Identity?.Name ?? "Sistema");
+            if (!r.Ok)
             {
-                string uploadsFolder = Path.Combine(_env.WebRootPath, "uploads", "evidencias"); if (!Directory.Exists(uploadsFolder)) Directory.CreateDirectory(uploadsFolder);
-                string uName = $"{id}_Costo_{DateTime.Now.Ticks}_{Path.GetFileName(file.FileName).Replace(" ", "_")}"; using (var s = new FileStream(Path.Combine(uploadsFolder, uName), FileMode.Create)) { await file.CopyToAsync(s); }
-                var costo = new ExtracostosOperacion
-                {
-                    IdOperacion = id,
-                    TipoCosto = tipo,
-                    Motivo = motivo,
-                    Responsable = responsable,
-                    ResponsableGestion = responsableGestion,
-                    GrupoOperativo = string.IsNullOrWhiteSpace(grupoOperativo) ? null : grupoOperativo.ToString(),
-                    Moneda = string.IsNullOrWhiteSpace(monedaForm) ? "CLP" : monedaForm.ToString(),
-                    Monto = montoForm,
-                    Evidencia = $"/uploads/evidencias/{uName}",
-                    FechaCreacion = DateTime.Now,
-                    UsuarioCreador = nombreUsuario
-                };
-                _context.ExtracostosOperacions.Add(costo);
-                var opCosto = await _context.Operaciones.FindAsync(id); if (opCosto != null) { RegistrarHito(opCosto, "GENERAL", $"Extracosto reportado — Tipo: {tipo} | Valor: {costo.Moneda} {montoForm:N0} | Gestiona: {responsableGestion} | Paga: {responsable} | Motivo: {motivo}"); }
-
-                await _context.SaveChangesAsync();
-                await SincronizarTodaOperacionAFinanzasAsync(id);
-
-                if (isAjax) return new JsonResult(new { success = true });
-                TempData["SuccessMsg"] = "Incidencia financiera reportada exitosamente.";
+                if (isAjax) return new JsonResult(new { success = false, message = r.Mensaje });
+                TempData["ErrorMsg"] = r.Mensaje;
+                return RedirectToPage();
             }
-            else if (isAjax) return new JsonResult(new { success = false, message = "Faltan datos obligatorios (categoría, valor o evidencia)." });
+            var opCosto = await _context.Operaciones.FindAsync(id);
+            if (opCosto != null) RegistrarHito(opCosto, "GENERAL", r.TextoHito);
+            await _context.SaveChangesAsync();
+            await SincronizarTodaOperacionAFinanzasAsync(id);
+
+            if (isAjax) return new JsonResult(new { success = true, message = r.Mensaje });
+            TempData["SuccessMsg"] = r.Mensaje;
             return RedirectToPage();
         }
 
@@ -1663,7 +1897,7 @@ DateTime? FechaSalida, string? ConductorSalidaNombre, string? ConductorSalidaRut
                 }
                 return new JsonResult(new { success = false, message = "No se recibió ningún archivo." });
             }
-            catch (Exception ex) { return new JsonResult(new { success = false, message = ex.Message }); }
+            catch (Exception ex) { _logger.LogError(ex, "Error no controlado en {Clase}", nameof(IndexModel)); return new JsonResult(new { success = false, message = ex.Message }); }
         }
 
         public async Task<IActionResult> OnPostFinalizarServicioAsync(int id, int? idUnidadTecnica, DateTime? LlegadaPlanta, DateTime? SalidaPlanta, DateTime LlegadaPuerto, DateTime? SalidaPuerto, string? ResponsableLar, bool SorteoEscaner, IFormFile? EvidenciaEscaner, string correoCliente)
@@ -1679,7 +1913,7 @@ DateTime? FechaSalida, string? ConductorSalidaNombre, string? ConductorSalidaRut
                 : null;
             string contenedorLabel = idUnidadTecnica.HasValue
                 ? (unidad?.NroContenedor ?? $"U{idUnidadTecnica}")
-                : (op.NumeroContenedor ?? "Contenedor Principal");
+                : (op.NumeroContenedor ?? "1° Contenedor");
 
             // Antes esto siempre buscaba/creaba la fila del contenedor PRINCIPAL
             // (IdUnidadTecnica == null) sin importar para qué contenedor se estaba
@@ -1712,7 +1946,14 @@ DateTime? FechaSalida, string? ConductorSalidaNombre, string? ConductorSalidaRut
                 if (unidad != null) unidad.EstadoLar = "INGRESADO CON LAR"; else op.EstadoLar = "INGRESADO CON LAR";
                 string m = $"[{contenedorLabel}] Ingreso a puerto {LlegadaPuerto:dd/MM HH:mm}, superando el Cut-Off. Criterio: {ResponsableLar}";
                 var extCosto = op.ExtracostosOperacions.FirstOrDefault(e => e.TipoCosto == "Late Arrival (LAR)");
-                if (extCosto == null) { op.ExtracostosOperacions.Add(new ExtracostosOperacion { TipoCosto = "Late Arrival (LAR)", Motivo = m, Monto = 0, Moneda = "USD", Evidencia = "Generado automáticamente por hora de acceso", FechaCreacion = DateTime.Now, UsuarioCreador = User.Identity?.Name ?? "Sistema" }); }
+                if (extCosto == null)
+                {
+                    // Fase 2: acá sí se conoce el contenedor que gatilló el LAR (cuando
+                    // aplica), así que se puede sugerir la tarifa Dry/Reefer específica.
+                    var sugerenciaLar = await RecargoNavieraHelper.SugerirLateArrivalAsync(_context, op.IdNaviera, unidad?.TipoContenedor);
+                    string motivoLar = sugerenciaLar != null ? $"{m} | {sugerenciaLar.NotaCatalogo}" : m;
+                    op.ExtracostosOperacions.Add(new ExtracostosOperacion { TipoCosto = "Late Arrival (LAR)", Motivo = motivoLar, Monto = sugerenciaLar?.Monto ?? 0, Moneda = sugerenciaLar?.Moneda ?? "USD", Evidencia = "Generado automáticamente por hora de acceso", FechaCreacion = DateTime.Now, UsuarioCreador = User.Identity?.Name ?? "Sistema" });
+                }
             }
             if (unidad != null) unidad.ContenedorIngresado = true; else op.ContenedorIngresado = true;
 
@@ -1747,8 +1988,8 @@ DateTime? FechaSalida, string? ConductorSalidaNombre, string? ConductorSalidaRut
         public bool OperacionCerradaPorRetiro(Operacione op)
         {
             if (op.Unidadestecnicas != null && op.Unidadestecnicas.Any())
-                return op.FechaRetiroDestino.HasValue && op.Unidadestecnicas.All(u => u.FechaRetiroDestino.HasValue);
-            return op.FechaRetiroDestino.HasValue;
+                return op.FechaDevolucionVacio.HasValue && op.Unidadestecnicas.All(u => u.FechaDevolucionVacio.HasValue);
+            return op.FechaDevolucionVacio.HasValue;
         }
 
         public bool PendienteGestionRetiro(Operacione op)
@@ -1759,9 +2000,19 @@ DateTime? FechaSalida, string? ConductorSalidaNombre, string? ConductorSalidaRut
             return mainPendiente || unidadPendiente;
         }
 
-        public void GenerarAlertasProactivas(Operacione op, OperacionesTerrestre? t, OperacionesDocumentale? d, bool reqMar, bool reqDoc, bool reqMatriz, bool reqTerrestre, out string alertMatriz, out string alertStacking, out string alertTransporte, out string alertTransbordo, out string alertArribo)
+        // Estado intermedio nuevo: el contenedor ya fue retirado del terminal
+        // pero aún no se confirma la devolución del vacío al depósito.
+        public bool PendienteDevolucionVacio(Operacione op)
         {
-            alertMatriz = ""; alertStacking = ""; alertTransporte = ""; alertTransbordo = ""; alertArribo = ""; DateTime now = DateTime.Now;
+            if (OperacionCerradaPorRetiro(op)) return false;
+            bool mainPendiente = op.EstadoWorkflow == "Contenedor Retirado";
+            bool unidadPendiente = op.Unidadestecnicas != null && op.Unidadestecnicas.Any(u => u.Estado == "Contenedor Retirado");
+            return mainPendiente || unidadPendiente;
+        }
+
+        public void GenerarAlertasProactivas(Operacione op, OperacionesTerrestre? t, OperacionesDocumentale? d, bool reqMar, bool reqDoc, bool reqMatriz, bool reqTerrestre, out string alertMatriz, out string alertStacking, out string alertTransporte, out string alertTransbordo, out string alertArribo, out string alertDevolucion)
+        {
+            alertMatriz = ""; alertStacking = ""; alertTransporte = ""; alertTransbordo = ""; alertArribo = ""; alertDevolucion = ""; DateTime now = DateTime.Now;
             if (reqMatriz && (d == null || d.MatrizPresentada != true) && op.CutOffMatriz.HasValue) { TimeSpan diff = op.CutOffMatriz.Value - now; if (diff.TotalHours <= 24 && diff.TotalHours > 12) alertMatriz = $"<div class='p-2 mb-1 rounded bg-light border-start border-3 border-info text-dark shadow-sm' style='font-size: 11px;'><strong class='d-block text-info'><i class='bi bi-info-circle me-1'></i> MATRIZ DOCUMENTAL</strong> Vence en {Math.Round(diff.TotalHours)} hrs ({op.CutOffMatriz.Value:dd/MM HH:mm}).</div>"; else if (diff.TotalHours <= 12 && diff.TotalHours > 3) alertMatriz = $"<div class='p-2 mb-1 rounded bg-light border-start border-3 border-warning text-dark shadow-sm' style='font-size: 11px;'><strong class='d-block' style='color:#d97706;'><i class='bi bi-exclamation-triangle me-1'></i> MATRIZ DOCUMENTAL</strong> Vence en {Math.Round(diff.TotalHours)} hrs. Urge confirmación.</div>"; else if (diff.TotalHours <= 3 && diff.TotalHours > 0) alertMatriz = $"<div class='p-2 mb-1 rounded bg-light border-start border-3 border-danger text-dark shadow-sm' style='font-size: 11px;'><strong class='d-block text-danger'><i class='bi bi-x-octagon me-1'></i> MATRIZ CRÍTICA</strong> Vence en {Math.Round(diff.TotalHours)} hrs. Riesgo de multa.</div>"; else if (diff.TotalHours <= 0) alertMatriz = $"<div class='p-2 mb-1 rounded bg-danger bg-opacity-10 border-start border-3 border-danger text-danger shadow-sm' style='font-size: 11px;'><strong class='d-block'><i class='bi bi-x-octagon-fill me-1'></i> MATRIZ VENCIDA</strong> ¡Corte finalizado! Gestión urgente.</div>"; }
             if (reqMar) { DateTime? deadline = op.LateArrival ?? op.CutOffMatriz; if (deadline.HasValue) { TimeSpan travelTime = GetTravelTime(t?.PlantaCarga, op.IdPuertoOrigenNavigation?.NombrePuerto); DateTime maxDeparture = deadline.Value.Subtract(travelTime); TimeSpan timeToDeparture = maxDeparture - now; if (timeToDeparture.TotalHours <= 3) { if (timeToDeparture.TotalHours <= 0) alertStacking = $"<div class='p-2 mb-1 rounded bg-danger bg-opacity-10 border-start border-3 border-danger text-danger shadow-sm alert-stacking' style='font-size: 11px;'><strong class='d-block'><i class='bi bi-truck me-1'></i> ATRASO A PUERTO</strong> Camión debió salir a las {maxDeparture:HH:mm}. <br/><span class='text-muted text-danger'>Riesgo de pérdida de nave.</span></div>"; else alertStacking = $"<div class='p-2 mb-1 rounded bg-light border-start border-3 border-warning text-dark shadow-sm alert-stacking' style='font-size: 11px;'><strong class='d-block' style='color:#d97706;'><i class='bi bi-cone-striped me-1'></i> TRÁNSITO A PUERTO</strong> Salida límite: {maxDeparture:HH:mm}.</div>"; } } }
             if (reqTerrestre && op.FechaStacking.HasValue) { TimeSpan diffTrans = op.FechaStacking.Value - now; bool transportAsignado = !string.IsNullOrWhiteSpace(t?.EmpresaTransporte); bool asignacionNotificada = t?.AsignacionEnviada == true; bool solicitudEnviada = t?.SolicitudEnviada == true; if (transportAsignado || asignacionNotificada) { alertTransporte = ""; } else if (solicitudEnviada) { alertTransporte = $"<div class='p-2 mb-1 rounded bg-light border-start border-3 border-primary text-dark shadow-sm' style='font-size: 11px;'><strong class='d-block text-primary'><i class='bi bi-envelope-check me-1'></i> LOGÍSTICA EN PROCESO</strong> Solicitud enviada, esperando chofer.</div>"; } else { if (diffTrans.TotalDays <= 5 && diffTrans.TotalDays > 3) alertTransporte = $"<div class='p-2 mb-1 rounded bg-light border-start border-3 border-info text-dark shadow-sm' style='font-size: 11px;'><strong class='d-block text-info'><i class='bi bi-truck me-1'></i> LOGÍSTICA</strong> Faltan {diffTrans.TotalDays:0} días para Stacking. <br/><span class='text-muted'>Sugerencia: Solicitar transporte.</span></div>"; else if (diffTrans.TotalDays <= 3 && diffTrans.TotalDays > 2) alertTransporte = $"<div class='p-2 mb-1 rounded bg-light border-start border-3 border-warning text-dark shadow-sm' style='font-size: 11px;'><strong class='d-block' style='color:#d97706;'><i class='bi bi-truck me-1'></i> ALERTA LOGÍSTICA</strong> Faltan {diffTrans.TotalDays:0} días para Stacking. <br/><span class='text-muted'>Debe confirmar camión.</span></div>"; else if (diffTrans.TotalDays <= 2 && diffTrans.TotalDays > 1) alertTransporte = $"<div class='p-2 mb-1 rounded bg-light border-start border-3 border-danger text-dark shadow-sm' style='font-size: 11px;'><strong class='d-block text-danger'><i class='bi bi-truck me-1'></i> LOGÍSTICA CRÍTICA</strong> Menos de 48 hrs y NO hay transporte.</div>"; else if (diffTrans.TotalDays <= 1 && diffTrans.TotalDays >= 0) alertTransporte = $"<div class='p-2 mb-1 rounded bg-danger bg-opacity-10 border-start border-3 border-danger text-danger shadow-sm' style='font-size: 11px;'><strong class='d-block'><i class='bi bi-truck me-1'></i> PELIGRO LOGÍSTICO</strong> Stacking abre mañana. <br/><span class='text-muted text-danger'>¡Asignación URGENTE!</span></div>"; else if (diffTrans.TotalDays < 0) alertTransporte = $"<div class='p-2 mb-1 rounded bg-danger text-white border-start border-3 border-dark shadow-sm' style='font-size: 11px;'><strong class='d-block'><i class='bi bi-exclamation-octagon-fill me-1'></i> LOGÍSTICA VENCIDA</strong> STACKING ABIERTO SIN CAMIÓN.</div>"; } }
@@ -1775,17 +2026,26 @@ DateTime? FechaSalida, string? ConductorSalidaNombre, string? ConductorSalidaRut
                 if (estadoTr == "CRITICO" && limiteTr.HasValue)
                 {
                     int diasRest = Math.Max(0, (int)Math.Ceiling((limiteTr.Value - now).TotalDays));
-                    alertTransbordo = $"<div class='p-2 mb-1 rounded bg-light border-start border-3 border-warning text-dark shadow-sm' style='font-size: 11px;'><strong class='d-block' style='color:#d97706;'><i class='bi bi-arrow-left-right me-1'></i> TRANSBORDO</strong> Quedan {diasRest} día(s) para gestionar la nueva nave en {op.Transbordo}.</div>";
+                    // op.Transbordo es texto libre ingresado por el usuario: se HTML-encodea antes de
+                    // interpolarlo porque el resto del string se renderiza con @Html.Raw (XSS almacenado).
+                    string transbordoSeguro = System.Net.WebUtility.HtmlEncode(op.Transbordo);
+                    alertTransbordo = $"<div class='p-2 mb-1 rounded bg-light border-start border-3 border-warning text-dark shadow-sm' style='font-size: 11px;'><strong class='d-block' style='color:#d97706;'><i class='bi bi-arrow-left-right me-1'></i> TRANSBORDO</strong> Quedan {diasRest} día(s) para gestionar la nueva nave en {transbordoSeguro}.</div>";
                 }
                 else if (estadoTr == "VENCIDO")
                 {
-                    alertTransbordo = $"<div class='p-2 mb-1 rounded bg-danger bg-opacity-10 border-start border-3 border-danger text-danger shadow-sm' style='font-size: 11px;'><strong class='d-block'><i class='bi bi-exclamation-octagon-fill me-1'></i> TRANSBORDO VENCIDO</strong> Plazo en {op.Transbordo} superado sin nueva nave confirmada.</div>";
+                    string transbordoSeguro = System.Net.WebUtility.HtmlEncode(op.Transbordo);
+                    alertTransbordo = $"<div class='p-2 mb-1 rounded bg-danger bg-opacity-10 border-start border-3 border-danger text-danger shadow-sm' style='font-size: 11px;'><strong class='d-block'><i class='bi bi-exclamation-octagon-fill me-1'></i> TRANSBORDO VENCIDO</strong> Plazo en {transbordoSeguro} superado sin nueva nave confirmada.</div>";
                 }
             }
 
             if (PendienteGestionRetiro(op))
             {
                 alertArribo = $"<div class='p-2 mb-1 rounded bg-light border-start border-3 border-success text-dark shadow-sm' style='font-size: 11px;'><strong class='d-block text-success'><i class='bi bi-box-seam me-1'></i> RETIRO PENDIENTE</strong> El contenedor arribó a destino. Gestionar retiro con el cliente y marcar \"Contenedor Retirado\".</div>";
+            }
+
+            if (PendienteDevolucionVacio(op))
+            {
+                alertDevolucion = $"<div class='p-2 mb-1 rounded bg-light border-start border-3 border-info text-dark shadow-sm' style='font-size: 11px;'><strong class='d-block text-info'><i class='bi bi-arrow-return-left me-1'></i> PENDIENTE DEVOLUCIÓN</strong> El contenedor fue retirado. Falta confirmar la devolución del vacío al depósito.</div>";
             }
         }
 
@@ -1829,7 +2089,7 @@ DateTime? FechaSalida, string? ConductorSalidaNombre, string? ConductorSalidaRut
                 await _context.SaveChangesAsync();
                 return new JsonResult(new { success = true });
             }
-            catch (Exception ex) { return new JsonResult(new { success = false, message = ex.Message }); }
+            catch (Exception ex) { _logger.LogError(ex, "Error no controlado en {Clase}", nameof(IndexModel)); return new JsonResult(new { success = false, message = ex.Message }); }
         }
 
 
@@ -1840,6 +2100,18 @@ DateTime? FechaSalida, string? ConductorSalidaNombre, string? ConductorSalidaRut
 
             var op = await _context.Operaciones.Include(o => o.OperacionesDocumentales).FirstOrDefaultAsync(o => o.Id == idOperacion);
             if (op == null) return new JsonResult(new { success = false, message = "Operación no encontrada." });
+
+            // Cobro al cliente de Honorarios y DUS: no depende de certificados guardados.
+            if (certKey == "aga")
+            {
+                string anterior = op.ModalidadCobroAgencia ?? "INDIVIDUAL";
+                op.ModalidadCobroAgencia = modalidad;
+                op.FechaModificacion = DateTime.Now;
+                RegistrarHito(op, "DOCUMENTAL", $"Cobro al cliente de Honorarios y DUS: {(modalidad == "GRUPAL" ? "un solo cobro (grupal)" : "por contenedor")} (antes: {(anterior == "GRUPAL" ? "grupal" : "por contenedor")})");
+                await _context.SaveChangesAsync();
+                await _finanzasSync.SincronizarAsync(idOperacion, User.Identity?.Name ?? "Sistema");
+                return new JsonResult(new { success = true });
+            }
 
             string? actual = certKey switch
             {
@@ -1914,7 +2186,7 @@ DateTime? FechaSalida, string? ConductorSalidaNombre, string? ConductorSalidaRut
                 op.CorreoClienteEnviado = true; op.VersionCorreo = nuevaVersion; string nota = $"[{DateTime.Now:dd/MM/yyyy HH:mm} OPERACIONES] Confirmación V{nuevaVersion} enviada a {correoDestino}.\n"; op.Comentarios = nota + (op.Comentarios ?? ""); RegistrarHito(op, "GENERAL", $"Correo reserva V{nuevaVersion} enviado a: {correoDestino}");
                 await _context.SaveChangesAsync(); return new JsonResult(new { success = true });
             }
-            catch (Exception ex) { return new JsonResult(new { success = false, message = ex.Message }); }
+            catch (Exception ex) { _logger.LogError(ex, "Error no controlado en {Clase}", nameof(IndexModel)); return new JsonResult(new { success = false, message = ex.Message }); }
         }
 
         public async Task<IActionResult> OnPostEnviarBorradorBLAsync(string idOperacion, string correoDestino, IFormFile? ArchivoBL)
@@ -1936,7 +2208,7 @@ DateTime? FechaSalida, string? ConductorSalidaNombre, string? ConductorSalidaRut
                 RegistrarHito(op, "DOCUMENTAL", $"Borrador de BL enviado al cliente para revisión a: {correoDestino}");
                 await _context.SaveChangesAsync(); return new JsonResult(new { success = true });
             }
-            catch (Exception ex) { return new JsonResult(new { success = false, message = ex.Message }); }
+            catch (Exception ex) { _logger.LogError(ex, "Error no controlado en {Clase}", nameof(IndexModel)); return new JsonResult(new { success = false, message = ex.Message }); }
         }
 
         public async Task<IActionResult> OnGetRespuestaSanitarioAgenciaAsync(int id)
@@ -1952,7 +2224,7 @@ DateTime? FechaSalida, string? ConductorSalidaNombre, string? ConductorSalidaRut
                 string htmlResponse = $@"<!DOCTYPE html><html lang='es'><head><meta charset='UTF-8'><title>Recepción Confirmada — Atilson Cargo</title><style>body{{font-family:'Segoe UI',sans-serif;background:#f1f5f9;display:flex;justify-content:center;align-items:center;height:100vh;margin:0;}}.card{{background:#fff;padding:40px;border-radius:12px;box-shadow:0 10px 25px rgba(0,0,0,.1);text-align:center;max-width:450px;border-top:6px solid #0ea5e9;}}h1{{color:#0ea5e9;margin-top:0;}}p{{color:#475569;line-height:1.6;font-size:15px;}}</style></head><body><div class='card'><h1>📋 Recepción Confirmada</h1><p>Hemos registrado la recepción del Certificado Sanitario en el sistema de Atilson Cargo SpA.</p><p style='font-size:13px;color:#94a3b8;margin-top:30px;'>Ya puede cerrar esta pestaña.</p></div></body></html>";
                 return Content(htmlResponse, "text/html");
             }
-            catch (Exception ex) { return Content($"Error al procesar: {ex.Message}"); }
+            catch (Exception ex) { _logger.LogError(ex, "Error no controlado en {Clase}", nameof(IndexModel)); return Content($"Error al procesar: {ex.Message}"); }
         }
 
         public async Task<IActionResult> OnGetRespuestaAgenciaAsync(int id, string estado, string tipoDoc)
@@ -1998,7 +2270,7 @@ DateTime? FechaSalida, string? ConductorSalidaNombre, string? ConductorSalidaRut
                                     if (!logActual.Contains("GUÍA VISADA") && !logActual.Contains("GUIA VISADA") && !logActual.Contains("✅"))
                                     {
                                         string linkVisado = $"{baseUrl}/Operaciones/Index?handler=RespuestaGuiaAgencia&id={idOperacion}&estado=visado";
-                                        string correoDestino = "pruebas@demo.cl"; // correo de prueba (llega a smtp4dev)
+                                        string correoDestino = "pruebas@demo.cl"; // <-- OJO EN PRODUCCIÓN
                                         string htmlRecordatorio = $@"<div style='font-family:Arial,sans-serif;max-width:580px;margin:0 auto;'><div style='background:linear-gradient(135deg,#b91c1c 0%,#7f1d1d 100%);padding:24px 28px;border-radius:8px 8px 0 0;text-align:center;'><h2 style='color:#fff;margin:0;font-size:18px;'>⏰ Recordatorio: Visación Pendiente</h2><p style='color:#fecaca;margin:6px 0 0;font-size:13px;'>Booking: <strong style='color:#fff;'>{bookingStr}</strong></p></div><div style='background:#fff;padding:28px;border:1px solid #e2e8f0;border-top:none;border-radius:0 0 8px 8px;'><p style='font-size:14px;color:#475569;line-height:1.6;'>Estimado equipo de Agencia,</p><p style='font-size:14px;color:#475569;line-height:1.6;'>El sistema detecta que han pasado <strong>más de 30 minutos</strong> desde que se marcó el inicio del proceso de visación para el Booking <strong style='color:#0f172a;'>{bookingStr}</strong>, y aún no se ha confirmado su término.</p><div style='background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:20px;margin:24px 0;text-align:center;'><p style='font-size:13px;font-weight:700;color:#0f172a;text-transform:uppercase;margin:0 0 14px;'>Si la guía ya fue visada, por favor confírmelo aquí:</p><a href='{linkVisado}' style='background:#16a34a;color:#fff;padding:14px 22px;text-decoration:none;border-radius:6px;font-weight:800;font-size:13px;display:inline-block;'>✅ CONFIRMAR GUÍA VISADA</a></div></div></div>";
                                         await emailSvc.EnviarCorreoAsync(correoDestino, $"[ALERTA AUTOMÁTICA] Visación Pendiente — BKG: {bookingStr}", htmlRecordatorio);
                                         string logAuto = $"<div style='border-left:2px solid #f59e0b; padding:6px; margin-bottom:6px; background:#fffbeb; border-top:1px solid #fde68a; border-right:1px solid #fde68a; border-bottom:1px solid #fde68a;'><div style='display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;'><span style='font-weight:800; color:#d97706; text-transform:uppercase; font-size:10px;'>⏰ RECORDATORIO ENVIADO</span><span style='color:#64748b; font-size:9px;'>{DateTime.Now:dd/MM/yyyy HH:mm}</span></div><div style='color:#475569; font-size:10px; margin-bottom:3px;'>Por: <strong>Sistema Automático</strong></div><div style='color:#1e293b; font-size:11px; line-height:1.2;'>Alerta por demora enviada a {correoDestino}</div></div>\n";
@@ -2010,6 +2282,7 @@ DateTime? FechaSalida, string? ConductorSalidaNombre, string? ConductorSalidaRut
                         }
                         catch (Exception ex)
                         {
+                            _logger.LogError(ex, "Error no controlado en temporizador de {Clase}", nameof(IndexModel));
                             using (var scope = _scopeFactory.CreateScope())
                             {
                                 var db = scope.ServiceProvider.GetRequiredService<AtilsonContext>(); var opError = await db.Operaciones.Include(o => o.OperacionesDocumentales).FirstOrDefaultAsync(o => o.Id == idOperacion);
@@ -2021,7 +2294,7 @@ DateTime? FechaSalida, string? ConductorSalidaNombre, string? ConductorSalidaRut
                 string htmlResponse = $@"<!DOCTYPE html><html lang='es'><head><meta charset='UTF-8'><meta name='viewport' content='width=device-width, initial-scale=1.0'><title>{textoEstado} — Atilson Cargo</title><style>body{{font-family:'Segoe UI',sans-serif;background:#f1f5f9;display:flex;justify-content:center;align-items:center;height:100vh;margin:0;}}.card{{background:#fff;padding:40px;border-radius:12px;box-shadow:0 10px 25px rgba(0,0,0,.1);text-align:center;max-width:450px;border-top:6px solid {color};}}h1{{color:{color};margin-top:0;}}p{{color:#475569;line-height:1.6;font-size:15px;}}</style></head><body><div class='card'><h1>{emoji} {textoEstado}</h1><p>Hemos registrado la confirmación en el sistema de Atilson Cargo SpA.<br>Nuestros operadores han sido notificados automáticamente.</p><p style='font-size:13px;color:#94a3b8;margin-top:30px;'>Ya puede cerrar esta pestaña.</p></div></body></html>";
                 return Content(htmlResponse, "text/html");
             }
-            catch (Exception ex) { return Content($"Error al procesar: {ex.Message}"); }
+            catch (Exception ex) { _logger.LogError(ex, "Error no controlado en {Clase}", nameof(IndexModel)); return Content($"Error al procesar: {ex.Message}"); }
         }
 
         public async Task<IActionResult> OnGetGuardarCambiosBLAsync(int id, string comentariosCliente)
@@ -2085,6 +2358,7 @@ DateTime? FechaSalida, string? ConductorSalidaNombre, string? ConductorSalidaRut
             }
             catch (Exception ex)
             {
+                _logger.LogError(ex, "Error no controlado en {Clase}", nameof(IndexModel));
                 return new JsonResult(new { success = false, mensaje = ex.Message });
             }
         }
@@ -2108,6 +2382,99 @@ DateTime? FechaSalida, string? ConductorSalidaNombre, string? ConductorSalidaRut
                 }
             }
             return null;
+        }
+
+        // "Seguir Camión" (Transporte, Asignación Preliminar/Final): traza en el mapa el
+        // recorrido planificado Depósito de retiro -> Planta(s) de carga -> Puerto de entrega.
+        // No es tracking GPS en vivo (no hay esa fuente de datos) — es la ruta esperada según
+        // las ubicaciones ya configuradas, igual que ya hace OnGetCalcularDistanciaLogisticaAsync
+        // para el requerimiento interplanta, pero con varias paradas y devolviendo la geometría
+        // completa para dibujarla.
+        public async Task<JsonResult> OnGetCalcularRutaTransporteAsync(string? deposito, string? planta, string? planta2, string? planta3, string? puerto, string? terminal)
+        {
+            if (string.IsNullOrWhiteSpace(planta) || string.IsNullOrWhiteSpace(puerto))
+                return new JsonResult(new { success = false, mensaje = "Faltan la Planta de carga y/o el Puerto para trazar la ruta." });
+
+            // Ubicación de cada parada (oct-2026): ver Services/UbicacionesRutaService.cs — usa el
+            // enlace de Google Maps de la planta, el terminal portuario y solo resultados en Chile.
+            if (HttpContext.RequestServices.GetService(typeof(AtilsonCargoSpa.Services.UbicacionesRutaService)) is not AtilsonCargoSpa.Services.UbicacionesRutaService ubic)
+                return new JsonResult(new { success = false, mensaje = "Servicio de ubicaciones no disponible." });
+
+            try
+            {
+                // Una parada que no se puede ubicar no oculta las demás: se informa cuál falta y cómo corregirla.
+                var paradas = new List<AtilsonCargoSpa.Services.ParadaRuta>();
+                var avisos = new List<string>();
+                async Task Agregar(Task<(AtilsonCargoSpa.Services.ParadaRuta? Parada, string? Error)> tarea)
+                {
+                    var (parada, error) = await tarea;
+                    if (parada != null) paradas.Add(parada); else avisos.Add(error ?? "No se pudo ubicar una de las paradas.");
+                }
+
+                if (!string.IsNullOrWhiteSpace(deposito) && deposito.Trim() != "-") await Agregar(ubic.UbicarDepositoAsync(deposito.Trim()));
+                await Agregar(ubic.UbicarPlantaAsync(planta.Trim()));
+                if (!string.IsNullOrWhiteSpace(planta2)) await Agregar(ubic.UbicarPlantaAsync(planta2.Trim()));
+                if (!string.IsNullOrWhiteSpace(planta3)) await Agregar(ubic.UbicarPlantaAsync(planta3.Trim()));
+                await Agregar(ubic.UbicarPuertoAsync(puerto.Trim(), terminal));
+                if (paradas.Count < 2) return new JsonResult(new { success = false, mensaje = string.Join(" ", avisos) });
+
+                using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(12) };
+                client.DefaultRequestHeaders.Add("User-Agent", "AtilsonCargoERP/1.0");
+                string coordsStr = string.Join(";", paradas.Select(p => $"{p.Lon.ToString(System.Globalization.CultureInfo.InvariantCulture)},{p.Lat.ToString(System.Globalization.CultureInfo.InvariantCulture)}"));
+                string osrmUrl = $"https://router.project-osrm.org/route/v1/driving/{coordsStr}?overview=full&geometries=geojson";
+
+                double? distanciaKm = null, duracionMin = null;
+                var polilinea = new List<double[]>();
+                try
+                {
+                    var respOsrm = await client.GetAsync(osrmUrl);
+                    if (respOsrm.IsSuccessStatusCode)
+                    {
+                        using var doc = JsonDocument.Parse(await respOsrm.Content.ReadAsStringAsync());
+                        var routes = doc.RootElement.GetProperty("routes");
+                        if (routes.GetArrayLength() > 0)
+                        {
+                            var rutaEl = routes[0];
+                            distanciaKm = Math.Round(rutaEl.GetProperty("distance").GetDouble() / 1000.0, 1);
+                            duracionMin = Math.Round(rutaEl.GetProperty("duration").GetDouble() / 60.0, 0);
+                            // GeoJSON viene como [lon, lat]; Leaflet usa [lat, lon].
+                            foreach (var c in rutaEl.GetProperty("geometry").GetProperty("coordinates").EnumerateArray())
+                                polilinea.Add(new double[] { c[1].GetDouble(), c[0].GetDouble() });
+                        }
+                    }
+                }
+                catch (Exception exRuta) when (exRuta is HttpRequestException or TaskCanceledException or JsonException)
+                {
+                    _logger.LogInformation("OSRM no respondió para la ruta de transporte: {Error}", exRuta.Message);
+                }
+
+                // Sin trazado por carretera igual se muestran las paradas bien ubicadas (unidas en línea recta).
+                if (polilinea.Count == 0) polilinea = paradas.Select(p => new[] { p.Lat, p.Lon }).ToList();
+
+                return new JsonResult(new
+                {
+                    success = true,
+                    distanciaKm,
+                    duracionMin,
+                    trazadoPorCarretera = distanciaKm != null,
+                    avisos,
+                    puntos = paradas.Select(p => new
+                    {
+                        tipo = p.Tipo,
+                        etiqueta = p.Nombre,
+                        lat = p.Lat.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                        lon = p.Lon.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                        precision = p.Precision,
+                        aproximada = p.Aproximada
+                    }),
+                    ruta = polilinea
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error no controlado en {Clase}", nameof(IndexModel));
+                return new JsonResult(new { success = false, mensaje = ex.Message });
+            }
         }
 
         public async Task<IActionResult> OnPostEnviarCertificadoClienteAsync(string idOperacion, string tipo, string correoDestino)
@@ -2142,7 +2509,7 @@ DateTime? FechaSalida, string? ConductorSalidaNombre, string? ConductorSalidaRut
                 op.FechaModificacion = DateTime.Now; await _context.SaveChangesAsync();
                 return new JsonResult(new { success = true });
             }
-            catch (Exception ex) { return new JsonResult(new { success = false, message = ex.Message }); }
+            catch (Exception ex) { _logger.LogError(ex, "Error no controlado en {Clase}", nameof(IndexModel)); return new JsonResult(new { success = false, message = ex.Message }); }
         }
 
         public async Task<IActionResult> OnGetRespuestaCertificadoClienteAsync(string id, string tipo, string respuesta)
@@ -2264,7 +2631,7 @@ DateTime? FechaSalida, string? ConductorSalidaNombre, string? ConductorSalidaRut
                                     if (!logActual.Contains("GUÍA VISADA") && !logActual.Contains("GUIA VISADA") && !logActual.Contains("✅"))
                                     {
                                         string linkVisado = $"{baseUrl}/Operaciones/Index?handler=RespuestaGuiaAgencia&id={idOperacion}&estado=visado";
-                                        string correoDestino = "pruebas@demo.cl"; // correo de prueba (llega a smtp4dev)
+                                        string correoDestino = "pruebas@demo.cl"; // <-- OJO EN PRODUCCIÓN
                                         string htmlRecordatorio = $@"<div style='font-family:Arial,sans-serif;max-width:580px;margin:0 auto;'><div style='background:linear-gradient(135deg,#b91c1c 0%,#7f1d1d 100%);padding:24px 28px;border-radius:8px 8px 0 0;text-align:center;'><h2 style='color:#fff;margin:0;font-size:18px;'>⏰ Recordatorio: Visación Pendiente</h2><p style='color:#fecaca;margin:6px 0 0;font-size:13px;'>Booking: <strong style='color:#fff;'>{bookingStr}</strong></p></div><div style='background:#fff;padding:28px;border:1px solid #e2e8f0;border-top:none;border-radius:0 0 8px 8px;'><p style='font-size:14px;color:#475569;line-height:1.6;'>Estimado equipo de Agencia,</p><p style='font-size:14px;color:#475569;line-height:1.6;'>El sistema detecta que han pasado <strong>más de 30 minutos</strong> desde que se marcó el inicio del proceso de visación para el Booking <strong style='color:#0f172a;'>{bookingStr}</strong>, y aún no se ha confirmado su término.</p><div style='background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:20px;margin:24px 0;text-align:center;'><p style='font-size:13px;font-weight:700;color:#0f172a;text-transform:uppercase;margin:0 0 14px;'>Si la guía ya fue visada, por favor confírmelo aquí:</p><a href='{linkVisado}' style='background:#16a34a;color:#fff;padding:14px 22px;text-decoration:none;border-radius:6px;font-weight:800;font-size:13px;display:inline-block;'>✅ CONFIRMAR GUÍA VISADA</a></div></div></div>";
                                         await emailSvc.EnviarCorreoAsync(correoDestino, $"[ALERTA AUTOMÁTICA] Visación Pendiente — BKG: {bookingStr}", htmlRecordatorio);
                                         string logAuto = $"<div style='border-left:2px solid #f59e0b; padding:6px; margin-bottom:6px; background:#fffbeb; border-top:1px solid #fde68a; border-right:1px solid #fde68a; border-bottom:1px solid #fde68a;'><div style='display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;'><span style='font-weight:800; color:#d97706; text-transform:uppercase; font-size:10px;'>⏰ RECORDATORIO ENVIADO</span><span style='color:#64748b; font-size:9px;'>{DateTime.Now:dd/MM/yyyy HH:mm}</span></div><div style='color:#475569; font-size:10px; margin-bottom:3px;'>Por: <strong>Sistema Automático</strong></div><div style='color:#1e293b; font-size:11px; line-height:1.2;'>Alerta por demora enviada a {correoDestino}</div></div>\n";
@@ -2276,6 +2643,7 @@ DateTime? FechaSalida, string? ConductorSalidaNombre, string? ConductorSalidaRut
                         }
                         catch (Exception ex)
                         {
+                            _logger.LogError(ex, "Error no controlado en temporizador de {Clase}", nameof(IndexModel));
                             using (var scope = _scopeFactory.CreateScope())
                             {
                                 var db = scope.ServiceProvider.GetRequiredService<AtilsonContext>(); var opError = await db.Operaciones.Include(o => o.OperacionesDocumentales).FirstOrDefaultAsync(o => o.Id == idOperacion);
@@ -2287,7 +2655,7 @@ DateTime? FechaSalida, string? ConductorSalidaNombre, string? ConductorSalidaRut
                 string htmlResponse = $@"<!DOCTYPE html><html lang='es'><head><meta charset='UTF-8'><meta name='viewport' content='width=device-width, initial-scale=1.0'><title>{textoEstado} — Atilson Cargo</title><style>body{{font-family:'Segoe UI',sans-serif;background:#f1f5f9;display:flex;justify-content:center;align-items:center;height:100vh;margin:0;}}.card{{background:#fff;padding:40px;border-radius:12px;box-shadow:0 10px 25px rgba(0,0,0,.1);text-align:center;max-width:450px;border-top:6px solid {color};}}h1{{color:{color};margin-top:0;}}p{{color:#475569;line-height:1.6;font-size:15px;}}</style></head><body><div class='card'><h1>{emoji} {textoEstado}</h1><p>Hemos registrado la confirmación en el sistema de Atilson Cargo SpA.<br>Nuestros operadores han sido notificados automáticamente.</p><p style='font-size:13px;color:#94a3b8;margin-top:30px;'>Ya puede cerrar esta pestaña.</p></div></body></html>";
                 return Content(htmlResponse, "text/html");
             }
-            catch (Exception ex) { return Content($"Error al procesar: {ex.Message}"); }
+            catch (Exception ex) { _logger.LogError(ex, "Error no controlado en {Clase}", nameof(IndexModel)); return Content($"Error al procesar: {ex.Message}"); }
         }
 
         // =========================================================================================
@@ -2311,8 +2679,10 @@ DateTime? FechaSalida, string? ConductorSalidaNombre, string? ConductorSalidaRut
             else
             {
                 responsablePago = (pagoGate ?? "").Contains("Agencia", StringComparison.OrdinalIgnoreCase) ? "AGENCIA" : "ATILSON";
-                responsable = gestionaGate == "Atilson entrega concesión incluido para cliente" ? "ATILSON" : "CLIENTE";
+                responsable = "CLIENTE";
             }
+            // "Gate out incluido para cliente": el Gate OUT lo asume Atilson (el Gate IN se cobra igual).
+            bool gateOutIncluido = gestionaGate == "Gate out incluido para cliente" || gestionaGate == "Atilson entrega concesión incluido para cliente";
 
             var txsGate = await _context.TransaccionesFinancieras
                 .Where(t => t.IdOperacion == idOperacion && t.TipoMovimiento == "EGRESO" &&
@@ -2324,7 +2694,7 @@ DateTime? FechaSalida, string? ConductorSalidaNombre, string? ConductorSalidaRut
             foreach (var tx in txsGate)
             {
                 tx.ResponsablePago = responsablePago;
-                tx.Responsable = responsable;
+                tx.Responsable = gateOutIncluido && (tx.Concepto ?? "").Contains("Gate OUT Contenedor") ? "ATILSON" : responsable;
                 tx.FechaModificacion = DateTime.Now;
                 tx.UsuarioModificador = User.Identity?.Name ?? "Sistema";
             }
