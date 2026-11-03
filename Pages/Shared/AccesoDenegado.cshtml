@@ -1,4 +1,6 @@
-﻿@page
+﻿@page "/AccesoDenegado"
+@* Ruta fija (oct-2026): Program.cs manda los accesos denegados a /AccesoDenegado; sin esta
+   ruta la página solo existía en /Shared/AccesoDenegado y se veía un error 404. *@
 @{
     ViewData["Title"] = "Acceso Denegado";
     Layout = null; // No usamos el menú superior para esta vista

@@ -16,7 +16,19 @@
         ? op.Unidadestecnicas.FirstOrDefault(u => u.Id == Model.IdUnidadTecnica)?.FotoSello
         : op.FotoSello;
 
+    // "Solicitud y Asignación de Transporte" arranca siempre colapsada; el estado
+    // "Completa/Pendiente" se ve en la cabecera del toggle sin necesidad de desplegarla.
+    bool asignacionCompleta = !string.IsNullOrWhiteSpace(numeroContenedorActual) && !string.IsNullOrWhiteSpace(numeroSelloActual);
+
     var estRespTer = Model.PageModel.ObtenerEstadoConcepto(op, "Flete Terrestre");
+
+    // "Seguir Camión": solo tiene sentido mostrarlo una vez que hay suficiente ruta
+    // configurada (Depósito, Planta y Puerto) para poder trazarla en el mapa. Se revisa
+    // también en JS tras cada guardado (ver actualizarVisibilidadSeguimiento en
+    // operaciones-detalle.js) para que aparezca sin tener que recargar la página.
+    bool puedeSeguirCamionTer = !string.IsNullOrWhiteSpace(t?.DepositoRetiro)
+        && !string.IsNullOrWhiteSpace(t?.PlantaCarga)
+        && !string.IsNullOrWhiteSpace(t?.PuertoEntrega);
 }
 <form method="post" action="/Operaciones/Index?handler=QuickEditTransporte" enctype="multipart/form-data">
     <input type="hidden" name="__RequestVerificationToken" value="" class="anti-forgery-token-input" />
@@ -26,131 +38,229 @@
         <input type="hidden" name="IdUnidadTecnica" value="@Model.IdUnidadTecnica" />
     }
 
-    <div class="form-section shadow-sm" id="ter-form-@Model.IdSuffix">
+    <div class="form-section shadow-sm" id="ter-form-@Model.IdSuffix"
+         data-resumen-panel="ter-resumen-@Model.IdSuffix" data-core-panel="ter-form-core-@Model.IdSuffix" data-resumen-completo="@(puedeSeguirCamionTer ? "true" : "false")">
         <div class="section-title-sm">
-            <span><i class="bi bi-truck me-1"></i> Servicio Terrestre@(Model.Label != null ? $" — {Model.Label}" : "")</span>
-            <a class="btn-edit-inline" onclick="toggleEditMode('ter-form-@Model.IdSuffix', this)"><i class="bi bi-pencil me-1"></i> Editar</a>
+            <span>
+                <i class="bi bi-truck me-1"></i> Servicio Terrestre@(Model.Label != null ? $" — {Model.Label}" : "")
+                @if (estRespTer.PendienteTarifa)
+                {
+                    <i class="bi bi-exclamation-octagon dt-tarifa-ico" data-tarifa-detalle="Flete Terrestre" title="Pendiente de asignación de tarifa. Falta que Comercial agregue el valor de Flete Terrestre de este tramo en Acuerdos Operativos. Puedes seguir editando esta pestaña mientras tanto."></i>
+                }
+            </span>
+            <div class="section-title-actions">
+                <a class="btn-edit-inline" onclick="toggleEditMode('ter-form-@Model.IdSuffix', this)"><i class="bi bi-pencil me-1"></i> Editar</a>
+                <button type="button" class="btn-cancel-inline edit-only-inline" onclick="cancelEditMode('ter-form-@Model.IdSuffix')">Cancelar</button>
+                <button type="button" class="btn-save-inline edit-only-inline" onclick="guardarTransporteAjax(this, '@Model.IdSuffix')"><i class="bi bi-save me-1"></i> Guardar</button>
+            </div>
         </div>
 
-        <div class="row g-3 mb-4">
-            <div class="col-md-6">
-                <div class="p-3 border rounded bg-light h-100">
-                    <div class="row g-2">
-                        <div class="col-12">
-                            <div class="row g-2">
-                                <div class="col-6">
-                                    <label class="mod-label text-success">Depósito Retiro Vacío</label>
-                                    <input type="text" class="form-control inline-field text-uppercase view-only-depositoretiro" value="@(t?.DepositoRetiro ?? "-")" readonly style="pointer-events:none;" />
-                                    <select name="DepositoRetiro" class="form-select inline-field text-uppercase edit-only-depositoretiro select2-enable" style="display:none;" disabled>
-                                        <option value="">-- Seleccionar Depósito --</option>
-                                        @if (ViewData["DepositosList"] != null)
-                                        {
-                                            foreach (var dep in (IEnumerable<AtilsonCargoSpa.Models.Deposito>)ViewData["DepositosList"])
-                                            {
-                                                <option value="@dep.NombreDeposito" selected="@(t?.DepositoRetiro == dep.NombreDeposito ? "selected" : null)">@dep.NombreDeposito</option>
-                                            }
-                                        }
-                                    </select>
-                                </div>
-                                <div class="col-6">
-                                    <label class="mod-label text-success">Folio Retiro</label>
-                                    <div class="input-group input-group-sm shadow-sm">
-                                        <input type="text" name="FolioRetiro" class="form-control inline-field text-uppercase fw-bold border-end-0" value="@t?.FolioRetiro" placeholder="N° Folio..." readonly />
-                                        @if (!string.IsNullOrEmpty(t?.RutaFolioRetiro))
-                                        {
-                                            <a href="@t.RutaFolioRetiro" target="_blank" class="input-group-text bg-light text-primary border-start-0" title="Ver Folio"><i class="bi bi-eye"></i></a>
-                                        }
-                                        <label class="input-group-text bg-white edit-only-inline border-start-0 m-0" style="display:none; cursor:pointer;" title="Adjuntar Folio">
-                                            <i class="bi bi-paperclip text-muted"></i>
-                                            <input type="file" name="UploadFolioRetiro" accept=".pdf,.jpg,.png" class="d-none edit-only-file" disabled onchange="this.parentElement.querySelector('i').classList.replace('text-muted', 'text-success')" />
-                                        </label>
-                                    </div>
-                                </div>
-                            </div>
+        <div class="op-resumen @(puedeSeguirCamionTer ? "" : "d-none") mb-4" id="ter-resumen-@Model.IdSuffix">
+            @if (!string.IsNullOrWhiteSpace(t?.EmpresaTransporte) || !string.IsNullOrWhiteSpace(t?.NombreConductor))
+            {
+                string? nombreConductorRaw = t?.NombreConductor;
+                string conductorResumenStr = string.IsNullOrWhiteSpace(nombreConductorRaw) ? "Conductor por confirmar" : nombreConductorRaw;
+                <div class="op-hero">
+                    <div class="op-hero-main">
+                        <span class="op-hero-icon"><i class="bi bi-person-badge"></i></span>
+                        <div>
+                            <div class="op-hero-eyebrow">@(t?.EmpresaTransporte ?? "Empresa por confirmar")</div>
+                            <div class="op-hero-title">@conductorResumenStr</div>
                         </div>
+                    </div>
+                    <div class="op-chips">
+                        @if (!string.IsNullOrWhiteSpace(t?.Patente)) { <span class="op-chip">Patente @t?.Patente</span> }
+                        @if (!string.IsNullOrWhiteSpace(numeroContenedorActual)) { <span class="op-chip">@numeroContenedorActual</span> }
+                        @if (!string.IsNullOrWhiteSpace(numeroSelloActual)) { <span class="op-chip">Sello @numeroSelloActual</span> }
+                    </div>
+                </div>
+            }
 
-                        <div class="col-12 mt-2">
-                            <label class="mod-label text-success"><i class="bi bi-calendar-event me-1"></i> Fecha de Retiro</label>
-                            <input type="datetime-local" name="FechaRetiroVacio" class="form-control inline-field" value="@(t?.FechaRetiroVacio?.ToString("yyyy-MM-ddTHH:mm"))" readonly />
+            <div class="op-route">
+                <div class="op-route-port">
+                    <span class="op-route-eyebrow">Depósito</span>
+                    <div class="op-route-nombre" id="resumen-deposito-nombre-@Model.IdSuffix">@(t?.DepositoRetiro ?? "-")</div>
+                    @{
+                        string? folioRetiroRaw = t?.FolioRetiro;
+                        string folioRetiroStr = string.IsNullOrWhiteSpace(folioRetiroRaw) ? "Sin folio" : $"Folio {folioRetiroRaw}";
+                        string? fechaRetiroVaciaStr = t?.FechaRetiroVacio?.ToString("dd/MM HH:mm");
+                    }
+                    <div class="op-route-sub">@folioRetiroStr</div>
+                    @if (!string.IsNullOrEmpty(fechaRetiroVaciaStr))
+                    {
+                        <div class="op-route-date">
+                            <span class="op-route-date-label"><i class="bi bi-calendar-event"></i> Retiro</span>
+                            <span class="op-route-date-val">@fechaRetiroVaciaStr</span>
                         </div>
+                    }
+                </div>
 
-                        <div class="col-12 mt-2">
-                            <div class="row g-2">
-                                <div class="col-6">
-                                    <label class="mod-label text-success">Puerto de Origen (POL)</label>
-                                    <input type="text" class="form-control inline-field text-uppercase view-only-puertoentrega" value="@(string.IsNullOrEmpty(t?.PuertoEntrega) ? "-" : t.PuertoEntrega)" readonly style="pointer-events:none;" />
-                                    <select name="PuertoEntrega" class="form-select inline-field text-uppercase edit-only-puertoentrega" style="display:none;" disabled onchange="actualizarTerminalTerrestreIndex(this, '@Model.IdSuffix')">
-                                        <option value="">-- Puerto --</option>
-                                        @if (ViewData["PuertosList"] != null)
-                                        {
-                                            foreach (var pto in ((IEnumerable<AtilsonCargoSpa.Models.Puerto>)ViewData["PuertosList"]).GroupBy(p => p.NombrePuerto).Select(g => g.First()))
-                                            {
-                                                <option value="@pto.NombrePuerto" selected="@(t?.PuertoEntrega?.ToUpper() == pto.NombrePuerto.ToUpper() ? "selected" : null)">@pto.NombrePuerto.ToUpper()</option>
-                                            }
-                                        }
-                                    </select>
-                                </div>
-                                <div class="col-6">
-                                    <label class="mod-label text-success">Terminal</label>
-                                    <input type="text" class="form-control inline-field text-uppercase view-only-terminalterrestre" value="@(!string.IsNullOrEmpty(t?.TerminalTerrestreStr) ? t.TerminalTerrestreStr : "-")" readonly style="pointer-events:none;" />
-                                    <div class="edit-only-terminalterrestre" style="display:none;">
-                                        <select name="TerminalTerrestreStr" class="form-select inline-field text-uppercase" id="selTermTer-@Model.IdSuffix" disabled style="display:none;">
-                                            <option value="">-- Terminal --</option>
-                                            <option value="STI" selected="@(t?.TerminalTerrestreStr == "STI" ? "selected" : null)">STI</option>
-                                            <option value="DPW" selected="@(t?.TerminalTerrestreStr == "DPW" ? "selected" : null)">DPW</option>
-                                        </select>
-                                        <input type="text" name="TerminalTerrestreStr" class="form-control inline-field text-uppercase" id="inpTermTer-@Model.IdSuffix" value="@(t?.TerminalTerrestreStr)" placeholder="Ej: TPS..." disabled style="display:none; background:#fff;" />
-                                    </div>
-                                </div>
-                            </div>
+                <div class="op-route-connector">
+                    <span class="op-route-connector-line"></span>
+                    <span class="op-route-marker"><i class="bi bi-truck"></i></span>
+                </div>
+
+                <div class="op-route-port">
+                    <span class="op-route-eyebrow">Planta</span>
+                    <div class="op-route-nombre" id="resumen-planta-nombre-@Model.IdSuffix">@(t?.PlantaCarga ?? "-")</div>
+                    @{ string? fechaCargaStr = t?.FechaCarga?.ToString("dd/MM HH:mm"); }
+                    <div class="op-route-sub">@(t?.ZonaCarga ?? "")</div>
+                    @if (!string.IsNullOrEmpty(fechaCargaStr))
+                    {
+                        <div class="op-route-date">
+                            <span class="op-route-date-label"><i class="bi bi-calendar-event"></i> Presentación</span>
+                            <span class="op-route-date-val">@fechaCargaStr</span>
+                        </div>
+                    }
+                </div>
+
+                <div class="op-route-connector">
+                    <span class="op-route-connector-line"></span>
+                    <span class="op-route-marker"><i class="bi bi-truck"></i></span>
+                </div>
+
+                <div class="op-route-port op-route-port--end">
+                    <span class="op-route-eyebrow">Puerto (POL)</span>
+                    <div class="op-route-nombre" id="resumen-puerto-nombre-@Model.IdSuffix">@(t?.PuertoEntrega ?? "-")</div>
+                    <div class="op-route-sub">@(t?.TerminalTerrestreStr ?? "")</div>
+                </div>
+            </div>
+
+            @if (t?.AplicaInterplanta == true && (!string.IsNullOrWhiteSpace(t?.PlantaCarga2) || !string.IsNullOrWhiteSpace(t?.PlantaCarga3)))
+            {
+                <div class="op-route-nota">
+                    <i class="bi bi-signpost-split-fill"></i>
+                    Interplanta: también retira en @(string.Join(" y ", new[] { t?.PlantaCarga2, t?.PlantaCarga3 }.Where(p => !string.IsNullOrWhiteSpace(p))))
+                </div>
+            }
+        </div>
+
+        <div class="op-form-core @(puedeSeguirCamionTer ? "d-none" : "")" id="ter-form-core-@Model.IdSuffix">
+        <div class="op-route-edit">
+            <div class="op-route-edit-stop">
+                <div class="op-route-edit-eyebrow"><i class="bi bi-dropbox"></i> Depósito</div>
+                <label class="mod-label">Depósito Retiro Vacío</label>
+                @if (Model.DepositoDesdeMaritimo)
+                {
+                    // Con tramo marítimo el depósito se define en la pestaña Marítimo (oct-2026):
+                    // aquí es solo informativo y no se envía al guardar Terrestre.
+                    string depositoInfoTer = !string.IsNullOrWhiteSpace(t?.DepositoRetiro) ? t!.DepositoRetiro! : (Model.DepositoRetiroBooking ?? "");
+                    <input type="text" class="form-control inline-field text-uppercase view-only-depositoretiro" value="@(string.IsNullOrWhiteSpace(depositoInfoTer) ? "-" : depositoInfoTer)" readonly style="pointer-events:none;" />
+                    <input type="text" class="form-control text-uppercase edit-only-depositoretiro" value="@(string.IsNullOrWhiteSpace(depositoInfoTer) ? "-" : depositoInfoTer)" readonly tabindex="-1" style="display:none; background:#f1f5f9; pointer-events:none;" />
+                    <span class="d-block mt-1" style="font-size:10px; color:#94a3b8;"><i class="bi bi-lock me-1"></i>Se define en la pestaña Marítimo.</span>
+                }
+                else
+                {
+                    <input type="text" class="form-control inline-field text-uppercase view-only-depositoretiro" value="@(t?.DepositoRetiro ?? "-")" readonly style="pointer-events:none;" />
+                    <select name="DepositoRetiro" class="form-select inline-field text-uppercase edit-only-depositoretiro select2-enable" style="display:none;" disabled>
+                        <option value="">-- Seleccionar Depósito --</option>
+                        @if (ViewData["DepositosList"] != null)
+                        {
+                            foreach (var dep in (IEnumerable<AtilsonCargoSpa.Models.Deposito>)ViewData["DepositosList"])
+                            {
+                                <option value="@dep.NombreDeposito" selected="@(t?.DepositoRetiro == dep.NombreDeposito ? "selected" : null)">@dep.NombreDeposito</option>
+                            }
+                        }
+                    </select>
+                }
+                <div class="op-route-edit-sub op-route-edit-sub--full">
+                    <div>
+                        <label class="mod-label">Folio Retiro</label>
+                        <div class="input-group input-group-sm shadow-sm">
+                            <input type="text" name="FolioRetiro" class="form-control inline-field text-uppercase fw-bold border-end-0" value="@t?.FolioRetiro" placeholder="N° Folio..." readonly />
+                            @if (!string.IsNullOrEmpty(t?.RutaFolioRetiro))
+                            {
+                                <a href="@t.RutaFolioRetiro" target="_blank" class="input-group-text bg-light text-primary border-start-0" title="Ver Folio"><i class="bi bi-eye"></i></a>
+                            }
+                            <label class="input-group-text bg-white edit-only-inline border-start-0 m-0" style="display:none; cursor:pointer;" title="Adjuntar Folio">
+                                <i class="bi bi-paperclip text-muted"></i>
+                                <input type="file" name="UploadFolioRetiro" accept=".pdf,.jpg,.png" class="d-none edit-only-file" disabled onchange="this.parentElement.querySelector('i').classList.replace('text-muted', 'text-success')" />
+                            </label>
+                        </div>
+                    </div>
+                </div>
+                <div class="op-route-edit-sub op-route-edit-sub--full">
+                    <div>
+                        <label class="mod-label"><i class="bi bi-calendar-event me-1"></i> Fecha de Retiro</label>
+                        <input type="datetime-local" name="FechaRetiroVacio" class="form-control inline-field" value="@(t?.FechaRetiroVacio?.ToString("yyyy-MM-ddTHH:mm"))" readonly />
+                    </div>
+                </div>
+            </div>
+
+            <div class="op-route-edit-connector"><span class="op-route-edit-marker"><i class="bi bi-truck"></i></span></div>
+
+            <div class="op-route-edit-stop">
+                <div class="op-route-edit-eyebrow"><i class="bi bi-building"></i> Planta</div>
+                <label class="mod-label">Planta de Cliente</label>
+                <input type="text" class="form-control inline-field text-uppercase view-only-planta" value="@(t?.PlantaCarga ?? "-")" readonly style="pointer-events:none;" />
+                <select name="PlantaCarga" class="form-select inline-field text-uppercase edit-only-planta select2-enable" style="display:none;" disabled onchange="autoCompletarPlanta(this)">
+                    <option value="">-- Seleccionar Planta --</option>
+                    @if (ViewData["PlantasList"] != null)
+                    {
+                        foreach (var planta in (IEnumerable<AtilsonCargoSpa.Models.Planta>)ViewData["PlantasList"])
+                        {
+                            <option value="@planta.Nombre" data-ciudad="@planta.Ciudad?.Nombre" selected="@(t?.PlantaCarga == planta.Nombre ? "selected" : null)">@planta.Nombre</option>
+                        }
+                    }
+                </select>
+                <div class="op-route-edit-sub">
+                    <div>
+                        <label class="mod-label">Ciudad</label>
+                        <input type="text" class="form-control inline-field text-uppercase view-only-zonacarga" value="@(t?.ZonaCarga ?? "-")" readonly style="pointer-events:none;" />
+                        <input type="text" name="ZonaCarga" class="form-control inline-field text-uppercase edit-only-zonacarga" value="@t?.ZonaCarga" style="display:none; background:#fff;" disabled />
+                    </div>
+                    <div>
+                        <label class="mod-label"><i class="bi bi-calendar-event me-1"></i> Presentación</label>
+                        <input type="datetime-local" name="FechaCarga" class="form-control inline-field" value="@(t?.FechaCarga?.ToString("yyyy-MM-ddTHH:mm"))" readonly />
+                    </div>
+                </div>
+                <div class="op-route-edit-sub op-route-edit-sub--full">
+                    <div>
+                        <label class="mod-label"><i class="bi bi-map me-1"></i> Link Google Maps</label>
+                        <div class="d-flex gap-2 align-items-center">
+                            <input type="url" class="form-control inline-field view-only-link" value="@t?.LinkTracking" readonly style="pointer-events:none;" />
+                            <input type="url" name="LinkTracking" class="form-control inline-field edit-only-link" value="@t?.LinkTracking" placeholder="URL Google Maps..." style="display:none; background:#fff;" disabled />
+                            @if (!string.IsNullOrEmpty(t?.LinkTracking))
+                            {
+                                <a href="@t.LinkTracking" target="_blank" class="btn btn-sm btn-outline-danger py-1 px-2 view-only-maps-btn" title="Abrir en Maps"><i class="bi bi-map"></i></a>
+                            }
                         </div>
                     </div>
                 </div>
             </div>
-            <div class="col-md-6">
-                <div class="p-3 border rounded bg-light h-100">
-                    <div class="row g-2">
-                        <div class="col-12">
-                            <label class="mod-label">Planta de Cliente</label>
-                            <input type="text" class="form-control inline-field text-uppercase view-only-planta" value="@(t?.PlantaCarga ?? "-")" readonly style="pointer-events:none;" />
-                            <select name="PlantaCarga" class="form-select inline-field text-uppercase edit-only-planta select2-enable" style="display:none;" disabled onchange="autoCompletarPlanta(this)">
-                                <option value="">-- Seleccionar Planta --</option>
-                                @if (ViewData["PlantasList"] != null)
-                                {
-                                    foreach (var planta in (IEnumerable<AtilsonCargoSpa.Models.Planta>)ViewData["PlantasList"])
-                                    {
-                                        <option value="@planta.Nombre" data-ciudad="@planta.Ciudad?.Nombre" selected="@(t?.PlantaCarga == planta.Nombre ? "selected" : null)">@planta.Nombre</option>
-                                    }
-                                }
+
+            <div class="op-route-edit-connector"><span class="op-route-edit-marker"><i class="bi bi-truck"></i></span></div>
+
+            <div class="op-route-edit-stop">
+                <div class="op-route-edit-eyebrow"><i class="bi bi-geo-alt"></i> Puerto (POL)</div>
+                <label class="mod-label">Puerto de Origen</label>
+                <input type="text" class="form-control inline-field text-uppercase view-only-puertoentrega" value="@(string.IsNullOrEmpty(t?.PuertoEntrega) ? "-" : t.PuertoEntrega)" readonly style="pointer-events:none;" />
+                <select name="PuertoEntrega" class="form-select inline-field text-uppercase edit-only-puertoentrega" style="display:none;" disabled onchange="actualizarTerminalTerrestreIndex(this, '@Model.IdSuffix')">
+                    <option value="">-- Puerto --</option>
+                    @if (ViewData["PuertosList"] != null)
+                    {
+                        foreach (var pto in ((IEnumerable<AtilsonCargoSpa.Models.Puerto>)ViewData["PuertosList"]).GroupBy(p => p.NombrePuerto).Select(g => g.First()))
+                        {
+                            <option value="@pto.NombrePuerto" selected="@(t?.PuertoEntrega?.ToUpper() == pto.NombrePuerto.ToUpper() ? "selected" : null)">@pto.NombrePuerto.ToUpper()</option>
+                        }
+                    }
+                </select>
+                <div class="op-route-edit-sub op-route-edit-sub--full">
+                    <div>
+                        <label class="mod-label">Terminal</label>
+                        <input type="text" class="form-control inline-field text-uppercase view-only-terminalterrestre" value="@(!string.IsNullOrEmpty(t?.TerminalTerrestreStr) ? t.TerminalTerrestreStr : "-")" readonly style="pointer-events:none;" />
+                        <div class="edit-only-terminalterrestre" style="display:none;">
+                            <select name="TerminalTerrestreStr" class="form-select inline-field text-uppercase" id="selTermTer-@Model.IdSuffix" disabled style="display:none;">
+                                <option value="">-- Terminal --</option>
+                                <option value="STI" selected="@(t?.TerminalTerrestreStr == "STI" ? "selected" : null)">STI</option>
+                                <option value="DPW" selected="@(t?.TerminalTerrestreStr == "DPW" ? "selected" : null)">DPW</option>
                             </select>
-                        </div>
-                        <div class="col-12 mt-2">
-                            <div class="row g-2">
-                                <div class="col-6">
-                                    <label class="mod-label">Ciudad</label>
-                                    <input type="text" class="form-control inline-field text-uppercase view-only-zonacarga" value="@(t?.ZonaCarga ?? "-")" readonly style="pointer-events:none;" />
-                                    <input type="text" name="ZonaCarga" class="form-control inline-field text-uppercase edit-only-zonacarga" value="@t?.ZonaCarga" style="display:none; background:#fff;" disabled />
-                                </div>
-                                <div class="col-6">
-                                    <label class="mod-label"><i class="bi bi-calendar-event me-1"></i> Fecha de Presentación en Planta</label>
-                                    <input type="datetime-local" name="FechaCarga" class="form-control inline-field" value="@(t?.FechaCarga?.ToString("yyyy-MM-ddTHH:mm"))" readonly />
-                                </div>
-                            </div>
-                        </div>
-                        <div class="col-12 mt-2">
-                            <label class="mod-label"><i class="bi bi-map me-1 text-danger"></i> Link Google Maps</label>
-                            <div class="d-flex gap-2 align-items-center">
-                                <input type="url" class="form-control inline-field view-only-link" value="@t?.LinkTracking" readonly style="pointer-events:none;" />
-                                <input type="url" name="LinkTracking" class="form-control inline-field edit-only-link" value="@t?.LinkTracking" placeholder="URL Google Maps..." style="display:none; background:#fff;" disabled />
-                                @if (!string.IsNullOrEmpty(t?.LinkTracking))
-                                {
-                                    <a href="@t.LinkTracking" target="_blank" class="btn btn-sm btn-outline-danger py-1 px-2 view-only-maps-btn" title="Abrir en Maps"><i class="bi bi-map"></i></a>
-                                }
-                            </div>
+                            <input type="text" name="TerminalTerrestreStr" class="form-control inline-field text-uppercase" id="inpTermTer-@Model.IdSuffix" value="@(t?.TerminalTerrestreStr)" placeholder="Ej: TPS..." disabled style="display:none; background:#fff;" />
                         </div>
                     </div>
                 </div>
             </div>
+        </div>
         </div>
 
         <div class="col-12 mt-2 pt-2 border-top">
@@ -217,10 +327,39 @@
             </div>
         </div>
 
-        <ul class="nav nav-pills mb-3 border-top pt-3" role="tablist">
-            <li class="nav-item"><button class="nav-link active py-1 px-3" data-bs-toggle="pill" data-bs-target="#sol-serv-@Model.IdSuffix" type="button" style="font-size:11px; font-weight:700; border: 1px solid #cbd5e1; color: #475569; background: #f1f5f9;"><i class="bi bi-send me-1"></i> Solicitud Servicio</button></li>
-            <li class="nav-item"><button class="nav-link py-1 px-3" data-bs-toggle="pill" data-bs-target="#asig-pre-@Model.IdSuffix" type="button" style="font-size:11px; font-weight:700; border: 1px solid #cbd5e1; color: #475569; background: #f1f5f9;"><i class="bi bi-person-check me-1"></i> Asig. Preliminar</button></li>
-            <li class="nav-item"><button class="nav-link py-1 px-3" data-bs-toggle="pill" data-bs-target="#asig-fin-@Model.IdSuffix" type="button" style="font-size:11px; font-weight:700; border: 1px solid #cbd5e1; color: #475569; background: #f1f5f9;"><i class="bi bi-check2-all me-1"></i> Asig. Final</button></li>
+        <div class="ter-ruta-wrap @(puedeSeguirCamionTer ? "" : "d-none") mt-3 mb-3" id="seguimiento-wrap-@Model.IdSuffix">
+            <button type="button" class="ter-ruta-toggle" data-bs-toggle="collapse" data-bs-target="#seguimiento-collapse-@Model.IdSuffix" aria-expanded="false" aria-controls="seguimiento-collapse-@Model.IdSuffix" onclick="toggleSeguimientoTransporte(event, '@Model.IdSuffix')">
+                <span class="ter-ruta-toggle__icon"><i class="bi bi-signpost-split"></i></span>
+                <span class="ter-ruta-toggle__label">
+                    <strong>Seguir Camión — Ruta Estimada</strong>
+                    <span class="ter-ruta-toggle__resumen" id="seguimiento-resumen-@Model.IdSuffix">Depósito → Planta → Puerto, según lo configurado</span>
+                </span>
+                <i class="bi bi-chevron-down ter-ruta-toggle__chevron"></i>
+            </button>
+            <div class="collapse" id="seguimiento-collapse-@Model.IdSuffix">
+                <div class="ter-ruta-body">
+                    <div id="seguimiento-mapa-@Model.IdSuffix" class="ter-ruta-mapa"></div>
+                    <ol class="ter-ruta-paradas" id="seguimiento-paradas-@Model.IdSuffix" aria-label="Paradas de la ruta"></ol>
+                    <div class="ter-ruta-nota"><i class="bi bi-info-circle me-1"></i>Ruta estimada por carretera según Depósito, Planta y Puerto — no es la posición en vivo del camión.</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="op-toggle-wrap mb-3">
+            <button type="button" class="op-toggle" data-bs-toggle="collapse" data-bs-target="#ter-asig-collapse-@Model.IdSuffix" aria-expanded="false" aria-controls="ter-asig-collapse-@Model.IdSuffix">
+                <span class="op-toggle__icon"><i class="bi bi-send"></i></span>
+                <span class="op-toggle__label">
+                    <strong>Solicitud y Asignación de Transporte</strong>
+                    <span class="op-toggle__estado @(asignacionCompleta ? "op-toggle__estado--ok" : "op-toggle__estado--pend")">@(asignacionCompleta ? "Completa — contenedor y sello registrados" : "Pendiente: conductor, contenedor y sello")</span>
+                </span>
+                <i class="bi bi-chevron-down op-toggle__chevron"></i>
+            </button>
+            <div class="collapse" id="ter-asig-collapse-@Model.IdSuffix">
+            <div class="op-toggle-body">
+        <ul class="nav nav-pills ter-sub-pills mb-3" role="tablist">
+            <li class="nav-item"><button class="nav-link active" data-bs-toggle="pill" data-bs-target="#sol-serv-@Model.IdSuffix" type="button"><i class="bi bi-send me-1"></i> Solicitud Servicio</button></li>
+            <li class="nav-item"><button class="nav-link" data-bs-toggle="pill" data-bs-target="#asig-pre-@Model.IdSuffix" type="button"><i class="bi bi-person-check me-1"></i> Asig. Preliminar</button></li>
+            <li class="nav-item"><button class="nav-link" data-bs-toggle="pill" data-bs-target="#asig-fin-@Model.IdSuffix" type="button"><i class="bi bi-check2-all me-1"></i> Asig. Final</button></li>
         </ul>
 
         <div class="tab-content p-0" style="min-height: auto;">
@@ -231,16 +370,23 @@
                                                                         <div class="col-md-4">
                             <label class="mod-label">Empresa Transporte</label>
                             <input type="text" class="form-control inline-field text-uppercase view-only-empresatransporte" value="@(t?.EmpresaTransporte ?? "-")" readonly style="pointer-events:none;" />
-                            <input type="text" name="EmpresaTransporte" list="listaEmpresasTransporte-@Model.IdSuffix" class="form-control inline-field text-uppercase edit-only-empresatransporte" value="@t?.EmpresaTransporte" placeholder="Escriba el nombre de la empresa..." style="display:none;" disabled />
-                            <datalist id="listaEmpresasTransporte-@Model.IdSuffix">
-                                @if (ViewData["ProveedoresTransporteList"] != null)
+                            @{
+                                var transportistasPanel = (ViewData["ProveedoresTransporteList"] as IEnumerable<AtilsonCargoSpa.Models.Proveedore>)?.ToList() ?? new List<AtilsonCargoSpa.Models.Proveedore>();
+                                string empresaActualPanel = (t?.EmpresaTransporte ?? "").Trim();
+                                bool empresaEnLista = empresaActualPanel == "" || transportistasPanel.Any(pv => string.Equals(pv.NombreProveedor.Trim(), empresaActualPanel, StringComparison.OrdinalIgnoreCase));
+                            }
+                            <select name="EmpresaTransporte" class="form-select inline-field text-uppercase edit-only-empresatransporte select2-enable" style="display:none;" disabled onchange="autoCompletarTransportista(this)">
+                                <option value="">-- Seleccionar transportista --</option>
+                                @if (!empresaEnLista)
                                 {
-                                    foreach (var prov in (IEnumerable<AtilsonCargoSpa.Models.Proveedore>)ViewData["ProveedoresTransporteList"])
-                                    {
-                                        <option value="@prov.NombreProveedor"></option>
-                                    }
+                                    <option value="@empresaActualPanel" data-rut="@t?.RutTransporte" data-correo="@t?.CorreoTransporte" selected>@empresaActualPanel.ToUpper() (actual)</option>
                                 }
-                            </datalist>
+                                @foreach (var prov in transportistasPanel)
+                                {
+                                    bool esActualPanel = string.Equals(prov.NombreProveedor.Trim(), empresaActualPanel, StringComparison.OrdinalIgnoreCase);
+                                    <option value="@prov.NombreProveedor.Trim()" data-rut="@prov.Rut" data-correo="@prov.CorreoOperativo" data-contacto="@prov.Contacto" selected="@esActualPanel">@prov.NombreProveedor.Trim().ToUpper()</option>
+                                }
+                            </select>
                         </div>
                         <div class="col-md-4"><label class="mod-label">RUT Empresa</label><input type="text" name="RutTransporte" class="form-control inline-field text-uppercase" value="@t?.RutTransporte" readonly /></div>
                         <div class="col-md-4">
@@ -279,7 +425,7 @@
                         <div class="col-md-4"><label class="mod-label">Patente Rampla</label><input type="text" name="PatenteRampla" class="form-control inline-field text-uppercase" value="@t?.PatenteRampla" readonly /></div>
                         <div class="col-md-4">
                             <label class="mod-label">Correos Cliente (Separados por ;)</label>
-                            <input type="text" name="CorreosCliente" class="form-control inline-field text-primary fw-bold" value="@(op.IdClienteNavigation?.Correo ?? "")" readonly />
+                            <input type="text" name="CorreosCliente" class="form-control inline-field fw-bold" value="@(op.IdClienteNavigation?.Correo ?? "")" readonly />
                         </div>
                     </div>
                     <div class="p-2 rounded border border-dashed bg-light mb-3" style="border-style: dashed !important;"><p class="text-muted mb-0" style="font-size:10px;"><i class="bi bi-info-circle me-1"></i> Esta notificación enviará los datos del conductor sin número de contenedor. El número de equipo se informará en la Asignación Final.</p></div>
@@ -291,13 +437,12 @@
             </div>
             <div class="tab-pane fade" id="asig-fin-@Model.IdSuffix">
                 <div class="p-3 bg-white rounded border">
-                    <div class="d-flex justify-content-end gap-2">
-                        <button type="button" class="btn btn-sm btn-outline-success fw-bold px-4" onclick="guardarTransporteYEnviar(event, '@Model.IdSuffix', 'completa')" style="font-size:11px;"><i class="bi bi-envelope me-1"></i> Previsualizar Borrador</button>
-                        <button type="button" class="btn btn-sm btn-success fw-bold px-4" onclick="guardarTransporteYEnviar(event, '@Model.IdSuffix', 'completa')" style="font-size:11px;"><i class="bi bi-check2-all me-1"></i> Generar Asignación Completa</button>
+                    <div class="section-title-sm mb-3" style="font-size:10px;">
+                        <span><i class="bi bi-box-seam me-1 text-success"></i> Contenedor y Sello Final</span>
                     </div>
                     <div class="row g-3 mb-3">
                         <div class="col-md-6">
-                            <label class="mod-label text-primary">N° Contenedor <span class="text-danger fw-bold">*</span></label>
+                            <label class="mod-label">N° Contenedor <span class="text-danger fw-bold">*</span></label>
                             <div class="d-flex gap-2 align-items-stretch">
                                 <input type="text" name="NumeroContenedor" class="form-control inline-field text-uppercase fw-bold" value="@numeroContenedorActual" placeholder="N° CONTENEDOR" readonly style="flex: 1;" />
                                 <label class="mb-0 d-flex align-items-center justify-content-center gap-2 fw-bold" style="flex: 1; cursor:pointer; background:#f8fafc; border: 1px solid #e2e8f0; border-radius:6px; font-size:11px; color:#475569; padding: 8px 12px;" title="Adjuntar respaldo">
@@ -314,7 +459,7 @@
                             </div>
                         </div>
                         <div class="col-md-6">
-                            <label class="mod-label text-primary">N° Sello <span class="text-danger fw-bold">*</span></label>
+                            <label class="mod-label">N° Sello <span class="text-danger fw-bold">*</span></label>
                             <div class="d-flex gap-2 align-items-stretch">
                                 <input type="text" name="NumeroSello" class="form-control inline-field text-uppercase fw-bold" value="@numeroSelloActual" placeholder="N° SELLO" readonly style="flex: 1;" />
                                 <label class="mb-0 d-flex align-items-center justify-content-center gap-2 fw-bold" style="flex: 1; cursor:pointer; background:#f8fafc; border: 1px solid #e2e8f0; border-radius:6px; font-size:11px; color:#475569; padding: 8px 12px;" title="Adjuntar respaldo">
@@ -332,17 +477,17 @@
                         </div>
                     </div>
                     <div class="p-2 rounded bg-success bg-opacity-10 border border-success border-opacity-25 mb-3"><p class="text-success mb-0" style="font-size:10px;"><i class="bi bi-check-circle me-1"></i> Esta notificación enviará la asignación completa con N° de contenedor y sello al cliente. Requiere que ambos campos estén ingresados en Asignación Final.</p></div>
+                    <div class="d-flex justify-content-end gap-2">
+                        <button type="button" class="btn btn-sm btn-outline-success fw-bold px-4" onclick="guardarTransporteYEnviar(event, '@Model.IdSuffix', 'completa')" style="font-size:11px;"><i class="bi bi-envelope me-1"></i> Previsualizar Borrador</button>
+                        <button type="button" class="btn btn-sm btn-success fw-bold px-4" onclick="guardarTransporteYEnviar(event, '@Model.IdSuffix', 'completa')" style="font-size:11px;"><i class="bi bi-check2-all me-1"></i> Generar Asignación Completa</button>
+                    </div>
                 </div>
             </div>
         </div>
-
-        @if (estRespTer.PendienteTarifa)
-        {
-            <div class="alert alert-danger d-flex align-items-center gap-2 py-2 px-3 mt-3 mb-0" style="font-size:11px; font-weight:700; border-radius:8px;">
-                <i class="bi bi-lock-fill"></i>
-                <div><strong>Pendiente de asignación de tarifa.</strong> Comercial debe agregar el valor de este tramo (Flete Terrestre) en Acuerdos Operativos.</div>
             </div>
-        }
+            </div>
+        </div>
+
         @if (!Model.IdUnidadTecnica.HasValue)
         {
             <div class="d-flex align-items-center gap-1 mt-2 pt-2 border-top" style="font-size:10px;">
@@ -365,15 +510,9 @@
         else
         {
             <div class="mt-2 pt-2 border-top text-muted" style="font-size:9px;">
-                <i class="bi bi-info-circle me-1"></i>El costo de Flete Terrestre y su responsable de pago se gestionan a nivel de Booking, en la pestaña "Contenedor Principal".
+                <i class="bi bi-info-circle me-1"></i>El costo de Flete Terrestre y su responsable de pago se gestionan a nivel de Booking, en la pestaña del 1° contenedor.
             </div>
         }
 
-        <div class="col-12 text-end mt-3 pt-3 border-top btn-save-wrapper d-none">
-            <div class="d-flex justify-content-end gap-2">
-                <button type="button" class="btn btn-sm btn-outline-secondary fw-bold" onclick="cancelEditMode('ter-form-@Model.IdSuffix')">Cancelar</button>
-                <button type="button" class="btn btn-sm btn-dark fw-bold" onclick="guardarTransporteAjax(this, '@Model.IdSuffix')"><i class="bi bi-save me-1"></i> Guardar Transporte</button>
-            </div>
-        </div>
     </div>
 </form>

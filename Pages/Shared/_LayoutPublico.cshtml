@@ -1,0 +1,261 @@
+@* Layout del sitio público (nov-2026): landing, páginas de servicio e itinerarios.
+   Barra superior (indicadores y noticia), navegación con menú de servicios, pie y
+   asistente flotante. Estilos en wwwroot/css/publico.css y comportamiento en
+   wwwroot/js/publico.js. Cada página agrega lo suyo en las secciones Head y Scripts. *@
+@using AtilsonCargoSpa.Pages.Servicios
+@inject AtilsonCargoSpa.Services.SitioWebInfo Sitio
+@inject Microsoft.AspNetCore.Mvc.ViewFeatures.IFileVersionProvider Versiones
+@{
+    string titulo = ViewData["Title"] as string ?? "Atilson Cargo · Servicios logísticos";
+    string descripcion = ViewData["Description"] as string ?? "Atilson Cargo: freight forwarder en Valparaíso. Servicio marítimo, terrestre, documental, agencia de aduanas y un portal para seguir cada embarque.";
+    string navActivo = ViewData["Nav"] as string ?? "";
+}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@titulo</title>
+    <meta name="description" content="@descripcion" />
+    <meta name="theme-color" content="#160e2f" />
+    <link rel="icon" type="image/svg+xml" href="~/img/marca/atilson-isotipo.svg" asp-append-version="true" />
+    <meta name="i18n-en" content="@Versiones.AddFileVersionToPath(Context.Request.PathBase, "/js/i18n/en.json")" />
+    @* Si la persona eligió inglés, se oculta la página un instante mientras se traduce (i18n.js). *@
+    <style>html.trad-pend body { visibility: hidden; }</style>
+    <script>try { if (localStorage.getItem('atilson-idioma') === 'en') { document.documentElement.classList.add('trad-pend'); document.documentElement.lang = 'en'; setTimeout(function () { document.documentElement.classList.remove('trad-pend'); }, 1500); } } catch (e) { }</script>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    <link rel="stylesheet" href="~/css/publico.css" asp-append-version="true" />
+    @await RenderSectionAsync("Head", required: false)
+</head>
+<body>
+
+    <div class="top-bar d-none d-lg-block">
+        <div class="contenedor">
+            <div class="top-redes" aria-label="Redes sociales">
+                <a href="@Sitio.LinkedIn" target="_blank" rel="noopener" title="LinkedIn" aria-label="LinkedIn"><i class="bi bi-linkedin"></i></a>
+                <a href="@Sitio.InstagramUrl" target="_blank" rel="noopener" title="Instagram" aria-label="Instagram"><i class="bi bi-instagram"></i></a>
+                <a href="@Sitio.FacebookUrl" target="_blank" rel="noopener" title="Facebook" aria-label="Facebook"><i class="bi bi-facebook"></i></a>
+                <a href="@Sitio.WhatsAppUrl" target="_blank" rel="noopener" title="WhatsApp" aria-label="WhatsApp"><i class="bi bi-whatsapp"></i></a>
+            </div>
+
+            <div class="top-centro">
+                <div class="indicadores" data-indicadores="@Url.Page("/Index", "Indicadores")" title="Valores del día">
+                    <span class="live-indicator" aria-hidden="true"></span>
+                    <div><b>UF</b><span id="top-uf">…</span></div>
+                    <div><b>USD</b><span id="top-usd">…</span></div>
+                    <div><b>EUR</b><span id="top-eur">…</span></div>
+                </div>
+                <div class="ticker-divider" data-ticker></div>
+                <div class="d-flex align-items-center text-truncate" title="Última noticia de Mundo Marítimo" data-ticker>
+                    <i class="bi bi-newspaper me-2" aria-hidden="true"></i>
+                    <a href="/#noticias" id="top-news-ticker" data-url="@Url.Page("/Index", "Noticias")" class="news-ticker-text text-truncate" target="_blank" rel="noopener">Cargando noticias…</a>
+                </div>
+            </div>
+
+            <div class="top-contacto">
+                <a href="mailto:@Sitio.CorreoContacto"><i class="bi bi-envelope-fill"></i>@Sitio.CorreoContacto</a>
+                @if (Sitio.Telefono != null)
+                {
+                    <a href="@Sitio.TelefonoEnlace"><i class="bi bi-telephone-fill"></i>@Sitio.Telefono</a>
+                }
+            </div>
+        </div>
+    </div>
+
+    <nav class="navbar-atilson" id="navbar" aria-label="Principal">
+        <div class="contenedor">
+            <a href="/" class="navbar-brand" aria-label="Atilson Cargo, inicio">
+                <img src="~/img/marca/atilson-logo-blanco.svg" alt="Atilson Servicios Logísticos" class="navbar-logo" id="logo-img"
+                     data-logo-claro="@Url.Content("~/img/marca/atilson-logo-blanco.svg")" data-logo-color="@Url.Content("~/img/marca/atilson-logo.svg")" asp-append-version="true" />
+            </a>
+            <div class="nav-enlaces d-none d-lg-flex">
+                <div class="nav-menu">
+                    <button type="button" class="nav-link @(navActivo == "servicios" ? "activo" : "")" data-menu aria-expanded="false" aria-controls="menuServicios">Servicios <i class="bi bi-chevron-down" aria-hidden="true"></i></button>
+                    <div class="nav-panel" id="menuServicios" hidden>
+                        <div class="nav-panel-servicios">
+                            <p class="nav-panel-tit">Servicios logísticos</p>
+                            <div class="nav-panel-grid">
+                                @foreach (var s in ServiciosWeb.Todos.Where(x => !x.EsPortal))
+                                {
+                                    <a href="@s.Url" class="nav-serv"><i class="bi @s.Icono" aria-hidden="true"></i><span><b>@s.NombreMenu</b><small>@s.Corto</small></span><i class="bi bi-chevron-right nav-serv-ir" aria-hidden="true"></i></a>
+                                }
+                            </div>
+                            <div class="nav-panel-pie">
+                                <a href="/Itinerarios"><i class="bi bi-calendar2-week" aria-hidden="true"></i> Ver itinerarios</a>
+                                <a href="/PortalCliente/SolicitarCotizacion"><i class="bi bi-calculator" aria-hidden="true"></i> Cotizar servicio</a>
+                                <a href="/#contacto"><i class="bi bi-chat-dots" aria-hidden="true"></i> Hablar con un ejecutivo</a>
+                            </div>
+                        </div>
+                        @foreach (var s in ServiciosWeb.Todos.Where(x => x.EsPortal))
+                        {
+                            <a href="@s.Url" class="nav-portal">
+                                <span class="nav-portal-lema"><i class="bi @s.Icono" aria-hidden="true"></i> Plataforma propia</span>
+                                <b>@s.Nombre</b>
+                                <small>@s.Corto</small>
+                                <span class="nav-portal-demo" aria-hidden="true">
+                                    <span class="npd-fila"><em>SAI</em><i class="npd-ruta"><i></i></i><em>RTM</em></span>
+                                    <span class="npd-hito"><i class="bi bi-check2"></i> Zarpe confirmado</span>
+                                    <span class="npd-hito npd-hito-2"><i class="bi bi-file-earmark-check"></i> BL listo para aprobar</span>
+                                </span>
+                                <span class="nav-portal-cta">Conoce el portal <i class="bi bi-chevron-right" aria-hidden="true"></i></span>
+                            </a>
+                        }
+                    </div>
+                </div>
+                <a href="/Itinerarios" class="nav-link @(navActivo == "itinerarios" ? "activo" : "")" aria-current="@(navActivo == "itinerarios" ? "page" : null)">Itinerarios</a>
+                @if (Sitio.MostrarNosotros)
+                {
+                    <a href="/Nosotros" class="nav-link @(navActivo == "nosotros" ? "activo" : "")" aria-current="@(navActivo == "nosotros" ? "page" : null)">Nosotros</a>
+                }
+                <a href="/#noticias" class="nav-link">Noticias</a>
+                <a href="/#contacto" class="nav-link">Contacto</a>
+            </div>
+            <div class="nav-derecha">
+                <button type="button" class="btn-idioma" data-idioma aria-label="View in English" title="View in English">
+                    <span class="idioma-bandera idioma-en" aria-hidden="true"><svg viewBox="0 0 60 30"><clipPath id="banUk1"><path d="M0 0v30h60V0z"/></clipPath><clipPath id="banUk2"><path d="M30 15h30v15zv15H0zH0V0zV0h30z"/></clipPath><g clip-path="url(#banUk1)"><path d="M0 0v30h60V0z" fill="#012169"/><path d="M0 0l60 30m0-30L0 30" stroke="#fff" stroke-width="6"/><path d="M0 0l60 30m0-30L0 30" clip-path="url(#banUk2)" stroke="#C8102E" stroke-width="4"/><path d="M30 0v30M0 15h60" stroke="#fff" stroke-width="10"/><path d="M30 0v30M0 15h60" stroke="#C8102E" stroke-width="6"/></g></svg></span>
+                    <span class="idioma-bandera idioma-es" aria-hidden="true"><svg viewBox="0 0 30 20"><rect width="30" height="10" fill="#fff"/><rect y="10" width="30" height="10" fill="#d52b1e"/><rect width="10" height="10" fill="#0039a6"/><path d="M5 2.2l.67 2.07h2.18l-1.76 1.28.67 2.07L5 6.34 3.24 7.62l.67-2.07-1.76-1.28h2.18z" fill="#fff"/></svg></span>
+                    <span class="idioma-cod">EN</span>
+                </button>
+                <a href="/Login" class="btn-portal"><i class="bi bi-shield-lock"></i> Ingreso portal</a>
+                <button type="button" class="btn-menu-movil" id="btnMenuMovil" aria-label="Abrir menú" aria-expanded="false" aria-controls="menuMovil"><i class="bi bi-list"></i></button>
+            </div>
+        </div>
+    </nav>
+
+    <div class="menu-movil" id="menuMovil" hidden>
+        <div class="menu-movil-cab">
+            <img src="~/img/marca/atilson-logo-blanco.svg" alt="Atilson" asp-append-version="true" />
+            <button type="button" id="btnCerrarMenu" aria-label="Cerrar menú"><i class="bi bi-x-lg"></i></button>
+        </div>
+        <h2>Servicios</h2>
+        @foreach (var s in ServiciosWeb.Todos)
+        {
+            <a href="@s.Url"><i class="bi @s.Icono" aria-hidden="true"></i>@s.Nombre</a>
+        }
+        <h2>Sitio</h2>
+        <a href="/Itinerarios"><i class="bi bi-calendar2-week" aria-hidden="true"></i>Itinerarios</a>
+        @if (Sitio.MostrarNosotros)
+        {
+            <a href="/Nosotros"><i class="bi bi-people" aria-hidden="true"></i>Nosotros</a>
+        }
+        <a href="/#noticias"><i class="bi bi-newspaper" aria-hidden="true"></i>Noticias</a>
+        <a href="/#contacto"><i class="bi bi-envelope" aria-hidden="true"></i>Contacto</a>
+        <a href="/Login" class="btn-portal"><i class="bi bi-shield-lock"></i> Ingreso portal</a>
+        <button type="button" class="btn-idioma btn-idioma-movil" data-idioma aria-label="View in English" title="View in English">
+                    <span class="idioma-bandera idioma-en" aria-hidden="true"><svg viewBox="0 0 60 30"><clipPath id="banUk3"><path d="M0 0v30h60V0z"/></clipPath><clipPath id="banUk4"><path d="M30 15h30v15zv15H0zH0V0zV0h30z"/></clipPath><g clip-path="url(#banUk3)"><path d="M0 0v30h60V0z" fill="#012169"/><path d="M0 0l60 30m0-30L0 30" stroke="#fff" stroke-width="6"/><path d="M0 0l60 30m0-30L0 30" clip-path="url(#banUk4)" stroke="#C8102E" stroke-width="4"/><path d="M30 0v30M0 15h60" stroke="#fff" stroke-width="10"/><path d="M30 0v30M0 15h60" stroke="#C8102E" stroke-width="6"/></g></svg></span>
+                    <span class="idioma-bandera idioma-es" aria-hidden="true"><svg viewBox="0 0 30 20"><rect width="30" height="10" fill="#fff"/><rect y="10" width="30" height="10" fill="#d52b1e"/><rect width="10" height="10" fill="#0039a6"/><path d="M5 2.2l.67 2.07h2.18l-1.76 1.28.67 2.07L5 6.34 3.24 7.62l.67-2.07-1.76-1.28h2.18z" fill="#fff"/></svg></span>
+                    <span class="idioma-cod">EN</span>
+                </button>
+        <div class="footer-redes menu-movil-redes" aria-label="Redes sociales">
+            <a href="@Sitio.LinkedIn" target="_blank" rel="noopener" aria-label="LinkedIn"><i class="bi bi-linkedin"></i></a>
+            <a href="@Sitio.InstagramUrl" target="_blank" rel="noopener" aria-label="Instagram"><i class="bi bi-instagram"></i></a>
+            <a href="@Sitio.FacebookUrl" target="_blank" rel="noopener" aria-label="Facebook"><i class="bi bi-facebook"></i></a>
+            <a href="@Sitio.WhatsAppUrl" target="_blank" rel="noopener" aria-label="WhatsApp"><i class="bi bi-whatsapp"></i></a>
+        </div>
+    </div>
+
+    @RenderBody()
+
+    <footer class="footer-area">
+        <div class="contenedor">
+            <div class="footer-grid">
+                <div>
+                    <img src="~/img/marca/atilson-logo-blanco.svg" alt="Atilson Servicios Logísticos" class="footer-logo" asp-append-version="true" />
+                    <p class="footer-text">Freight forwarder en Valparaíso. Conectamos origen y destino con tecnología, transparencia y eficiencia operativa.</p>
+                    @if (Sitio.MostrarNosotros)
+                    {
+                        <a href="/Nosotros" class="footer-link">Conoce al equipo <i class="bi bi-chevron-right" aria-hidden="true"></i></a>
+                    }
+                </div>
+                <div>
+                    <h5 class="footer-title">Plataforma</h5>
+                    <a href="/Login" class="footer-link text-white fw-bold"><i class="bi bi-shield-lock footer-icon"></i> Ingreso portal</a>
+                    <a href="/Itinerarios" class="footer-link">Itinerarios</a>
+                    <a href="/PortalCliente/SolicitarCotizacion" class="footer-link">Cotizar servicio</a>
+                    <a href="/PortalCliente/SolicitarReserva" class="footer-link">Solicitar servicio</a>
+                    <a href="/Registro" class="footer-link">Registrar mi empresa</a>
+                </div>
+                <div>
+                    <h5 class="footer-title">Servicios</h5>
+                    @foreach (var s in ServiciosWeb.Todos)
+                    {
+                        <a href="@s.Url" class="footer-link">@s.Nombre</a>
+                    }
+                </div>
+                <div>
+                    <h5 class="footer-title">Contacto</h5>
+                    <p class="footer-link mb-1"><i class="bi bi-geo-alt footer-icon"></i> A Prat 814 Of. 503, Valparaíso</p>
+                    <a href="mailto:@Sitio.CorreoContacto" class="footer-link mb-1"><i class="bi bi-envelope footer-icon"></i> @Sitio.CorreoContacto</a>
+                    @if (Sitio.Telefono != null)
+                    {
+                        <a href="@Sitio.TelefonoEnlace" class="footer-link mb-1"><i class="bi bi-telephone footer-icon"></i> @Sitio.Telefono</a>
+                    }
+                    <div class="footer-redes" aria-label="Redes sociales">
+                        <a href="@Sitio.LinkedIn" target="_blank" rel="noopener" aria-label="LinkedIn" title="LinkedIn"><i class="bi bi-linkedin"></i></a>
+                        <a href="@Sitio.InstagramUrl" target="_blank" rel="noopener" aria-label="Instagram" title="Instagram"><i class="bi bi-instagram"></i></a>
+                        <a href="@Sitio.FacebookUrl" target="_blank" rel="noopener" aria-label="Facebook" title="Facebook"><i class="bi bi-facebook"></i></a>
+                        <a href="@Sitio.WhatsAppUrl" target="_blank" rel="noopener" aria-label="WhatsApp" title="WhatsApp"><i class="bi bi-whatsapp"></i></a>
+                    </div>
+                </div>
+            </div>
+            <div class="footer-legal">
+                <p class="mb-0">© @DateTime.Now.Year Atilson Cargo SpA. Todos los derechos reservados.</p>
+                <p class="mb-0">Valparaíso, Chile</p>
+            </div>
+        </div>
+    </footer>
+
+    <!-- Asistente del sitio y WhatsApp -->
+    <section class="asis" id="asistente" role="dialog" aria-modal="false" aria-labelledby="asisTitulo" hidden>
+        <header class="asis-cab">
+            <span class="asis-avatar"><img src="~/img/marca/atilson-isotipo-blanco.svg" alt="" /></span>
+            <div>
+                <b id="asisTitulo">Asistente Atilson</b>
+                <small>@(Sitio.AsistenteConIa ? "Asistente con IA · responde al instante" : "Responde al instante")</small>
+            </div>
+            <button type="button" class="asis-cerrar asis-reiniciar" id="asisReiniciar" aria-label="Empezar una conversación nueva" title="Empezar de nuevo"><i class="bi bi-arrow-counterclockwise"></i></button>
+            <button type="button" class="asis-cerrar" id="asisCerrar" aria-label="Cerrar asistente"><i class="bi bi-x-lg"></i></button>
+        </header>
+        <div class="asis-msgs" id="asisMsgs" aria-live="polite">
+            <div class="asis-msg bot">¡Hola! Qué bueno tenerte por aquí. Cuéntame qué necesitas: si vas a embarcar algo, si quieres saber cuándo sale una nave o si tienes alguna duda, te ayudo.</div>
+        </div>
+        <div class="asis-sugerencias" id="asisSugerencias">
+            <button type="button">Quiero cotizar</button>
+            <button type="button">¿Cuándo sale una nave?</button>
+            <button type="button">¿Dónde está mi carga?</button>
+            <button type="button">Hablar con una persona</button>
+        </div>
+        <form class="asis-form" id="asisForm" method="post" asp-page="/Index" asp-page-handler="Asistente" data-correo="@Sitio.CorreoContacto">
+            <input type="hidden" name="idioma" id="asisIdioma" value="es" />
+            <label for="asisTexto" class="visually-hidden">Escribe tu pregunta</label>
+            <textarea id="asisTexto" rows="1" maxlength="800" placeholder="Escribe tu pregunta…" autocomplete="off"></textarea>
+            <button type="submit" id="asisEnviar" aria-label="Enviar"><i class="bi bi-send-fill"></i></button>
+        </form>
+        <p class="asis-pie">@(Sitio.AsistenteConIa ? "Respuestas generadas con IA: un ejecutivo confirma tarifas y fechas." : "Para tarifas y fechas exactas te contacta un ejecutivo.")</p>
+    </section>
+
+    <div class="flotantes" id="flotantes">
+        @if (Sitio.WhatsApp != null)
+        {
+            <a href="https://wa.me/@Sitio.WhatsApp" class="flot-btn flot-wapp" target="_blank" rel="noopener" aria-label="Escribir por WhatsApp">
+                <i class="bi bi-whatsapp"></i>
+                <span class="flot-tip">Escríbenos por WhatsApp</span>
+            </a>
+        }
+        <button type="button" class="flot-btn flot-asis" id="asisAbrir" aria-controls="asistente" aria-expanded="false" aria-label="Abrir asistente">
+            <i class="bi bi-chat-dots-fill"></i><i class="bi bi-x-lg"></i>
+            <span class="flot-tip">¿Te ayudo? Pregúntame</span>
+        </button>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="~/js/publico.js" asp-append-version="true"></script>
+    @await RenderSectionAsync("Scripts", required: false)
+    <script src="~/js/i18n.js" asp-append-version="true"></script>
+</body>
+</html>

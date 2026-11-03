@@ -42,12 +42,23 @@ namespace AtilsonCargoSpa.Pages.Operaciones
 
             if (Operacion == null) return NotFound();
 
-            Terrestre = Operacion.OperacionesTerrestres.FirstOrDefault() ?? new OperacionesTerrestre();
-
             // Filtrado ESTRICTO: Solo trae las transacciones de esta Orden de Compra específica
             TransaccionesTerrestres = Operacion.TransaccionesFinancieras
                 .Where(t => t.TipoMovimiento == "EGRESO" && t.NumeroOrdenCompra == NumeroOC)
                 .ToList();
+
+            // Datos de transporte del contenedor de esta OC (sufijo "(Uxx)" en el concepto;
+            // sin sufijo = contenedor principal). Antes se tomaba la primera fila terrestre,
+            // con el transportista de otro contenedor.
+            int? idUnidadOc = TransaccionesTerrestres
+                .Select(t => System.Text.RegularExpressions.Regex.Match(t.Concepto ?? "", @"\(U(\d+)\)"))
+                .Where(m => m.Success)
+                .Select(m => (int?)int.Parse(m.Groups[1].Value))
+                .FirstOrDefault();
+            Terrestre = Operacion.OperacionesTerrestres.FirstOrDefault(x => x.IdUnidadTecnica == idUnidadOc)
+                ?? Operacion.OperacionesTerrestres.FirstOrDefault(x => x.IdUnidadTecnica == null)
+                ?? Operacion.OperacionesTerrestres.FirstOrDefault()
+                ?? new OperacionesTerrestre();
 
             if (!TransaccionesTerrestres.Any()) return NotFound("No se encontraron costos para esta Orden de Compra.");
 

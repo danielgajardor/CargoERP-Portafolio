@@ -1,0 +1,325 @@
+@page
+@model AtilsonCargoSpa.Pages.Operaciones.ItinerariosModel
+@using AtilsonCargoSpa.Helpers
+@using AtilsonCargoSpa.Models
+@{
+    ViewData["Title"] = "Itinerarios de naves";
+    var cl = System.Globalization.CultureInfo.GetCultureInfo("es-CL");
+    var hoy = ItinerariosHelper.Hoy;
+    var horizonte = hoy.AddDays(ItinerarioNave.SemanasHorizonte * 7);
+    var aviso = !string.IsNullOrEmpty(Model.Aviso) && ItinerariosModel.Avisos.TryGetValue(Model.Aviso, out var av) ? av : default;
+    bool editando = Model.Input.Id != null;
+    bool abierto = Model.FormularioAbierto || !Model.Salidas.Any() || aviso.Tipo == "danger";
+    var puertosPorPais = Model.Puertos.GroupBy(p => string.IsNullOrWhiteSpace(p.Pais) ? "OTROS" : p.Pais!.Trim().ToUpper()).ToList();
+    var semanas = Model.Salidas.GroupBy(s => ItinerariosHelper.InicioSemana(s.Etd)).OrderBy(g => g.Key).ToList();
+    bool hayFiltros = Model.Pol != null || Model.Pod != null || Model.Naviera != null || Model.VerPasadas;
+}
+
+<link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+<link rel="stylesheet" href="~/css/cotizaciones-ops.css" asp-append-version="true" />
+
+<div class="container-fluid py-4 cot-ops">
+
+    <div class="page-header">
+        <div class="page-header__title-row">
+            <div class="page-header__icon"><i class="bi bi-calendar2-week"></i></div>
+            <div>
+                <h1>Itinerarios de naves</h1>
+                <p class="page-header__subtitle">Salidas que ven los clientes en el portal para elegir nave al reservar. Se muestran las de los próximos @ItinerarioNave.SemanasHorizonte semanas.</p>
+            </div>
+        </div>
+        <partial name="_CotizacionesNav" model="@("itinerarios")" />
+    </div>
+
+    @if (aviso.Texto != null)
+    {
+        <div class="alert alert-@aviso.Tipo cot-aviso d-flex align-items-center gap-2" role="status">
+            <i class="bi @(aviso.Tipo == "success" ? "bi-check-circle-fill" : "bi-x-circle-fill")"></i>
+            <span>@aviso.Texto</span>
+        </div>
+    }
+
+    <!-- Alta / edición -->
+    <section class="erp-card it-form-card mb-4">
+        <button class="it-form-toggle" type="button" data-bs-toggle="collapse" data-bs-target="#itForm" aria-expanded="@(abierto ? "true" : "false")" aria-controls="itForm">
+            <span class="it-form-toggle__ico"><i class="bi @(editando ? "bi-pencil-square" : "bi-plus-lg")"></i></span>
+            <span>
+                <strong>@(editando ? "Editar salida #" + Model.Input.Id : Model.Copiar != null ? "Nueva salida (copia, semana siguiente)" : "Agregar salida")</strong>
+                <small>Naviera, nave, ruta y fechas. Cópiala a la semana siguiente para servicios semanales.</small>
+            </span>
+            <i class="bi bi-chevron-down it-form-toggle__chev"></i>
+        </button>
+
+        <div class="collapse @(abierto ? "show" : "")" id="itForm">
+            <form method="post" asp-page-handler="Guardar" class="cot-form it-form" id="formSalida">
+                <input type="hidden" name="Input.Id" value="@Model.Input.Id" />
+                <input type="hidden" name="Pol" value="@Model.Pol" />
+                <input type="hidden" name="Pod" value="@Model.Pod" />
+                <input type="hidden" name="Naviera" value="@Model.Naviera" />
+                <input type="hidden" name="VerPasadas" value="@(Model.VerPasadas ? "true" : "false")" />
+
+                <div class="row g-3">
+                    <div class="col-md-4">
+                        <label class="cot-label" for="itNaviera">Naviera <span class="text-danger">*</span></label>
+                        <select id="itNaviera" name="Input.IdNaviera" class="form-select it-select2" required>
+                            <option value="">Seleccionar…</option>
+                            @foreach (var n in Model.Navieras)
+                            {
+                                <option value="@n.Id" selected="@(Model.Input.IdNaviera == n.Id)">@n.NombreNaviera</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="col-md-5">
+                        <label class="cot-label" for="itNave">Nave <span class="text-danger">*</span></label>
+                        <input id="itNave" name="Input.Nave" class="form-control text-uppercase" list="dlNaves" maxlength="150" value="@Model.Input.Nave" placeholder="Ej: MSC FLAVIA" required autocomplete="off" />
+                        <datalist id="dlNaves">
+                            @foreach (var nave in Model.NavesSugeridas)
+                            {
+                                <option value="@nave"></option>
+                            }
+                        </datalist>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="cot-label" for="itViaje">N° viaje</label>
+                        <input id="itViaje" name="Input.NumeroViaje" class="form-control text-uppercase" maxlength="40" value="@Model.Input.NumeroViaje" placeholder="Ej: 432N" />
+                    </div>
+
+                    <div class="col-md-6">
+                        <label class="cot-label" for="itPol">Puerto de origen (POL) <span class="text-danger">*</span></label>
+                        <select id="itPol" name="Input.IdPuertoOrigen" class="form-select it-select2" required>
+                            <option value="">Seleccionar…</option>
+                            @foreach (var g in puertosPorPais)
+                            {
+                                <optgroup label="@g.Key">
+                                    @foreach (var p in g)
+                                    {
+                                        <option value="@p.Id" selected="@(Model.Input.IdPuertoOrigen == p.Id)">@p.NombrePuerto</option>
+                                    }
+                                </optgroup>
+                            }
+                        </select>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="cot-label" for="itPod">Puerto de destino (POD) <span class="text-danger">*</span></label>
+                        <select id="itPod" name="Input.IdPuertoDestino" class="form-select it-select2" required>
+                            <option value="">Seleccionar…</option>
+                            @foreach (var g in puertosPorPais)
+                            {
+                                <optgroup label="@g.Key">
+                                    @foreach (var p in g)
+                                    {
+                                        <option value="@p.Id" selected="@(Model.Input.IdPuertoDestino == p.Id)">@p.NombrePuerto</option>
+                                    }
+                                </optgroup>
+                            }
+                        </select>
+                    </div>
+
+                    <div class="col-sm-6 col-lg-3">
+                        <label class="cot-label" for="itEtd">ETD (zarpe) <span class="text-danger">*</span></label>
+                        <input id="itEtd" type="date" name="Input.Etd" class="form-control" value="@Model.Input.Etd" required />
+                    </div>
+                    <div class="col-sm-6 col-lg-3">
+                        <label class="cot-label" for="itEta">ETA (arribo) <span class="text-danger">*</span></label>
+                        <input id="itEta" type="date" name="Input.Eta" class="form-control" value="@Model.Input.Eta" required />
+                        <small class="it-transit" id="itTransit" aria-live="polite"></small>
+                    </div>
+                    <div class="col-sm-6 col-lg-3">
+                        <label class="cot-label" for="itCorte">Corte documental</label>
+                        <input id="itCorte" type="datetime-local" name="Input.CorteDocumental" class="form-control" value="@Model.Input.CorteDocumental" />
+                    </div>
+                    <div class="col-sm-6 col-lg-3">
+                        <label class="cot-label" for="itTransbordo">Transbordo</label>
+                        <input id="itTransbordo" name="Input.Transbordo" class="form-control text-uppercase" maxlength="150" value="@Model.Input.Transbordo" placeholder="Vacío = directo" />
+                    </div>
+                    <div class="col-12">
+                        <label class="cot-label" for="itObs">Observaciones <span class="cot-muted">(las ve el cliente)</span></label>
+                        <input id="itObs" name="Input.Observaciones" class="form-control" maxlength="500" value="@Model.Input.Observaciones" placeholder="Ej: servicio semanal, sujeto a confirmación de espacio" />
+                    </div>
+                </div>
+
+                <div class="cot-actions">
+                    @if (editando || Model.Copiar != null)
+                    {
+                        <a asp-page="./Itinerarios" asp-route-pol="@Model.Pol" asp-route-pod="@Model.Pod" asp-route-naviera="@Model.Naviera" class="btn btn-link cot-link-btn">Cancelar</a>
+                    }
+                    else
+                    {
+                        <span class="cot-muted m-0">Los campos con * son obligatorios.</span>
+                    }
+                    <button type="submit" class="btn btn-atilson cot-btn-primary"><i class="bi bi-check2 me-1"></i>@(editando ? "Guardar cambios" : "Agregar salida")</button>
+                </div>
+            </form>
+        </div>
+    </section>
+
+    <!-- Filtros -->
+    <form method="get" class="it-filters" role="search" aria-label="Filtrar salidas">
+        <select name="pol" class="form-select" aria-label="Filtrar por puerto de origen">
+            <option value="">Todos los POL</option>
+            @foreach (var p in Model.Puertos.Where(PuertosHelper.EsChileno))
+            {
+                <option value="@p.Id" selected="@(Model.Pol == p.Id)">@p.NombrePuerto</option>
+            }
+            <option disabled>──────────</option>
+            @foreach (var p in Model.Puertos.Where(p => !PuertosHelper.EsChileno(p)))
+            {
+                <option value="@p.Id" selected="@(Model.Pol == p.Id)">@p.NombrePuerto (@p.Pais)</option>
+            }
+        </select>
+        <select name="pod" class="form-select" aria-label="Filtrar por puerto de destino">
+            <option value="">Todos los POD</option>
+            @foreach (var p in Model.Puertos)
+            {
+                <option value="@p.Id" selected="@(Model.Pod == p.Id)">@p.NombrePuerto@(PuertosHelper.EsChileno(p) ? "" : " (" + p.Pais + ")")</option>
+            }
+        </select>
+        <select name="naviera" class="form-select" aria-label="Filtrar por naviera">
+            <option value="">Todas las navieras</option>
+            @foreach (var n in Model.Navieras)
+            {
+                <option value="@n.Id" selected="@(Model.Naviera == n.Id)">@n.NombreNaviera</option>
+            }
+        </select>
+        <div class="form-check it-filters__check">
+            <input class="form-check-input" type="checkbox" name="verPasadas" value="true" id="chkPasadas" checked="@Model.VerPasadas" />
+            <label class="form-check-label" for="chkPasadas">Incluir zarpadas</label>
+        </div>
+        <button type="submit" class="btn btn-atilson-outline"><i class="bi bi-funnel me-1"></i>Filtrar</button>
+        @if (hayFiltros)
+        {
+            <a asp-page="./Itinerarios" class="btn btn-link cot-link-btn">Limpiar</a>
+        }
+    </form>
+
+    <p class="it-horizon"><i class="bi bi-eye"></i> Los clientes ven las salidas con ETD entre hoy y el @horizonte.ToString("dd'/'MM'/'yyyy").</p>
+
+    @if (!Model.Salidas.Any())
+    {
+        <div class="empty-state">
+            <i class="bi bi-calendar-x"></i>
+            <p>@(hayFiltros ? "No hay salidas que coincidan con el filtro." : "Todavía no hay salidas cargadas. Agrega la primera arriba.")</p>
+        </div>
+    }
+    else
+    {
+        foreach (var semana in semanas)
+        {
+            <section class="it-week" aria-label="@ItinerariosHelper.EtiquetaSemana(semana.Key)">
+                <h2 class="it-week__title">@ItinerariosHelper.EtiquetaSemana(semana.Key) <span>@semana.Count() salida@(semana.Count() == 1 ? "" : "s")</span></h2>
+                <div class="table-responsive erp-card p-0">
+                    <table class="table erp-table it-table mb-0">
+                        <thead>
+                            <tr>
+                                <th scope="col">Naviera</th>
+                                <th scope="col">Nave / viaje</th>
+                                <th scope="col">Ruta</th>
+                                <th scope="col">ETD</th>
+                                <th scope="col">ETA</th>
+                                <th scope="col">Corte doc.</th>
+                                <th scope="col">Estado</th>
+                                <th scope="col" class="text-end"><span class="visually-hidden">Acciones</span></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var s in semana)
+                            {
+                                bool zarpada = s.Etd < hoy;
+                                bool visible = !zarpada && s.Etd <= horizonte;
+                                int reservas = Model.ReservasPorSalida.TryGetValue(s.Id, out var nr) ? nr : 0;
+                                <tr class="@(zarpada ? "it-row--past" : "")">
+                                    <td>
+                                        <span class="it-naviera"><span class="it-naviera__dot" style="background:@ItinerariosHelper.Color(s.IdNavieraNavigation)"></span>@(s.IdNavieraNavigation?.NombreNaviera ?? "—")</span>
+                                    </td>
+                                    <td>
+                                        <strong>@s.Nave</strong>
+                                        @if (!string.IsNullOrWhiteSpace(s.NumeroViaje))
+                                        {
+                                            <span class="it-viaje">@s.NumeroViaje</span>
+                                        }
+                                    </td>
+                                    <td>
+                                        @(s.IdPuertoOrigenNavigation?.NombrePuerto ?? "?") <i class="bi bi-arrow-right it-arrow"></i> @(s.IdPuertoDestinoNavigation?.NombrePuerto ?? "?")
+                                        <span class="it-sub">@(string.IsNullOrWhiteSpace(s.Transbordo) ? "Directo" : "Vía " + s.Transbordo) · @s.DiasTransito días</span>
+                                    </td>
+                                    <td class="it-date">@s.Etd.ToString("ddd dd'/'MM", cl)</td>
+                                    <td class="it-date">@s.Eta.ToString("ddd dd'/'MM", cl)</td>
+                                    <td class="it-date">@(s.CorteDocumental?.ToString("dd'/'MM HH:mm", cl) ?? "—")</td>
+                                    <td>
+                                        @if (zarpada)
+                                        {
+                                            <span class="badge-status badge-status--neutral">Zarpada</span>
+                                        }
+                                        else if (visible)
+                                        {
+                                            <span class="badge-status badge-status--success">Visible</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge-status badge-status--info" title="Se mostrará a los clientes cuando falten @ItinerarioNave.SemanasHorizonte semanas o menos">Programada</span>
+                                        }
+                                        @if (reservas > 0)
+                                        {
+                                            <span class="badge-status badge-status--warning ms-1" title="Solicitudes de reserva de clientes para esta salida">@reservas reserva@(reservas == 1 ? "" : "s")</span>
+                                        }
+                                    </td>
+                                    <td class="text-end it-actions">
+                                        <a class="btn btn-sm btn-atilson-outline" asp-page="./Itinerarios" asp-route-editar="@s.Id" asp-route-pol="@Model.Pol" asp-route-pod="@Model.Pod" asp-route-naviera="@Model.Naviera" title="Editar" aria-label="Editar salida @s.Nave"><i class="bi bi-pencil"></i></a>
+                                        <a class="btn btn-sm btn-atilson-outline" asp-page="./Itinerarios" asp-route-copiar="@s.Id" asp-route-pol="@Model.Pol" asp-route-pod="@Model.Pod" asp-route-naviera="@Model.Naviera" title="Copiar a la semana siguiente" aria-label="Copiar salida a la semana siguiente"><i class="bi bi-copy"></i></a>
+                                        <form method="post" asp-page-handler="Eliminar" class="d-inline" onsubmit="return confirm('¿Eliminar esta salida? Los clientes dejarán de verla.');">
+                                            <input type="hidden" name="idSalida" value="@s.Id" />
+                                            <input type="hidden" name="Pol" value="@Model.Pol" />
+                                            <input type="hidden" name="Pod" value="@Model.Pod" />
+                                            <input type="hidden" name="Naviera" value="@Model.Naviera" />
+                                            <button type="submit" class="btn btn-sm btn-atilson-outline it-del" title="Eliminar" aria-label="Eliminar salida @s.Nave"><i class="bi bi-trash"></i></button>
+                                        </form>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+        }
+    }
+</div>
+
+@section Scripts {
+    <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+    <script>
+        (function () {
+            if (window.jQuery && $.fn.select2) {
+                $('.it-select2').select2({ width: '100%', language: { noResults: function () { return 'Sin resultados'; } } });
+            }
+
+            const etd = document.getElementById('itEtd');
+            const eta = document.getElementById('itEta');
+            const transit = document.getElementById('itTransit');
+            function calcularTransito() {
+                if (!etd || !eta || !transit) return;
+                if (!etd.value || !eta.value) { transit.textContent = ''; return; }
+                const dias = Math.round((new Date(eta.value) - new Date(etd.value)) / 86400000);
+                transit.textContent = dias < 0 ? 'La ETA no puede ser anterior a la ETD' : dias + ' días de tránsito';
+                transit.classList.toggle('is-error', dias < 0);
+                eta.setCustomValidity(dias < 0 ? 'La ETA no puede ser anterior a la ETD' : '');
+            }
+            if (etd) {
+                etd.addEventListener('change', function () { if (eta && !eta.value) eta.min = etd.value; calcularTransito(); });
+                eta.addEventListener('change', calcularTransito);
+                calcularTransito();
+            }
+
+            const form = document.getElementById('formSalida');
+            if (form) {
+                form.addEventListener('submit', function (e) {
+                    const pol = document.getElementById('itPol').value;
+                    const pod = document.getElementById('itPod').value;
+                    if (pol && pol === pod) {
+                        e.preventDefault();
+                        alert('El puerto de origen y el de destino no pueden ser el mismo.');
+                    }
+                });
+            }
+        })();
+    </script>
+}

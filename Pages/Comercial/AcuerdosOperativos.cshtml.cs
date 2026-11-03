@@ -12,9 +12,12 @@ namespace AtilsonCargoSpa.Pages.Comercial
     {
         private readonly AtilsonContext _context;
 
-        public AcuerdosOperativosModel(AtilsonContext context)
+        private readonly AtilsonCargoSpa.Services.IndicadoresEconomicosService _indicadores;
+
+        public AcuerdosOperativosModel(AtilsonContext context, AtilsonCargoSpa.Services.IndicadoresEconomicosService indicadores)
         {
             _context = context;
+            _indicadores = indicadores;
         }
 
         public class TxDTO
@@ -24,14 +27,27 @@ namespace AtilsonCargoSpa.Pages.Comercial
             public string TipoMovimiento { get; set; } = string.Empty;
             public string Concepto { get; set; } = string.Empty;
             public decimal MontoNeto { get; set; }
+            public decimal ProfitHandling { get; set; }
             public string Moneda { get; set; } = string.Empty;
             public string? Justificacion { get; set; }
             public bool TarifaManual { get; set; }
 
-            // Tasa (UF o Dólar) usada al convertir a CLP. Solo viene informada en
-            // Gate-Out/In; permite reconstruir el monto original en USD como
-            // referencia visual.
+            // true = exento de IVA (Rebate, BL configurada sin IVA). Desde oct-2026 los
+            // conceptos Marítimos van + IVA salvo que vengan marcados exentos.
+            public bool? IvaExento { get; set; }
+
+            // Tasa (UF o Dólar) usada al convertir a CLP.
             public decimal? TipoCambio { get; set; }
+
+            // Monto original en USD ANTES de convertir a CLP (oct-2026: viene de
+            // TransaccionesFinanciera.MontoOriginalUsd, guardado tal cual por
+            // FinanzasSyncService — nunca se reconstruye dividiendo MontoNeto/TipoCambio
+            // acá, por el mismo motivo que explica el comentario de ese campo en el
+            // modelo: el tipo de cambio puede haber cambiado entre el momento en que se
+            // guardó y el momento en que se renderiza la página). Antes solo se
+            // informaba para Gate-Out/In; ahora cualquier concepto convertido a CLP
+            // (incluido Marítimo: Late Arrival, Roleo, Cancelación, etc.) también la trae.
+            public decimal? MontoOriginalUsd { get; set; }
         }
 
         public class BookingPricingDTO
@@ -60,11 +76,43 @@ namespace AtilsonCargoSpa.Pages.Comercial
             // PROPIEDADES PARA ALERTA DE TARIFA PENDIENTE
             public bool TieneConceptoPendiente { get; set; }
             public List<string> ConceptosPendientes { get; set; } = new();
+
+            // MATRIZ DE TARIFA PLANA — solo poblada cuando el cliente es EsClienteEspecial.
+            // Clave = concepto documental canónico, Valor = true si ese concepto está
+            // cubierto por el paquete (EsServicioGratuito en TarifasCliente) y por lo
+            // tanto NO se cobra aparte en este booking.
+            public bool EsClienteEspecial { get; set; }
+            public Dictionary<string, bool> MatrizTarifaPlana { get; set; } = new();
         }
 
         public List<BookingPricingDTO> Bookings { get; set; } = new();
 
         public List<TarifaGate> ComponentesGate { get; set; } = new();
+
+        // Mismos conceptos documentales que Comercial puede marcar como
+        // EsServicioGratuito al crear una TarifasCliente — ver checkbox "¿Servicio
+        // Gratuito?" en Comercial/Index.cshtml. Si se agrega un concepto nuevo ahí,
+        // agrégalo aquí también para que aparezca en la matriz.
+        private static readonly string[] ConceptosDocumentalesPaquete = {
+            "Honorarios Agencia",
+            "Legalización / Emisión DUS",
+            "Certificado de Origen",
+            "Certificado Fitosanitario",
+            "Certificado Sanitario",
+            "Certificado de Captura",
+            "Seguridad de la Carga ISPS"
+        };
+
+        // Mismo criterio de match normalizado y bidireccional que usa
+        // FinanzasSyncService.EsConceptoGratuitoCliente, para que esta matriz nunca
+        // se desincronice de lo que realmente aplica el motor financiero.
+        private static bool ConceptoCubiertoPorTarifaPlana(string conceptoCanon, List<string> conceptosGratuitos)
+        {
+            if (!conceptosGratuitos.Any()) return false;
+            string baseConcepto = conceptoCanon.ToUpper();
+            return conceptosGratuitos.Any(c => !string.IsNullOrWhiteSpace(c) &&
+                (baseConcepto.Contains(c.ToUpper()) || c.ToUpper().Contains(baseConcepto)));
+        }
 
         public async Task OnGetAsync()
         {
@@ -81,9 +129,17 @@ namespace AtilsonCargoSpa.Pages.Comercial
                 .Include(o => o.OperacionesDocumentales)
                 .Include(o => o.OperacionesAlmacenamientos) // <--- INYECTADO ALMACENAMIENTO
                 .Include(o => o.TransaccionesFinancieras)
-                .Where(o => !o.IsDeleted)
+                                .Where(o => !o.IsDeleted)
                 .OrderByDescending(o => o.Id)
                 .ToListAsync();
+
+            // Una sola consulta para todos los clientes con conceptos gratuitos,
+            // en vez de una por operación — mismo patrón que usa FinanzasSyncService.
+            var tarifasGratuitasPorCliente = await _context.TarifasClientes
+                .AsNoTracking()
+                .Where(t => t.EsActiva && t.EsServicioGratuito)
+                .GroupBy(t => t.IdCliente)
+                .ToDictionaryAsync(g => g.Key, g => g.Select(t => t.Concepto!).ToList());
 
             foreach (var op in operaciones)
             {
@@ -100,8 +156,17 @@ namespace AtilsonCargoSpa.Pages.Comercial
                     Naviera = op.IdNavieraNavigation?.NombreNaviera ?? "S/N",
                     AplicaTarifaGatePlana = op.IdNavieraNavigation?.AplicaTarifaGatePlana == true,
                     IdNaviera = op.IdNaviera,
-                    TipoGate = esRfDto ? "RF" : "DRY"
+                    TipoGate = esRfDto ? "RF" : "DRY",
+                    EsClienteEspecial = op.IdClienteNavigation?.EsClienteEspecial == true
                 };
+
+                if (dto.EsClienteEspecial)
+                {
+                    var conceptosGratuitos = tarifasGratuitasPorCliente.TryGetValue(op.IdCliente, out var cg)
+                        ? cg : new List<string>();
+                    foreach (var concepto in ConceptosDocumentalesPaquete)
+                        dto.MatrizTarifaPlana[concepto] = ConceptoCubiertoPorTarifaPlana(concepto, conceptosGratuitos);
+                }
 
                 List<string> serv = new List<string>();
                 if (op.IdNaviera > 0) serv.Add("MAR");
@@ -143,10 +208,13 @@ namespace AtilsonCargoSpa.Pages.Comercial
                         TipoMovimiento = t.TipoMovimiento,
                         Concepto = t.Concepto,
                         MontoNeto = t.MontoNeto,
+                        ProfitHandling = t.ProfitHandling,
                         Moneda = t.Moneda,
                         Justificacion = t.JustificacionManual,
                         TarifaManual = t.TarifaManual,
-                        TipoCambio = t.TipoCambio
+                        TipoCambio = t.TipoCambio,
+                        MontoOriginalUsd = t.MontoOriginalUsd,
+                        IvaExento = t.IvaExento
                     };
                 }).ToList();
 
@@ -179,14 +247,33 @@ namespace AtilsonCargoSpa.Pages.Comercial
                 if (tx != null)
                 {
                     decimal montoAnterior = tx.MontoNeto;
+                    string monedaAnterior = tx.Moneda;
 
                     tx.MontoNeto = update.NuevoMonto;
+                    tx.ProfitHandling = update.ProfitHandling;
                     tx.TarifaManual = true;
                     tx.JustificacionManual = update.Justificacion;
                     // El monto ahora lo define Comercial manualmente: se limpia la tasa
-                    // de conversión guardada para que no se muestre una referencia en
-                    // USD calculada con una tasa que ya no corresponde al valor real.
+                    // de conversión guardada (y el USD original que venía con ella, oct-2026)
+                    // para que no se muestre una referencia en USD que ya no corresponde al
+                    // valor real — antes esto solo limpiaba TipoCambio y dejaba
+                    // MontoOriginalUsd desactualizado, que ControlFinanciero sigue
+                    // mostrando sin mirar TipoCambio.
                     tx.TipoCambio = null;
+                    tx.MontoOriginalUsd = null;
+
+                    // Late / Extra Late: siempre CLP (+IVA). Si se ingresó en USD, se convierte
+                    // y el USD queda como referencia.
+                    string cUp = (tx.Concepto ?? "").ToUpperInvariant();
+                    bool esLate = cUp.Contains("LATE ARRIVAL") || cUp.Contains("EXTRA LATE") || cUp.Contains("(LAR)") || cUp.Contains("(ELAR)");
+                    if (esLate && tx.Moneda == "USD")
+                    {
+                        decimal dolar = await _indicadores.ObtenerValorDolarAsync();
+                        tx.MontoOriginalUsd = update.NuevoMonto;
+                        tx.TipoCambio = dolar;
+                        tx.MontoNeto = System.Math.Round(update.NuevoMonto * dolar);
+                        tx.Moneda = "CLP";
+                    }
                     // Saca la fila de "PENDIENTE VALORIZAR" — sin esto la alerta en
                     // Operaciones nunca desaparece, porque se calcula exactamente sobre
                     // este campo, y con TarifaManual=true el motor de sincronización ya
@@ -200,8 +287,8 @@ namespace AtilsonCargoSpa.Pages.Comercial
                         TipoEntidad = "TransaccionFinanciera",
                         IdRegistro = tx.Id,
                         Campo = $"{tx.Concepto} ({tx.TipoMovimiento})",
-                        ValorAnterior = $"{tx.Moneda} {montoAnterior:N0}",
-                        ValorNuevo = $"{tx.Moneda} {update.NuevoMonto:N0}",
+                        ValorAnterior = $"{monedaAnterior} {montoAnterior:N0}",
+                        ValorNuevo = $"{tx.Moneda} {tx.MontoNeto:N0}",
                         Comentario = string.IsNullOrWhiteSpace(update.Justificacion) ? "(Sin comentario)" : update.Justificacion.Trim(),
                         Usuario = usuario,
                         FechaCambio = System.DateTime.Now,
@@ -228,6 +315,7 @@ namespace AtilsonCargoSpa.Pages.Comercial
         {
             public int IdTx { get; set; }
             public decimal NuevoMonto { get; set; }
+            public decimal ProfitHandling { get; set; }
             public string Justificacion { get; set; } = string.Empty;
         }
 

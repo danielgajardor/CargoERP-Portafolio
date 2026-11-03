@@ -18,6 +18,12 @@ namespace AtilsonCargoSpa.Models
 
         public bool ReqTerrestre { get; set; }
 
+        // Sugerencia automática de Acuerdo Comercial según país/puerto de destino,
+        // calculada contra ReglasTlc antes de construir este VM. Null si no hay
+        // match o si el certificado ya tiene un AcuerdoOrigen guardado. La
+        // selección real sigue siendo manual — esto solo ofrece un botón "Aplicar".
+        public string? AcuerdoOrigenSugerido { get; set; }
+
         public IOperacionesConsultaPageModel PageModel { get; set; } = null!;
 
         // Lista de todos los contenedores del booking (principal + Unidadestecnicas),

@@ -1,0 +1,77 @@
+@model AtilsonCargoSpa.Models.SalidaCardVm
+@using AtilsonCargoSpa.Helpers
+@{
+    var s = Model.Salida;
+    var cl = System.Globalization.CultureInfo.GetCultureInfo("es-CL");
+    string naviera = s.IdNavieraNavigation?.NombreNaviera ?? "Naviera";
+    string color = ItinerariosHelper.Color(s.IdNavieraNavigation);
+    bool esSelector = Model.RadioName != null;
+    string idRadio = "salida-" + s.Id;
+    int diasParaZarpe = s.Etd.DayNumber - ItinerariosHelper.Hoy.DayNumber;
+    bool corteVencido = s.CorteDocumental != null && s.CorteDocumental.Value < DateTime.Now;
+    string pol = s.IdPuertoOrigenNavigation?.NombrePuerto ?? "—";
+    string pod = s.IdPuertoDestinoNavigation?.NombrePuerto ?? "—";
+    string escala = string.IsNullOrWhiteSpace(s.Transbordo) ? "Directo" : "Vía " + s.Transbordo;
+    string resumen = $"{naviera}, nave {s.NaveViaje}. Zarpa de {pol} el {s.Etd.ToString("d 'de' MMMM", cl)} y llega a {pod} el {s.Eta.ToString("d 'de' MMMM", cl)}. {s.DiasTransito} días, {escala.ToLower()}.";
+}
+@* Tarjeta tipo buscador de vuelos (oct-2026). En modo selector (Solicitar
+   Reserva) va un radio real + un label que cubre toda la tarjeta: el radio es
+   el control accesible y la tarjeta solo es su presentación. *@
+<div class="fc-wrap @(esSelector ? "fc-option" : "")">
+    @if (esSelector)
+    {
+        <input type="radio" class="fc-radio" name="@Model.RadioName" id="@idRadio" value="@s.Id" checked="@Model.Seleccionada"
+               data-etd="@s.Etd.ToString("yyyy-MM-dd")" data-nave="@s.NaveViaje" data-naviera="@naviera" />
+        <label class="fc-hit" for="@idRadio"><span class="visually-hidden">Elegir esta salida: @resumen</span></label>
+    }
+    <article class="fc @(Model.Compacta ? "fc--compact" : "")" style="--fc-c:@color" aria-label="@(esSelector ? null : resumen)">
+        <div class="fc__carrier">
+            <span class="fc__logo" aria-hidden="true">@ItinerariosHelper.Sigla(naviera)</span>
+            <div class="fc__carrier-txt">
+                <strong>@naviera</strong>
+                <span>@s.NaveViaje</span>
+            </div>
+        </div>
+
+        <div class="fc__route" aria-hidden="true">
+            <div class="fc__pt">
+                <span class="fc__date">@s.Etd.ToString("ddd d MMM", cl)</span>
+                <strong class="fc__port">@pol</strong>
+                <span class="fc__lbl">Zarpe</span>
+            </div>
+            <div class="fc__line">
+                <span class="fc__dur">@s.DiasTransito días</span>
+                <span class="fc__track"><i class="bi bi-water"></i></span>
+                <span class="fc__stops">@escala</span>
+            </div>
+            <div class="fc__pt fc__pt--end">
+                <span class="fc__date">@s.Eta.ToString("ddd d MMM", cl)</span>
+                <strong class="fc__port">@pod</strong>
+                <span class="fc__lbl">Arribo</span>
+            </div>
+        </div>
+
+        <div class="fc__side">
+            <span class="fc__meta">
+                @if (s.CorteDocumental != null)
+                {
+                    <span class="@(corteVencido ? "is-late" : "")"><i class="bi bi-file-earmark-check"></i> Corte doc. @s.CorteDocumental.Value.ToString("d MMM, HH:mm", cl)</span>
+                }
+                <span><i class="bi bi-clock"></i> @(diasParaZarpe <= 0 ? "Zarpa hoy" : diasParaZarpe == 1 ? "Zarpa mañana" : $"Zarpa en {diasParaZarpe} días")</span>
+            </span>
+            @if (esSelector)
+            {
+                <span class="fc__pick" aria-hidden="true"><span class="fc__pick-dot"></span><span class="fc__pick-txt"><span class="fc__pick-off">Elegir</span><span class="fc__pick-on">Elegida</span></span></span>
+            }
+            else if (!string.IsNullOrEmpty(Model.AccionUrl))
+            {
+                <a class="fc__btn" href="@Model.AccionUrl">@(Model.AccionTexto ?? "Reservar") <i class="bi bi-arrow-right"></i></a>
+            }
+        </div>
+
+        @if (!Model.Compacta && !string.IsNullOrWhiteSpace(s.Observaciones))
+        {
+            <p class="fc__obs"><i class="bi bi-info-circle"></i> @s.Observaciones</p>
+        }
+    </article>
+</div>

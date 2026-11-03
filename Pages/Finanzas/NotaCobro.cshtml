@@ -92,7 +92,7 @@
             </div>
             <div class="col-5 text-end">
                 <h2 class="fw-bold mb-1" style="font-size: 18px;">Nota de Cobro N° : @Model.NumeroNotaCobro</h2>
-                <p class="mb-0"><strong>Fecha de Emisión :</strong> @DateTime.Now.ToString("dd MMMM yyyy").ToUpper()</p>
+                <p class="mb-0"><strong>Fecha de Emisión :</strong> @DateTime.Now.ToString("dd MMMM yyyy", new System.Globalization.CultureInfo("es-CL")).ToUpper()</p>
             </div>
         </div>
 
@@ -164,7 +164,7 @@
             Rut: 77.287.565-7<br />
             Cuenta corriente en pesos.<br />
             Banco ITAU N° 221241901<br />
-            Email: departamento.finanzas@atilson.com<br /><br />
+            Email: departamento.finanzas@cargoflow-demo.cl<br /><br />
             <strong>Importante:</strong> Estimado Cliente la nota de cobro no es un documento tributario, es solo un compendio de los gastos que ha incurrido la empresa emisora por su cuenta.
         </div>
     </div>

@@ -1,0 +1,246 @@
+@page "/servicios/{slug}"
+@model AtilsonCargoSpa.Pages.Servicios.ServicioModel
+@using AtilsonCargoSpa.Pages.Servicios
+@{
+    var s = Model.Servicio;
+    Layout = "_LayoutPublico";
+    ViewData["Title"] = s.Nombre + " · Atilson Cargo";
+    ViewData["Description"] = s.Bajada;
+    ViewData["Nav"] = "servicios";
+    var otros = ServiciosWeb.Todos.Where(x => x.Slug != s.Slug).ToList();
+}
+@section Head {
+    <link rel="stylesheet" href="~/css/servicios-web.css" asp-append-version="true" />
+    @if (s.EsPortal)
+    {
+        <link rel="stylesheet" href="~/css/vitrina-portal.css" asp-append-version="true" />
+    }
+    else
+    {
+        <link rel="stylesheet" href="~/css/escena-servicio.css" asp-append-version="true" />
+    }
+}
+@section Scripts {
+    @if (s.EsPortal)
+    {
+        <script src="~/js/vitrina-portal.js" asp-append-version="true"></script>
+    }
+    else
+    {
+        <script src="~/js/escena-servicio.js" asp-append-version="true"></script>
+    }
+}
+
+<header class="sv-hero @(s.EsPortal ? "sv-hero--portal" : "")">
+    <div class="plexus" data-plexus="0.8" aria-hidden="true"></div>
+    <div class="contenedor sv-hero-grid">
+        <div class="sv-hero-copia">
+            <nav class="sv-migas" aria-label="Ruta de navegación">
+                <a href="/">Inicio</a><i class="bi bi-chevron-right" aria-hidden="true"></i><a href="/#servicios">Servicios</a><i class="bi bi-chevron-right" aria-hidden="true"></i><span aria-current="page">@s.Nombre</span>
+            </nav>
+            <p class="sv-lema"><i class="bi @s.Icono" aria-hidden="true"></i> @s.Nombre</p>
+            <h1 class="titular sv-titulo">@s.Titular</h1>
+            <p class="sv-bajada">@s.Bajada</p>
+            <div class="sv-acciones">
+                @if (s.EsPortal)
+                {
+                    <a href="/Login" class="btn-hero btn-hero-principal"><i class="bi bi-shield-lock"></i> Ingreso portal</a>
+                    <a href="/Registro" class="btn-hero btn-hero-secundario"><i class="bi bi-building-add"></i> Registrar mi empresa</a>
+                }
+                else
+                {
+                    <a href="/PortalCliente/SolicitarCotizacion" class="btn-hero btn-hero-principal"><i class="bi bi-calculator"></i> Cotizar servicio</a>
+                    <a href="/PortalCliente/SolicitarReserva" class="btn-hero btn-hero-secundario"><i class="bi bi-clipboard-check"></i> Solicitar servicio</a>
+                }
+            </div>
+        </div>
+
+        @if (s.EsPortal)
+        {
+            @* Ilustración del portal hecha con HTML: muestra el tipo de información, no datos reales. *@
+            <div class="sv-mock" aria-hidden="true">
+                <div class="sv-mock-barra"><i></i><i></i><i></i><span>Portal de clientes · Atilson</span></div>
+                <div class="sv-mock-cuerpo">
+                    <div class="sv-mock-embarque">
+                        <div class="sv-mock-fila">
+                            <span class="sv-mock-chip">Booking</span>
+                            <span class="sv-mock-estado"><i class="bi bi-circle-fill"></i> En tránsito</span>
+                        </div>
+                        <div class="sv-mock-ruta">
+                            <div><small>Zarpe</small><b>San Antonio</b></div>
+                            <span class="sv-mock-linea"><i class="bi bi-water"></i></span>
+                            <div class="fin"><small>Arribo</small><b>Rotterdam</b></div>
+                        </div>
+                        <ol class="sv-mock-hitos">
+                            <li class="ok">Reserva</li>
+                            <li class="ok">Retiro</li>
+                            <li class="ok">Stacking</li>
+                            <li class="ok">Zarpe</li>
+                            <li class="act">Tránsito</li>
+                            <li>Arribo</li>
+                        </ol>
+                    </div>
+                    <div class="sv-mock-tarjetas">
+                        <div><i class="bi bi-folder2-open"></i><b>Documentos</b><small>BL y certificados</small></div>
+                        <div><i class="bi bi-file-earmark-check"></i><b>BL por aprobar</b><small>Revisa el borrador</small></div>
+                        <div><i class="bi bi-receipt"></i><b>Facturas</b><small>Estado de pago</small></div>
+                    </div>
+                </div>
+            </div>
+        }
+        else
+        {
+            <aside class="sv-ficha" aria-label="Ficha del servicio">
+                <div class="sv-ficha-cab">
+                    <span><i class="bi @s.Icono" aria-hidden="true"></i></span>
+                    <div><b>Ficha del servicio</b><small>@s.Lema</small></div>
+                </div>
+                <dl>
+                    @foreach (var d in s.Ficha)
+                    {
+                        <div><dt>@d.Etiqueta</dt><dd>@d.Valor</dd></div>
+                    }
+                </dl>
+            </aside>
+        }
+    </div>
+</header>
+
+<section class="sv-intro">
+    <div class="contenedor sv-intro-grid">
+        <p class="sv-intro-destacado">@s.Intro[0]</p>
+        <div>
+            @foreach (var parrafo in s.Intro.Skip(1))
+            {
+                <p>@parrafo</p>
+            }
+            @if (s.EsPortal)
+            {
+                <dl class="sv-intro-datos">
+                    @foreach (var d in s.Ficha)
+                    {
+                        <div><dt>@d.Etiqueta</dt><dd>@d.Valor</dd></div>
+                    }
+                </dl>
+            }
+        </div>
+    </div>
+</section>
+
+@if (s.EsPortal)
+{
+    <partial name="_VitrinaPortal" model='"servicio"' />
+}
+else
+{
+    <partial name="_EscenaServicio" model="s.Slug" />
+}
+
+<section class="sv-incluye" aria-labelledby="tIncluye">
+    <div class="contenedor">
+        <h2 class="titular sv-h2" id="tIncluye">@(s.EsPortal ? "Todo lo que puedes hacer" : "Qué incluye")</h2>
+        <ul class="sv-items @(s.Incluye.Length > 6 ? "sv-items--4" : "")">
+            @foreach (var it in s.Incluye)
+            {
+                <li>
+                    <i class="bi @it.Icono" aria-hidden="true"></i>
+                    <h3>@it.Titulo</h3>
+                    <p>@it.Texto</p>
+                </li>
+            }
+        </ul>
+    </div>
+</section>
+
+<section class="sv-bloques">
+    <div class="contenedor">
+        @foreach (var b in s.Bloques)
+        {
+            <article class="sv-bloque">
+                <div class="sv-bloque-texto">
+                    <span class="sv-bloque-ico"><i class="bi @b.Icono" aria-hidden="true"></i></span>
+                    <h2 class="titular">@b.Titulo</h2>
+                    <p>@b.Texto</p>
+                </div>
+                <ul class="sv-check">
+                    @foreach (var punto in b.Puntos)
+                    {
+                        <li><i class="bi bi-check2" aria-hidden="true"></i>@punto</li>
+                    }
+                </ul>
+            </article>
+        }
+    </div>
+</section>
+
+<section class="sv-pasos" aria-labelledby="tPasos">
+    <div class="contenedor">
+        <h2 class="titular sv-h2" id="tPasos">@(s.EsPortal ? "Cómo empezar" : "Cómo trabajamos")</h2>
+        <ol class="sv-ruta" style="--n:@s.Pasos.Length">
+            @foreach (var paso in s.Pasos)
+            {
+                <li>
+                    <h3>@paso.Titulo</h3>
+                    <p>@paso.Texto</p>
+                </li>
+            }
+        </ol>
+    </div>
+</section>
+
+@if (!s.EsPortal && s.EnElPortal.Length > 0)
+{
+    <section class="sv-portal">
+        <div class="contenedor sv-portal-grid">
+            <div>
+                <p class="sv-lema"><i class="bi bi-display" aria-hidden="true"></i> Portal de clientes</p>
+                <h2 class="titular">Todo tu embarque a la vista, las 24 horas.</h2>
+                <p>En el portal de clientes ves lo mismo que nuestro equipo, apenas se registra.</p>
+                <a href="/servicios/@ServiciosWeb.SlugPortal" class="btn-hero btn-hero-principal">Conoce el portal</a>
+            </div>
+            <ul>
+                @foreach (var x in s.EnElPortal)
+                {
+                    <li><i class="bi bi-check2-circle" aria-hidden="true"></i>@x</li>
+                }
+            </ul>
+        </div>
+    </section>
+}
+
+<section class="sv-cta">
+    <div class="contenedor sv-cta-caja">
+        <div>
+            <h2 class="titular">@(s.EsPortal ? "¿Ya eres cliente de Atilson?" : "¿Hablamos de tu próximo embarque?")</h2>
+            <p>@(s.EsPortal ? "Pide tu acceso registrando tu empresa. Si ya la registraste, ingresa con tu correo." : "Cotiza y solicita desde el portal, o déjanos tus datos y un ejecutivo te contacta.")</p>
+        </div>
+        <div class="sv-cta-acciones">
+            @if (s.EsPortal)
+            {
+                <a href="/Registro" class="btn-hero btn-hero-indigo"><i class="bi bi-building-add"></i> Registrar mi empresa</a>
+                <a href="/Login" class="btn-hero btn-hero-borde"><i class="bi bi-shield-lock"></i> Ingreso portal</a>
+            }
+            else
+            {
+                <a href="/PortalCliente/SolicitarCotizacion" class="btn-hero btn-hero-indigo"><i class="bi bi-calculator"></i> Cotizar servicio</a>
+                <a href="/#contacto" class="btn-hero btn-hero-borde"><i class="bi bi-envelope"></i> Dejar mis datos</a>
+            }
+        </div>
+    </div>
+</section>
+
+<section class="sv-otros" aria-labelledby="tOtros">
+    <div class="contenedor">
+        <h2 class="sv-otros-titulo" id="tOtros">Otros servicios</h2>
+        <div class="sv-otros-lista">
+            @foreach (var o in otros)
+            {
+                <a href="@o.Url" class="@(o.EsPortal ? "destacado" : "")">
+                    <i class="bi @o.Icono" aria-hidden="true"></i>
+                    <b>@o.Nombre</b>
+                    <small>@o.Resumen</small>
+                </a>
+            }
+        </div>
+    </div>
+</section>

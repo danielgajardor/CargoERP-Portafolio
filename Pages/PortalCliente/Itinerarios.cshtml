@@ -1,0 +1,133 @@
+@page
+@model AtilsonCargoSpa.Pages.PortalCliente.ItinerariosModel
+@using AtilsonCargoSpa.Helpers
+@using AtilsonCargoSpa.Models
+@{
+    ViewData["Title"] = "Itinerarios de naves";
+    Layout = "_LayoutCliente";
+    var semanas = Model.Salidas.GroupBy(s => ItinerariosHelper.InicioSemana(s.Etd)).OrderBy(g => g.Key).ToList();
+    bool filtrando = Model.Pol != null || Model.Pod != null || Model.Naviera != null;
+    string ruta = $"{Model.NombrePol ?? "cualquier origen"} → {Model.NombrePod ?? "cualquier destino"}";
+}
+
+<link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+<link rel="stylesheet" href="~/css/portal-forms.css" asp-append-version="true" />
+<link rel="stylesheet" href="~/css/portal-itinerarios.css" asp-append-version="true" />
+
+<div class="container py-4">
+    <div class="af-wrap">
+        <a asp-page="/PortalCliente/Index" class="af-back"><i class="bi bi-arrow-left"></i> Inicio</a>
+
+        <div class="af-head">
+            <h1>Itinerarios de naves</h1>
+            <p>Salidas de las próximas @ItinerarioNave.SemanasHorizonte semanas. Elige una y solicita tu servicio con esa nave.</p>
+        </div>
+
+        <form method="get" class="it-search" role="search" aria-label="Buscar salidas">
+            <div>
+                <label class="af-label" for="busPol">Desde</label>
+                <select id="busPol" name="pol" class="af-select it-s2" data-placeholder="Puerto de origen">
+                    <option value="">Cualquier puerto</option>
+                    @foreach (var p in Model.OpcionesPol)
+                    {
+                        <option value="@p.Id" selected="@(Model.Pol == p.Id)">@p.NombrePuerto@(PuertosHelper.EsChileno(p) ? "" : ", " + p.Pais)</option>
+                    }
+                </select>
+            </div>
+            <button type="button" class="it-swap" id="btnSwap" title="Intercambiar origen y destino" aria-label="Intercambiar origen y destino"><i class="bi bi-arrow-left-right"></i></button>
+            <div>
+                <label class="af-label" for="busPod">Hasta</label>
+                <select id="busPod" name="pod" class="af-select it-s2" data-placeholder="Puerto de destino">
+                    <option value="">Cualquier puerto</option>
+                    @foreach (var p in Model.OpcionesPod)
+                    {
+                        <option value="@p.Id" selected="@(Model.Pod == p.Id)">@p.NombrePuerto@(string.IsNullOrWhiteSpace(p.Pais) ? "" : ", " + p.Pais)</option>
+                    }
+                </select>
+            </div>
+            <div class="it-search__nav">
+                <label class="af-label" for="busNav">Naviera</label>
+                <select id="busNav" name="naviera" class="af-select">
+                    <option value="">Todas</option>
+                    @foreach (var n in Model.OpcionesNaviera)
+                    {
+                        <option value="@n.Id" selected="@(Model.Naviera == n.Id)">@n.NombreNaviera</option>
+                    }
+                </select>
+            </div>
+            <button type="submit" class="af-btn-primary"><i class="bi bi-search me-1"></i> Buscar</button>
+        </form>
+
+        @if (!Model.Salidas.Any())
+        {
+            <div class="it-empty">
+                <i class="bi bi-calendar-x"></i>
+                @if (Model.TotalProximas == 0)
+                {
+                    <h3>Aún no hay salidas publicadas</h3>
+                    <p>Nuestro equipo está actualizando los itinerarios. Mientras tanto puedes solicitar tu servicio con una fecha tentativa.</p>
+                }
+                else
+                {
+                    <h3>No encontramos salidas para @ruta</h3>
+                    <p>Prueba otra combinación o pídenos la ruta: te respondemos con tarifa y opciones de nave.</p>
+                }
+                <div class="it-empty__actions">
+                    @if (filtrando && Model.TotalProximas > 0)
+                    {
+                        <a asp-page="./Itinerarios" class="it-link-ghost">Ver todas las salidas</a>
+                    }
+                    <a asp-page="./SolicitarCotizacion" asp-route-pol="@Model.NombrePol" asp-route-pod="@Model.NombrePod" class="it-link-ghost">Cotizar esta ruta</a>
+                    <a asp-page="./SolicitarReserva" class="af-btn-primary">Solicitar servicio</a>
+                </div>
+            </div>
+        }
+        else
+        {
+            <div class="it-results-head">
+                <h2>@Model.Salidas.Count salida@(Model.Salidas.Count == 1 ? "" : "s") @(filtrando ? "para " + ruta : "disponibles")</h2>
+                <p>Fechas estimadas informadas por la naviera; pueden cambiar.</p>
+            </div>
+
+            foreach (var semana in semanas)
+            {
+                <section class="it-pweek" aria-label="@ItinerariosHelper.EtiquetaSemana(semana.Key)">
+                    <h3 class="it-pweek__title">@ItinerariosHelper.EtiquetaSemana(semana.Key)</h3>
+                    <div class="it-pweek__list">
+                        @foreach (var s in semana)
+                        {
+                            <partial name="_SalidaCard" model="@(new SalidaCardVm { Salida = s, AccionUrl = Url.Page("./SolicitarReserva", new { itinerario = s.Id }), AccionTexto = "Reservar" })" />
+                        }
+                    </div>
+                </section>
+            }
+        }
+    </div>
+</div>
+
+@section Scripts {
+    <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+    <script>
+        (function () {
+            const pol = document.getElementById('busPol');
+            const pod = document.getElementById('busPod');
+            const tieneS2 = window.jQuery && $.fn.select2;
+            if (tieneS2) {
+                $('.it-s2').select2({ width: '100%', language: { noResults: function () { return 'Sin resultados'; } } });
+            }
+
+            // Intercambiar origen/destino: solo si el puerto existe como opción
+            // del otro lado (las listas salen de las salidas reales).
+            document.getElementById('btnSwap').addEventListener('click', function () {
+                const a = pol.value, b = pod.value;
+                const tiene = function (sel, v) { return !v || Array.from(sel.options).some(function (o) { return o.value === v; }); };
+                if (!tiene(pol, b) || !tiene(pod, a)) {
+                    alert('No hay salidas publicadas en el sentido inverso para esos puertos.');
+                    return;
+                }
+                pol.value = b; pod.value = a;
+                if (tieneS2) { $(pol).trigger('change'); $(pod).trigger('change'); }
+            });
+        })();
+    </script>
+}

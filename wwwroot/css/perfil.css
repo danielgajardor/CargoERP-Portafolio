@@ -1,0 +1,97 @@
+/* Mi perfil (oct-2026) — compartido por el ERP y el portal de clientes. */
+.pf {
+    --pf-indigo: #443094;
+    --pf-indigo-700: #33246f;
+    --pf-niebla: #f4f2fa;
+    --pf-tinta: #1e1835;
+    --pf-gris: #5d5872;
+    --pf-linea: #e3dfee;
+    color: var(--pf-tinta);
+    max-width: 1180px;
+}
+.pf-cabecera h1 { font-size: 28px; font-weight: 800; letter-spacing: -0.02em; margin: 0 0 4px; }
+.pf-cabecera p { color: var(--pf-gris); margin: 0 0 22px; font-size: 15px; }
+
+.pf-aviso { display: flex; gap: 10px; align-items: flex-start; border-radius: 12px; padding: 12px 16px; font-size: 14.5px; margin-bottom: 18px; }
+.pf-aviso i { font-size: 17px; line-height: 1.3; }
+.pf-aviso.ok { background: #e7f6ee; color: #14532d; }
+.pf-aviso.error { background: #fdecec; color: #8a1c1c; }
+
+.pf-grid { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 24px; align-items: start; }
+
+.pf-identidad {
+    position: sticky; top: 20px;
+    background: #fff; border: 1px solid var(--pf-linea); border-radius: 18px;
+    padding: 28px 24px; text-align: center;
+}
+.pf-avatar-wrap { position: relative; width: 112px; height: 112px; margin: 0 auto 16px; }
+.pf-avatar { width: 112px; height: 112px; border-radius: 50%; object-fit: cover; display: block; }
+.pf-avatar-ini {
+    display: grid; place-items: center;
+    background: linear-gradient(145deg, var(--pf-indigo), #160e2f);
+    color: #fff; font-size: 38px; font-weight: 800; letter-spacing: .02em;
+}
+.pf-identidad h2 { font-size: 20px; font-weight: 800; margin: 0 0 4px; }
+.pf-cargo { margin: 0; color: var(--pf-tinta); font-weight: 600; font-size: 14.5px; }
+.pf-rol { margin: 2px 0 12px; color: var(--pf-gris); font-size: 14px; }
+.pf-datos { text-align: left; margin: 20px 0 18px; padding-top: 16px; border-top: 1px solid var(--pf-linea); display: grid; gap: 10px; }
+.pf-datos dt, .pf-empresa dt { font-size: 12.5px; color: var(--pf-gris); font-weight: 600; }
+.pf-datos dd, .pf-empresa dd { margin: 0; font-size: 14.5px; overflow-wrap: anywhere; }
+.pf-foto-acciones { margin: 0; }
+.pf-link { border: 0; background: none; color: var(--pf-gris); font-size: 13.5px; text-decoration: underline; text-underline-offset: 3px; margin-top: 8px; }
+.pf-link:hover { color: #b91c1c; }
+
+/* Chips de estado (consultas de soporte) */
+.pf-chip { display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; padding: 4px 12px; font-size: 13px; font-weight: 700; }
+.pf-chip::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+.pf-chip.ok { color: #047857; }
+.pf-chip.ok { background: #e7f6ee; }
+.pf-chip.ocupado { background: #fef3c7; color: #92400e; }
+.pf-chip.fuera { background: #f1f0f5; color: #57534e; }
+.pf-chip.sin { background: var(--pf-niebla); color: var(--pf-gris); }
+
+.pf-secciones { display: grid; gap: 18px; }
+.pf-card { background: #fff; border: 1px solid var(--pf-linea); border-radius: 18px; padding: 24px 26px; scroll-margin-top: 20px; }
+.pf-card h3 { font-size: 17px; font-weight: 800; margin: 0 0 6px; display: flex; gap: 10px; align-items: center; }
+.pf-card h3 i { color: var(--pf-indigo); }
+.pf-intro { color: var(--pf-gris); font-size: 14px; margin: 0 0 16px; }
+
+.pf-campos { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px 18px; margin-top: 14px; }
+.pf-campo.full, .pf-pie { grid-column: 1 / -1; }
+.pf-campo label, .pf label { text-transform: none; letter-spacing: normal; }
+.pf-campo label { display: block; font-size: 13.5px; font-weight: 600; margin-bottom: 6px; color: var(--pf-tinta); }
+.pf-campo input {
+    width: 100%; height: 44px; border: 1px solid var(--pf-linea); border-radius: 10px;
+    padding: 0 14px; font-size: 15px; color: var(--pf-tinta); background: #fff;
+}
+.pf-campo input:focus { outline: none; border-color: var(--pf-indigo); box-shadow: 0 0 0 4px rgba(68,48,148,.14); }
+.pf-campo input:disabled { background: var(--pf-niebla); color: var(--pf-gris); }
+.pf-campo input.error { border-color: #c2410c; box-shadow: 0 0 0 3px rgba(194,65,12,.12); }
+.pf-ayuda { display: block; font-size: 12.5px; color: var(--pf-gris); margin-top: 6px; }
+.pf-pie { display: flex; justify-content: flex-end; }
+
+.pf-btn {
+    display: inline-flex; align-items: center; gap: 8px; justify-content: center;
+    border: 0; border-radius: 999px; background: var(--pf-indigo); color: #fff;
+    padding: 11px 22px; font-weight: 700; font-size: 14.5px; cursor: pointer;
+    text-transform: none; letter-spacing: normal; margin: 0;
+}
+.pf-btn:hover { background: var(--pf-indigo-700); color: #fff; }
+.pf-btn:disabled { opacity: .5; cursor: not-allowed; }
+.pf-btn-sec { background: var(--pf-niebla); color: var(--pf-indigo); }
+.pf-btn-sec:hover { background: #e9e5f7; color: var(--pf-indigo-700); }
+.pf :focus-visible { outline: 3px solid #c3b6f5; outline-offset: 2px; }
+
+
+.pf-fuerza { height: 4px; border-radius: 4px; background: var(--pf-linea); margin-top: 8px; overflow: hidden; }
+.pf-fuerza span { display: block; height: 100%; width: 0; background: #dc2626; transition: width .2s; }
+.pf-fuerza span[data-nivel="2"] { background: #f59e0b; }
+.pf-fuerza span[data-nivel="3"], .pf-fuerza span[data-nivel="4"] { background: #10b981; }
+
+.pf-empresa { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 18px; margin: 12px 0 14px; }
+
+@media (max-width: 900px) {
+    .pf-grid { grid-template-columns: 1fr; }
+    .pf-identidad { position: static; }
+    .pf-campos, .pf-empresa { grid-template-columns: 1fr; }
+}

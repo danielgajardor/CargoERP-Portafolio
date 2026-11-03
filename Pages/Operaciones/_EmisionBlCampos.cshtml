@@ -1,0 +1,44 @@
+@model AtilsonCargoSpa.Models.EmisionBlCamposVm
+@using AtilsonCargoSpa.Helpers
+@{
+    // Bloque reutilizable "Tipo de emisión + Lugar de emisión" (oct-2026).
+    // Se elige UN tipo. El Lugar de emisión aparece solo con Originales y ofrece
+    // las 4 sedes. El comportamiento vive en wwwroot/js/emision-bl.js (data-embl).
+    var p = Model.IdPrefijo;
+    var opciones = EmisionBlHelper.Opciones.Where(o => o.Codigo != Model.ExcluirTipo).ToList();
+    var lugares = EmisionBlHelper.LugaresEmision.Where(l => l != Model.ExcluirLugar).ToList();
+    bool esOriginales = Model.Tipo == EmisionBlHelper.Originales;
+    bool esOtro = Model.Tipo == EmisionBlHelper.Otro;
+    bool mostrarLugar = Model.SoloLugar || esOriginales;
+}
+<div class="embl embl--@Model.Estilo" id="@p" data-embl="1" data-obligatorio="@(Model.TipoObligatorio ? "true" : "false")" data-solo-lugar="@(Model.SoloLugar ? "true" : "false")" data-embl-off="@(Model.Deshabilitado ? "true" : "false")">
+    @if (!Model.SoloLugar)
+    {
+        <div class="embl-label">@Model.TituloTipo @if (Model.TipoObligatorio) { <span class="embl-req">*</span> }</div>
+        <div class="embl-chips" role="radiogroup">
+            @foreach (var opc in opciones)
+            {
+                bool marcado = Model.Tipo == opc.Codigo;
+                <label class="embl-chip @(marcado ? "is-on" : "")">
+                    <input type="radio" name="@Model.CampoTipo" value="@opc.Codigo" checked="@marcado" disabled="@Model.Deshabilitado" data-embl-tipo="1" />
+                    <i class="bi @(marcado ? "bi-check-circle-fill" : "bi-circle")" aria-hidden="true"></i>
+                    <span>@opc.Etiqueta</span>
+                </label>
+            }
+            <input type="text" name="@Model.CampoOtro" class="form-control erp-input text-uppercase embl-otro @(esOtro ? "" : "d-none")" value="@Model.Otro" maxlength="60" placeholder="Especificar..." disabled="@(Model.Deshabilitado || !esOtro)" />
+        </div>
+    }
+    <div class="embl-lugar @(mostrarLugar ? "" : "d-none")">
+        <div class="embl-label">@Model.TituloLugar <span class="embl-req">*</span></div>
+        <div class="embl-chips embl-chips--lugar" role="radiogroup">
+            @foreach (var lugar in lugares)
+            {
+                bool marcadoLugar = Model.Lugar == lugar;
+                <label class="embl-pill @(marcadoLugar ? "is-on" : "")">
+                    <input type="radio" name="@Model.CampoLugar" value="@lugar" checked="@marcadoLugar" disabled="@(Model.Deshabilitado || !mostrarLugar)" data-embl-lugar="1" />
+                    @lugar
+                </label>
+            }
+        </div>
+    </div>
+</div>

@@ -1,410 +1,740 @@
-﻿@page
+@page
 @model AtilsonCargoSpa.Pages.PortalCliente.FacturasModel
+@using AtilsonCargoSpa.Models
+@using System.Globalization
+@functions {
+    private static bool EsPagado(string? estado) => estado == "PAGADO" || estado == "CONCILIADO";
+    private static bool EsIngreso(TransaccionesFinanciera t) => t.TipoMovimiento == "INGRESO";
+}
 @{
     ViewData["Title"] = "Mis Facturas y Pagos";
     Layout = "_LayoutCliente";
+
+    var es = new CultureInfo("es-CL");
+    var ops = Model.OperacionesFinancieras ?? new List<Operacione>();
+
+    var ingresosAll = ops.SelectMany(o => (o.TransaccionesFinancieras ?? new List<TransaccionesFinanciera>()).Where(EsIngreso)).ToList();
+    decimal gPagUsd = ingresosAll.Where(t => t.Moneda == "USD" && EsPagado(t.EstadoFila)).Sum(t => t.MontoNeto);
+    decimal gTotClp = ingresosAll.Where(t => t.Moneda == "CLP").Sum(t => t.MontoNeto);
+    decimal gSaldoClp = ingresosAll.Where(t => t.Moneda == "CLP" && !EsPagado(t.EstadoFila)).Sum(t => t.MontoNeto);
+    decimal baseRing = gPagUsd + Model.TotalPendienteGlobal;
+    int pctPagado = baseRing > 0 ? (int)Math.Round(gPagUsd / baseRing * 100) : (ops.Any() ? 100 : 0);
+
+    int nTodas = ops.Count;
+    int nConSaldo = ops.Count(o => (o.TransaccionesFinancieras ?? new List<TransaccionesFinanciera>()).Any(t => EsIngreso(t) && !EsPagado(t.EstadoFila)));
+    int nPagadas = nTodas - nConSaldo;
+    int nDocs = ingresosAll.Where(t => !string.IsNullOrWhiteSpace(t.NumeroDocumento)).Select(t => t.NumeroDocumento).Distinct().Count();
+
+    bool hayFiltros = Model.FechaDesde.HasValue || Model.FechaHasta.HasValue || !string.IsNullOrEmpty(Model.SearchString);
+    var hoy = DateTime.Today;
+    var iniMes = new DateTime(hoy.Year, hoy.Month, 1);
+
+    // Anillo de progreso (r = 54)
+    double circ = 2 * Math.PI * 54;
 }
 
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
+
 <style>
-    /* ESTETICA ERP FINANCIERO - MINIMALISTA */
-    :root {
-        --atilson-dark: #0f172a;
-        --text-main: #334155;
-        --text-muted: #64748b;
-        --border-color: #e2e8f0;
-        --bg-light: #f8fafc;
-        --atilson-purple: #6d2d9e;
+    /* =========================================================
+       0. TOKENS (mismo sistema que el Index del portal)
+       ========================================================= */
+    .pc {
+        --pc-brand: #6d2d9e; --pc-brand-2: #8b5cf6; --pc-deep: #2c1b4d; --pc-ink: #140c26;
+        --pc-text: #1e1b2e; --pc-muted: #6b6880; --pc-faint: #a19eb3; --pc-line: #ece8f3;
+        --pc-soft: #f7f5fb; --pc-tint: #f4eefb;
+        --pc-ok: #059669; --pc-ok-bg: #ecfdf5; --pc-ok-line: #a7f3d0;
+        --pc-warn: #c2410c; --pc-warn-bg: #fff7ed; --pc-warn-line: #fed7aa;
+        --pc-info: #1d4ed8; --pc-info-bg: #eff6ff; --pc-info-line: #bfdbfe;
+        --pc-grad: linear-gradient(135deg, #6d2d9e 0%, #8b5cf6 55%, #60a5fa 100%);
+        --pc-radius: 20px;
+        --pc-shadow: 0 1px 2px rgba(20,12,38,.04), 0 10px 30px -12px rgba(20,12,38,.10);
+        --pc-shadow-lg: 0 30px 70px -28px rgba(44,27,77,.45);
+        font-family: 'Plus Jakarta Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+        color: var(--pc-text);
+        max-width: 1280px; margin: 0 auto; padding: 8px 4px 56px;
+    }
+    .pc .mono { font-family: 'JetBrains Mono', ui-monospace, monospace; letter-spacing: -.2px; }
+    .pc a { text-decoration: none; }
+    .pc-eyebrow { font-size: 11px; font-weight: 800; letter-spacing: 1.6px; text-transform: uppercase; color: var(--pc-faint); }
+    .pc-lbl { display: block; font-size: 10px; font-weight: 800; letter-spacing: 1.2px; text-transform: uppercase; color: var(--pc-faint); margin-bottom: 4px; }
+
+    /* =========================================================
+       1. HERO FINANCIERO
+       ========================================================= */
+    .pc-fhero {
+        position: relative; isolation: isolate; overflow: hidden; color: #fff;
+        border-radius: 28px; padding: 44px 48px; margin-bottom: 24px;
+        display: grid; grid-template-columns: 1.4fr auto; gap: 40px; align-items: center;
+        background:
+            radial-gradient(700px 360px at 100% 0%, rgba(139,92,246,.45), transparent 60%),
+            radial-gradient(500px 300px at 0% 100%, rgba(96,165,250,.18), transparent 60%),
+            linear-gradient(135deg, #140c26 0%, #2c1b4d 100%);
+        box-shadow: var(--pc-shadow-lg);
+    }
+    .pc-fhero::after {
+        content: ''; position: absolute; inset: 0; z-index: -1; pointer-events: none;
+        background-image: linear-gradient(rgba(255,255,255,.045) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.045) 1px, transparent 1px);
+        background-size: 44px 44px;
+        -webkit-mask-image: linear-gradient(90deg, #000 0%, transparent 60%); mask-image: linear-gradient(90deg, #000 0%, transparent 60%);
+    }
+    .pc-fhero .pc-eyebrow { color: #a99fc4; }
+    .pc-fhero h1 { font-size: clamp(28px, 3.6vw, 42px); font-weight: 800; letter-spacing: -1.4px; line-height: 1.05; margin: 10px 0 12px; color: #fff; }
+    .pc-fhero h1 span { background: linear-gradient(120deg, #c4b5fd 0%, #a78bfa 40%, #93c5fd 100%); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
+    .pc-fhero p { font-size: 15px; color: #d6d1e6; max-width: 520px; margin: 0 0 26px; line-height: 1.6; }
+    .pc-fstats { display: flex; flex-wrap: wrap; gap: 10px; }
+    .pc-fstat {
+        display: inline-flex; align-items: center; gap: 10px; padding: 10px 16px; border-radius: 14px;
+        background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.14);
+        backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); font-size: 12.5px; color: #d6d1e6; font-weight: 600;
+    }
+    .pc-fstat b { color: #fff; font-size: 15px; font-weight: 800; }
+    .pc-fstat i { color: #a78bfa; }
+
+    .pc-ringcard {
+        display: flex; align-items: center; gap: 26px; padding: 26px 30px; border-radius: 24px;
+        background: linear-gradient(160deg, rgba(255,255,255,.14), rgba(255,255,255,.04));
+        border: 1px solid rgba(255,255,255,.18);
+        backdrop-filter: blur(20px) saturate(140%); -webkit-backdrop-filter: blur(20px) saturate(140%);
+        box-shadow: 0 20px 50px -20px rgba(0,0,0,.5), inset 0 1px 0 rgba(255,255,255,.15);
+    }
+    .pc-ring { position: relative; width: 132px; height: 132px; flex-shrink: 0; }
+    .pc-ring svg { transform: rotate(-90deg); }
+    .pc-ring-track { stroke: rgba(255,255,255,.12); }
+    .pc-ring-bar { stroke: url(#pcRingGrad); stroke-linecap: round; transition: stroke-dashoffset 1.6s cubic-bezier(.2,.8,.2,1); filter: drop-shadow(0 0 8px rgba(139,92,246,.7)); }
+    .pc-ring-txt { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; }
+    .pc-ring-txt b { font-size: 30px; font-weight: 800; letter-spacing: -1px; display: block; line-height: 1; }
+    .pc-ring-txt span { font-size: 10px; font-weight: 800; letter-spacing: 1.2px; text-transform: uppercase; color: #c9c2dd; }
+    .pc-ringcard .pc-eyebrow { color: #c9c2dd; }
+    .pc-saldo { font-size: 38px; font-weight: 800; letter-spacing: -1.6px; line-height: 1.05; margin: 6px 0 4px; }
+    .pc-saldo small { font-size: 13px; font-weight: 700; color: #c9c2dd; letter-spacing: 0; margin-left: 4px; }
+    .pc-saldo-sub { font-size: 12px; color: #c9c2dd; font-weight: 600; }
+    .pc-saldo-ok { display: inline-flex; align-items: center; gap: 6px; margin-top: 10px; font-size: 11.5px; font-weight: 800; color: #6ee7b7; background: rgba(16,185,129,.14); border: 1px solid rgba(110,231,183,.3); padding: 5px 10px; border-radius: 99px; }
+
+    /* =========================================================
+       2. KPIs
+       ========================================================= */
+    .pc-kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 18px; margin-bottom: 24px; }
+    .pc-kpi {
+        --k: var(--pc-brand); position: relative; overflow: hidden; background: #fff;
+        border: 1px solid var(--pc-line); border-radius: var(--pc-radius); padding: 22px;
+        box-shadow: var(--pc-shadow); transition: transform .3s ease, box-shadow .3s ease, border-color .3s ease;
+    }
+    .pc-kpi::after { content: ''; position: absolute; width: 180px; height: 180px; right: -70px; top: -70px; border-radius: 50%; background: radial-gradient(circle, color-mix(in srgb, var(--k) 22%, transparent) 0%, transparent 70%); transition: transform .5s ease; }
+    .pc-kpi:hover { transform: translateY(-4px); border-color: color-mix(in srgb, var(--k) 35%, var(--pc-line)); box-shadow: 0 24px 50px -24px color-mix(in srgb, var(--k) 55%, transparent); }
+    .pc-kpi:hover::after { transform: scale(1.25); }
+    .pc-kpi-ico { width: 46px; height: 46px; border-radius: 14px; display: grid; place-items: center; font-size: 20px; color: var(--k); background: color-mix(in srgb, var(--k) 11%, #fff); border: 1px solid color-mix(in srgb, var(--k) 18%, #fff); position: relative; z-index: 1; }
+    .pc-kpi-label { font-size: 12px; font-weight: 700; color: var(--pc-muted); margin: 18px 0 4px; position: relative; z-index: 1; }
+    .pc-kpi-value { font-size: 30px; font-weight: 800; letter-spacing: -1.2px; color: var(--pc-ink); line-height: 1.05; position: relative; z-index: 1; white-space: nowrap; }
+    .pc-kpi-value small { font-size: 12px; font-weight: 700; color: var(--pc-faint); letter-spacing: 0; margin-left: 4px; }
+    .pc-kpi-foot { margin-top: 10px; font-size: 12px; font-weight: 600; color: var(--pc-muted); position: relative; z-index: 1; }
+
+    /* =========================================================
+       3. HERRAMIENTAS: FILTROS + CONSOLIDADO
+       ========================================================= */
+    .pc-tools { display: grid; grid-template-columns: 1.35fr 1fr; gap: 18px; margin-bottom: 26px; }
+    .pc-panel { background: #fff; border: 1px solid var(--pc-line); border-radius: 22px; padding: 22px; box-shadow: var(--pc-shadow); }
+    .pc-panel-title { font-size: 15px; font-weight: 800; color: var(--pc-ink); letter-spacing: -.3px; margin: 0 0 16px; display: flex; align-items: center; gap: 10px; }
+    .pc-panel-title i { width: 34px; height: 34px; border-radius: 11px; display: grid; place-items: center; font-size: 15px; }
+    .pc-panel-title .sub { font-size: 12px; font-weight: 600; color: var(--pc-muted); margin-left: auto; letter-spacing: 0; }
+
+    .pc-ffields { display: grid; grid-template-columns: 1fr 1fr 1.4fr auto; gap: 10px; align-items: end; }
+    .pc-field label { font-size: 10.5px; font-weight: 800; color: var(--pc-muted); letter-spacing: .5px; margin-bottom: 6px; display: block; text-transform: uppercase; }
+    .pc-input-wrap { display: flex; align-items: center; gap: 8px; background: var(--pc-soft); border: 1px solid var(--pc-line); border-radius: 12px; padding: 0 12px; transition: all .2s; }
+    .pc-input-wrap:focus-within { background: #fff; border-color: var(--pc-brand-2); box-shadow: 0 0 0 4px rgba(139,92,246,.12); }
+    .pc-input-wrap i { color: var(--pc-faint); font-size: 14px; }
+    .pc-input-wrap input { border: 0; outline: 0; background: transparent; width: 100%; min-width: 0; padding: 11px 0; font-size: 13px; font-weight: 600; color: var(--pc-text); font-family: inherit; }
+    .pc-input-wrap input::placeholder { color: var(--pc-faint); font-weight: 500; }
+
+    .pc-btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; border: 0; cursor: pointer; padding: 12px 20px; border-radius: 12px; font-weight: 700; font-size: 13px; font-family: inherit; white-space: nowrap; transition: transform .2s, box-shadow .2s, background .2s, color .2s, border-color .2s; }
+    .pc-btn-dark { background: var(--pc-deep); color: #fff; }
+    .pc-btn-dark:hover { background: var(--pc-brand); color: #fff; transform: translateY(-1px); }
+    .pc-btn-grad { background: var(--pc-grad); color: #fff; box-shadow: 0 12px 26px -12px rgba(109,45,158,.8); }
+    .pc-btn-grad:hover { color: #fff; transform: translateY(-1px); box-shadow: 0 18px 34px -12px rgba(109,45,158,.9); }
+    .pc-btn-xls { background: #fff; color: #047857; border: 1px solid #a7f3d0; }
+    .pc-btn-xls:hover { background: #ecfdf5; color: #047857; transform: translateY(-1px); }
+    .pc-btn-ghost { background: #fff; color: var(--pc-muted); border: 1px solid var(--pc-line); }
+    .pc-btn-ghost:hover { color: var(--pc-brand); border-color: #d8c8f0; }
+
+    .pc-activef { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 14px; }
+    .pc-chipf { display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; font-weight: 700; color: var(--pc-brand); background: var(--pc-tint); border: 1px solid #e4d8fb; padding: 5px 10px; border-radius: 99px; }
+    .pc-clear { font-size: 12px; font-weight: 700; color: var(--pc-muted); display: inline-flex; align-items: center; gap: 5px; }
+    .pc-clear:hover { color: #dc2626; }
+
+    .pc-presets { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+    .pc-preset { border: 1px solid var(--pc-line); background: var(--pc-soft); color: var(--pc-muted); font-size: 11.5px; font-weight: 700; padding: 6px 11px; border-radius: 99px; font-family: inherit; transition: all .2s; }
+    .pc-preset:hover { color: var(--pc-brand); border-color: #d8c8f0; }
+    .pc-preset.active { background: var(--pc-deep); border-color: var(--pc-deep); color: #fff; }
+    .pc-cons-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
+    .pc-cons-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+    /* =========================================================
+       4. LISTADO
+       ========================================================= */
+    .pc-section-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 14px; flex-wrap: wrap; margin-bottom: 16px; }
+    .pc-section-title { font-size: 24px; font-weight: 800; letter-spacing: -.7px; color: var(--pc-ink); margin: 4px 0 0; }
+    .pc-section-title .count { font-size: 13px; font-weight: 700; color: var(--pc-brand); background: var(--pc-tint); padding: 3px 10px; border-radius: 99px; vertical-align: middle; margin-left: 8px; letter-spacing: 0; }
+    .pc-seg { display: inline-flex; flex-wrap: wrap; background: #fff; border: 1px solid var(--pc-line); border-radius: 14px; padding: 4px; gap: 2px; box-shadow: var(--pc-shadow); }
+    .pc-seg button { border: 0; background: transparent; padding: 8px 14px; border-radius: 10px; font-family: inherit; font-size: 13px; font-weight: 700; color: var(--pc-muted); transition: all .2s; display: inline-flex; align-items: center; gap: 7px; }
+    .pc-seg button:hover { color: var(--pc-ink); background: var(--pc-soft); }
+    .pc-seg button.active { background: var(--pc-deep); color: #fff; box-shadow: 0 6px 14px -6px rgba(44,27,77,.6); }
+    .pc-seg .n { font-size: 11px; padding: 1px 7px; border-radius: 99px; background: rgba(0,0,0,.06); }
+    .pc-seg button.active .n { background: rgba(255,255,255,.18); }
+
+    .pc-invs { display: flex; flex-direction: column; gap: 12px; }
+    .pc-inv { background: #fff; border: 1px solid var(--pc-line); border-radius: 20px; overflow: hidden; box-shadow: var(--pc-shadow); position: relative; transition: border-color .25s, box-shadow .25s; animation: pcIn .6s cubic-bezier(.2,.8,.2,1) both; animation-delay: calc(var(--i, 0) * 60ms); }
+    .pc-inv::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: var(--pc-grad); opacity: 0; transition: opacity .25s; }
+    .pc-inv.is-paid::before { background: #10b981; }
+    .pc-inv:hover { border-color: #ddd1ec; box-shadow: 0 22px 46px -26px rgba(44,27,77,.35); }
+    .pc-inv:hover::before, .pc-inv.is-open::before { opacity: 1; }
+    .pc-inv.is-open { border-color: #d2c1ea; box-shadow: 0 26px 60px -30px rgba(109,45,158,.45); }
+
+    .pc-inv-head {
+        display: grid; align-items: center; gap: 22px; padding: 20px 22px 20px 26px; cursor: pointer;
+        grid-template-columns: minmax(190px, 1.1fr) minmax(200px, 1.3fr) minmax(200px, 1.3fr) minmax(150px, auto) auto;
+        grid-template-areas: "id route pay amount act";
+    }
+    .pc-inv-head:focus-visible { outline: 2px solid var(--pc-brand-2); outline-offset: -2px; border-radius: 20px; }
+    .pc-c-id { grid-area: id; min-width: 0; display: flex; align-items: center; gap: 14px; }
+    .pc-c-route { grid-area: route; min-width: 0; }
+    .pc-c-pay { grid-area: pay; min-width: 0; }
+    .pc-c-amount { grid-area: amount; text-align: right; }
+    .pc-c-act { grid-area: act; }
+
+    .pc-inv-ico { width: 46px; height: 46px; border-radius: 14px; display: grid; place-items: center; font-size: 20px; flex-shrink: 0; background: var(--pc-tint); color: var(--pc-brand); }
+    .pc-inv.is-paid .pc-inv-ico { background: var(--pc-ok-bg); color: var(--pc-ok); }
+    .pc-bkg { font-size: 15.5px; font-weight: 600; color: var(--pc-brand); display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .pc-date { font-size: 11.5px; color: var(--pc-muted); display: block; margin-top: 2px; }
+
+    .pc-mroute { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 700; color: var(--pc-ink); min-width: 0; }
+    .pc-mroute span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .pc-mroute i { color: var(--pc-brand-2); flex-shrink: 0; }
+    .pc-docs { font-size: 11.5px; color: var(--pc-muted); margin-top: 3px; display: block; }
+
+    .pc-paybar { height: 6px; border-radius: 99px; background: var(--pc-soft); overflow: hidden; margin: 6px 0 6px; }
+    .pc-paybar > div { height: 100%; width: 0; border-radius: 99px; background: var(--pc-grad); transition: width 1.3s cubic-bezier(.2,.8,.2,1); }
+    .pc-inv.is-paid .pc-paybar > div { background: #10b981; }
+    .pc-paytxt { display: flex; justify-content: space-between; font-size: 11px; font-weight: 700; color: var(--pc-muted); }
+    .pc-paytxt b { color: var(--pc-ink); }
+
+    .pc-amount { font-size: 19px; font-weight: 600; color: var(--pc-ink); white-space: nowrap; }
+    .pc-amount small { font-size: 10.5px; color: var(--pc-faint); font-weight: 700; margin-right: 4px; font-family: 'Plus Jakarta Sans', sans-serif; }
+    .pc-amount-clp { font-size: 11.5px; color: var(--pc-muted); display: block; margin-top: 2px; white-space: nowrap; }
+
+    .pc-pill { display: inline-flex; align-items: center; gap: 7px; padding: 5px 11px; border-radius: 99px; font-size: 10.5px; font-weight: 800; letter-spacing: .3px; white-space: nowrap; border: 1px solid transparent; margin-top: 8px; }
+    .pc-pill::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+    .pc-pill.ok { color: var(--pc-ok); background: var(--pc-ok-bg); border-color: var(--pc-ok-line); }
+    .pc-pill.warn { color: var(--pc-warn); background: var(--pc-warn-bg); border-color: var(--pc-warn-line); }
+    .pc-pill.info { color: var(--pc-info); background: var(--pc-info-bg); border-color: var(--pc-info-line); }
+
+    .pc-chev { width: 38px; height: 38px; border-radius: 12px; display: grid; place-items: center; background: var(--pc-soft); color: var(--pc-muted); transition: transform .35s ease, background .2s, color .2s; }
+    .pc-inv:hover .pc-chev { background: var(--pc-tint); color: var(--pc-brand); }
+    .pc-inv.is-open .pc-chev { transform: rotate(180deg); background: var(--pc-deep); color: #fff; }
+
+    /* Recibo */
+    .pc-receipt { border-top: 1px solid var(--pc-line); background: linear-gradient(180deg, #fbf9ff 0%, #fff 100%); padding: 26px; }
+    .pc-receipt-grid { display: grid; grid-template-columns: 1fr 300px; gap: 20px; align-items: start; }
+    .pc-rcard { background: #fff; border: 1px solid var(--pc-line); border-radius: 18px; overflow: hidden; }
+    .pc-rgroup { padding: 12px 20px; background: var(--pc-soft); border-bottom: 1px solid var(--pc-line); display: flex; align-items: center; justify-content: space-between; }
+    .pc-rgroup span { font-size: 10.5px; font-weight: 800; letter-spacing: 1.2px; text-transform: uppercase; color: var(--pc-muted); }
+    .pc-rgroup b { font-size: 11px; color: var(--pc-faint); font-weight: 700; }
+    .pc-rtable { width: 100%; border-collapse: collapse; }
+    .pc-rtable th { font-size: 9.5px; font-weight: 800; letter-spacing: 1px; text-transform: uppercase; color: var(--pc-faint); padding: 12px 20px 8px; text-align: left; }
+    .pc-rtable td { padding: 12px 20px; font-size: 13px; border-top: 1px dashed var(--pc-line); vertical-align: middle; }
+    .pc-rtable tr:hover td { background: #fcfbfe; }
+    .pc-rtable .concept { font-weight: 700; color: var(--pc-ink); }
+    .pc-rtable .doc { font-size: 12px; color: var(--pc-muted); }
+    .pc-cur { font-size: 10px; font-weight: 800; padding: 2px 7px; border-radius: 6px; background: var(--pc-soft); border: 1px solid var(--pc-line); color: var(--pc-muted); }
+    .pc-st { display: inline-flex; align-items: center; gap: 5px; font-size: 10px; font-weight: 800; padding: 4px 9px; border-radius: 8px; text-transform: uppercase; letter-spacing: .4px; white-space: nowrap; }
+    .pc-st.ok { color: var(--pc-ok); background: var(--pc-ok-bg); }
+    .pc-st.warn { color: var(--pc-warn); background: var(--pc-warn-bg); }
+
+    .pc-summary { background: #fff; border: 1px solid var(--pc-line); border-radius: 18px; padding: 20px; position: sticky; top: 16px; }
+    .pc-summary-cur + .pc-summary-cur { margin-top: 16px; padding-top: 16px; border-top: 1px dashed var(--pc-line); }
+    .pc-srow { display: flex; justify-content: space-between; align-items: baseline; padding: 5px 0; font-size: 12.5px; color: var(--pc-muted); font-weight: 600; }
+    .pc-srow b { font-size: 13px; color: var(--pc-ink); }
+    .pc-srow.total { margin-top: 6px; padding-top: 10px; border-top: 1px solid var(--pc-line); }
+    .pc-srow.total span { font-weight: 800; color: var(--pc-ink); }
+    .pc-srow.total b { font-size: 18px; }
+    .pc-srow.total b.zero { color: var(--pc-ok); }
+    .pc-summary-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 18px; }
+    .pc-summary-actions .pc-btn { padding: 10px; font-size: 12px; }
+
+    .pc-empty { text-align: center; padding: 64px 20px; background: #fff; border: 1px dashed #d8d2e4; border-radius: 22px; }
+    .pc-empty-ico { width: 76px; height: 76px; border-radius: 24px; margin: 0 auto 18px; display: grid; place-items: center; font-size: 34px; color: #fff; background: var(--pc-grad); box-shadow: 0 18px 36px -14px rgba(109,45,158,.6); }
+    .pc-empty h5 { font-weight: 800; color: var(--pc-ink); margin-bottom: 6px; }
+    .pc-empty p { color: var(--pc-muted); font-size: 14px; margin-bottom: 20px; }
+
+    /* =========================================================
+       5. ANIMACIONES + RESPONSIVE
+       ========================================================= */
+    .pc-reveal { opacity: 0; transform: translateY(26px); transition: opacity .8s ease, transform .8s cubic-bezier(.2,.8,.2,1); }
+    .pc-reveal.in { opacity: 1; transform: none; }
+    @@keyframes pcIn { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+    @@media (prefers-reduced-motion: reduce) {
+        .pc *, .pc *::before, .pc *::after { animation: none !important; transition: none !important; }
+        .pc-reveal { opacity: 1; transform: none; }
     }
 
-    body {
-        background-color: var(--bg-light);
-        font-family: 'Inter', system-ui, sans-serif;
-        color: var(--text-main);
+    @@media (max-width: 1199.98px) {
+        .pc-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .pc-tools { grid-template-columns: 1fr; }
+        .pc-inv-head { grid-template-columns: minmax(180px, 1fr) minmax(200px, 1.2fr) auto auto; grid-template-areas: "id pay amount act" "route route route route"; row-gap: 12px; }
+        .pc-c-route { padding-top: 12px; border-top: 1px dashed var(--pc-line); display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
+        .pc-c-route .pc-docs { margin-top: 0; }
     }
-
-    /* KPI CARDS ELEGANTES */
-    .kpi-minimal {
-        background: #ffffff;
-        border: 1px solid var(--border-color);
-        border-radius: 12px;
-        padding: 24px;
-        display: flex;
-        align-items: center;
-        gap: 20px;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.02);
-        position: relative;
-        overflow: hidden;
+    @@media (max-width: 991.98px) {
+        .pc-fhero { grid-template-columns: 1fr; padding: 34px 28px; }
+        .pc-receipt-grid { grid-template-columns: 1fr; }
+        .pc-summary { position: static; }
     }
-
-        .kpi-minimal::before {
-            content: '';
-            position: absolute;
-            left: 0;
-            top: 0;
-            bottom: 0;
-            width: 4px;
-            background: var(--kpi-color);
-        }
-
-    .kpi-icon-box {
-        width: 48px;
-        height: 48px;
-        border-radius: 10px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 20px;
-        background: var(--bg-light);
+    @@media (max-width: 767.98px) {
+        .pc-ffields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .pc-ffields .pc-field-search, .pc-ffields .pc-btn { grid-column: span 2; }
+        .pc-cons-fields, .pc-cons-actions { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .pc-tools > *, .pc-field, .pc-input-wrap { min-width: 0; }
+        .pc-field input, .pc-field select { min-width: 0; width: 100%; }
+        .pc-inv-head { grid-template-columns: 1fr auto; grid-template-areas: "id act" "pay pay" "amount amount" "route route"; padding: 18px; }
+        .pc-c-amount { text-align: left; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+        .pc-c-amount .pc-pill { margin-top: 0; }
+        .pc-receipt { padding: 16px; }
+        .pc-rtable th:nth-child(2), .pc-rtable td:nth-child(2) { display: none; }
+        .pc-ringcard { flex-direction: column; text-align: center; }
     }
-
-    .kpi-title-min {
-        font-size: 11px;
-        font-weight: 800;
-        color: var(--text-muted);
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-        margin-bottom: 4px;
-        display: block;
-    }
-
-    .kpi-value-min {
-        font-size: 26px;
-        font-weight: 900;
-        color: var(--atilson-dark);
-        letter-spacing: -0.5px;
-        line-height: 1;
-    }
-
-    /* BARRA DE FILTROS UNIFICADA */
-    .erp-filter-bar {
-        background: #ffffff;
-        border: 1px solid var(--border-color);
-        border-radius: 8px;
-        padding: 6px;
-        display: flex;
-        gap: 6px;
-        align-items: center;
-        box-shadow: 0 1px 2px rgba(0,0,0,0.02);
-        flex-wrap: wrap;
-    }
-
-    .filter-item {
-        display: flex;
-        align-items: center;
-        background: var(--bg-light);
-        border-radius: 6px;
-        padding: 6px 12px;
-        flex-grow: 1;
-        border: 1px solid transparent;
-        transition: border 0.2s;
-    }
-
-        .filter-item:focus-within {
-            border-color: var(--atilson-purple);
-            background: #ffffff;
-        }
-
-        .filter-item i {
-            color: var(--text-muted);
-            font-size: 13px;
-            margin-right: 8px;
-        }
-
-        .filter-item input {
-            border: none;
-            background: transparent;
-            outline: none;
-            font-size: 12px;
-            font-weight: 600;
-            color: var(--text-main);
-            width: 100%;
-        }
-
-    .btn-filter {
-        background: var(--atilson-dark);
-        color: #fff;
-        font-size: 11px;
-        font-weight: 800;
-        text-transform: uppercase;
-        padding: 8px 24px;
-        border-radius: 6px;
-        border: none;
-        transition: background 0.2s;
-        letter-spacing: 0.5px;
-    }
-
-        .btn-filter:hover {
-            background: #1e293b;
-        }
-
-    /* TABLA ERP ALTA DENSIDAD */
-    .table-container {
-        background: #ffffff;
-        border: 1px solid var(--border-color);
-        border-radius: 8px;
-        overflow: hidden;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.02);
-    }
-
-    .table-erp {
-        width: 100%;
-        border-collapse: collapse;
-        margin: 0;
-    }
-
-        .table-erp th {
-            background: var(--bg-light);
-            color: var(--text-muted);
-            font-size: 10px;
-            font-weight: 800;
-            text-transform: uppercase;
-            padding: 14px 20px;
-            border-bottom: 1px solid var(--border-color);
-            letter-spacing: 0.5px;
-        }
-
-        .table-erp td {
-            padding: 14px 20px;
-            vertical-align: middle;
-            border-bottom: 1px solid #f1f5f9;
-            font-size: 13px;
-            font-weight: 600;
-            color: var(--text-main);
-            transition: background 0.2s;
-        }
-
-    .row-clickable {
-        cursor: pointer;
-    }
-
-        .row-clickable:hover td {
-            background-color: var(--bg-light);
-        }
-
-    /* ESTADOS HOLLOW (HUECOS) */
-    .badge-hollow {
-        font-size: 9px;
-        font-weight: 800;
-        padding: 4px 10px;
-        border-radius: 4px;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-        display: inline-block;
-        background: transparent;
-    }
-
-    .badge-ok {
-        color: #059669;
-        border: 1px solid #a7f3d0;
-    }
-
-    .badge-warn {
-        color: #d97706;
-        border: 1px solid #fde68a;
-    }
-
-    /* DETALLE FACTURA (ESTILO RECIBO) */
-    .row-detail td {
-        padding: 0 !important;
-        background-color: #fafbfd;
-        border-bottom: 2px solid var(--border-color) !important;
-    }
-
-    .receipt-box {
-        padding: 24px 30px;
-    }
-
-    .receipt-title {
-        font-size: 11px;
-        font-weight: 800;
-        color: var(--text-muted);
-        text-transform: uppercase;
-        letter-spacing: 1px;
-        margin-bottom: 15px;
-        border-bottom: 1px dashed var(--border-color);
-        padding-bottom: 8px;
-    }
-
-    .receipt-table {
-        width: 100%;
-        margin-bottom: 15px;
-    }
-
-        .receipt-table th {
-            font-size: 9px;
-            color: var(--text-muted);
-            text-transform: uppercase;
-            padding: 8px 0;
-            border-bottom: 1px solid var(--border-color);
-        }
-
-        .receipt-table td {
-            padding: 10px 0;
-            font-size: 12px;
-            border-bottom: 1px dashed #f1f5f9;
-            color: var(--text-main);
-        }
-
-    .font-mono {
-        font-family: 'SFMono-Regular', Consolas, monospace;
-        font-weight: 700;
+    @@media (max-width: 575.98px) {
+        .pc-kpis { grid-template-columns: 1fr; }
+        .pc-seg { width: 100%; }
+        .pc-seg button { flex: 1; justify-content: center; }
+        .pc-rtable td, .pc-rtable th { padding-left: 14px; padding-right: 14px; }
     }
 </style>
 
-<div class="container-fluid py-4" style="max-width: 1200px;">
+<div class="pc">
 
-    <div class="d-flex justify-content-between align-items-end mb-4 pb-2 border-bottom">
+    <!-- =====================================================
+         1. HERO FINANCIERO
+         ===================================================== -->
+    <section class="pc-fhero pc-reveal">
         <div>
-            <h1 style="font-size: 22px; font-weight: 900; color: var(--atilson-dark); margin: 0; letter-spacing: -0.5px;">ESTADO DE CUENTA</h1>
-            <p class="text-muted small m-0 fw-medium mt-1">Control financiero, facturas emitidas y saldos pendientes.</p>
-        </div>
-    </div>
-
-    <!-- KPIs Minimalistas -->
-    <div class="row g-4 mb-4 reveal">
-        <div class="col-md-6">
-            <div class="kpi-minimal" style="--kpi-color: #10b981;">
-                <div class="kpi-icon-box text-success"><i class="bi bi-check2-circle"></i></div>
-                <div>
-                    <span class="kpi-title-min">Total Facturado (USD)</span>
-                    <div class="kpi-value-min">$@Model.TotalFacturadoGlobal.ToString("N0")</div>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-6">
-            <div class="kpi-minimal" style="--kpi-color: var(--atilson-purple);">
-                <div class="kpi-icon-box" style="color: var(--atilson-purple);"><i class="bi bi-wallet2"></i></div>
-                <div>
-                    <span class="kpi-title-min">Saldo Pendiente (USD)</span>
-                    <div class="kpi-value-min">$@Model.TotalPendienteGlobal.ToString("N0")</div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Barra de Filtros Integrada -->
-    <form method="get" class="erp-filter-bar mb-4 reveal">
-        <div class="filter-item" style="max-width: 160px;">
-            <i class="bi bi-calendar"></i>
-            <input type="date" asp-for="FechaDesde" title="Fecha Desde">
-        </div>
-        <div class="filter-item" style="max-width: 160px;">
-            <i class="bi bi-calendar"></i>
-            <input type="date" asp-for="FechaHasta" title="Fecha Hasta">
-        </div>
-        <div class="filter-item" style="max-width: 300px;">
-            <i class="bi bi-search"></i>
-            <input type="text" asp-for="SearchString" placeholder="Booking o Referencia...">
-        </div>
-        <button type="submit" class="btn-filter ms-auto">FILTRAR</button>
-        <a href="/PortalCliente/Facturas" class="btn btn-sm btn-light border fw-bold text-muted px-3 ms-2" style="font-size: 11px;"><i class="bi bi-eraser-fill"></i></a>
-    </form>
-        <div class="d-flex justify-content-between align-items-center bg-white border rounded-3 p-3 mb-4 reveal" style="border-color: var(--border-color) !important;">
-        <div>
-            <span class="fw-bold text-dark d-block" style="font-size: 13px;"><i class="bi bi-file-earmark-arrow-down me-2" style="color: var(--atilson-purple);"></i>Estado de Cuenta Consolidado</span>
-            <span class="text-muted" style="font-size: 11px;">Descarga el resumen de todas tus operaciones en un rango de fechas.</span>
-        </div>
-        <form method="get" class="d-flex align-items-end gap-2">
-            <div>
-                <label class="d-block text-muted fw-bold mb-1" style="font-size: 10px; text-transform: uppercase;">Desde</label>
-                <input type="date" name="desde" required class="form-control form-control-sm" style="font-size: 12px;" />
-            </div>
-            <div>
-                <label class="d-block text-muted fw-bold mb-1" style="font-size: 10px; text-transform: uppercase;">Hasta</label>
-                <input type="date" name="hasta" required class="form-control form-control-sm" style="font-size: 12px;" />
-            </div>
-            <button type="submit" formaction="?handler=DescargarConsolidadoExcel" class="btn btn-sm btn-outline-success fw-bold px-3"><i class="bi bi-file-earmark-excel-fill me-1"></i> Excel</button>
-            <button type="submit" formaction="?handler=DescargarConsolidadoPdf" class="btn btn-sm fw-bold px-3" style="background: var(--atilson-dark); color: #fff;"><i class="bi bi-file-earmark-pdf-fill me-1"></i> PDF</button>
-        </form>
-    </div>
-    <!-- Grilla ERP Alta Densidad -->
-    <div class="table-container reveal mb-5">
-        <table class="table-erp">
-            <thead>
-                <tr>
-                    <th class="ps-4">Booking / Referencia</th>
-                    <th>Fecha Operación</th>
-                    <th class="text-end">Total Facturado</th>
-                    <th class="text-center">Estado General</th>
-                    <th class="pe-4"></th>
-                </tr>
-            </thead>
-            <tbody>
-                @if (Model.OperacionesFinancieras.Any())
+            <span class="pc-eyebrow">Finanzas · Portal cliente</span>
+            <h1>Estado de <span>cuenta.</span></h1>
+            <p>Revisa tus facturas emitidas, el avance de tus pagos y descarga tu liquidación por operación o consolidada.</p>
+            <div class="pc-fstats">
+                <span class="pc-fstat"><i class="bi bi-boxes"></i> <b>@nTodas</b> operaciones</span>
+                <span class="pc-fstat"><i class="bi bi-file-earmark-text"></i> <b>@nDocs</b> documentos emitidos</span>
+                @if (nConSaldo > 0)
                 {
-                    @foreach (var op in Model.OperacionesFinancieras)
-                    {
-                        var ingresos = op.TransaccionesFinancieras.Where(t => t.TipoMovimiento == "INGRESO").ToList();
-                        decimal totalUSD = ingresos.Where(t => t.Moneda == "USD").Sum(t => t.MontoNeto);
-                        bool tienePendientes = ingresos.Any(t => t.EstadoFila != "PAGADO" && t.EstadoFila != "CONCILIADO");
+                    <span class="pc-fstat"><i class="bi bi-hourglass-split"></i> <b>@nConSaldo</b> con saldo</span>
+                }
+            </div>
+        </div>
 
-                        <tr class="row-clickable" data-bs-toggle="collapse" data-bs-target="#fact-@op.Id">
-                            <td class="ps-4" style="color: var(--atilson-purple); font-weight: 800;"><i class="bi bi-receipt me-2"></i>@(op.NumeroBooking ?? "S/N")</td>
-                            <td class="font-mono text-muted" style="font-size: 12px;">@(op.FechaCreacion?.ToString("dd/MM/yyyy") ?? "-")</td>
-                            <td class="text-end font-mono text-dark" style="font-size: 14px;">USD $@totalUSD.ToString("N0")</td>
-                            <td class="text-center">
-                                <span class="badge-hollow @(tienePendientes ? "badge-warn" : "badge-ok")">
-                                    <i class="bi bi-circle-fill me-1" style="font-size: 5px;"></i> @(tienePendientes ? "CON SALDO" : "PAGADO")
-                                </span>
-                            </td>
-                            <td class="text-end pe-4"><i class="bi bi-chevron-down text-muted"></i></td>
-                        </tr>
+        <div class="pc-ringcard">
+            <div class="pc-ring">
+                <svg width="132" height="132" viewBox="0 0 132 132" aria-hidden="true">
+                    <defs>
+                        <linearGradient id="pcRingGrad" x1="0" y1="0" x2="1" y2="1">
+                            <stop offset="0%" stop-color="#a78bfa" />
+                            <stop offset="100%" stop-color="#60a5fa" />
+                        </linearGradient>
+                    </defs>
+                    <circle class="pc-ring-track" cx="66" cy="66" r="54" fill="none" stroke-width="11" />
+                    <circle class="pc-ring-bar" cx="66" cy="66" r="54" fill="none" stroke-width="11"
+                            stroke-dasharray="@circ.ToString("0.##", CultureInfo.InvariantCulture)"
+                            stroke-dashoffset="@circ.ToString("0.##", CultureInfo.InvariantCulture)"
+                            data-pct="@pctPagado" />
+                </svg>
+                <div class="pc-ring-txt">
+                    <div><b>@pctPagado%</b><span>Pagado</span></div>
+                </div>
+            </div>
+            <div>
+                <span class="pc-eyebrow">Saldo pendiente</span>
+                <div class="pc-saldo">$<span data-count="@Model.TotalPendienteGlobal.ToString("0", CultureInfo.InvariantCulture)">@Model.TotalPendienteGlobal.ToString("N0", es)</span><small>USD</small></div>
+                @if (gSaldoClp > 0)
+                {
+                    <div class="pc-saldo-sub mono">+ CLP $@gSaldoClp.ToString("N0", es)</div>
+                }
+                @if (Model.TotalPendienteGlobal <= 0 && gSaldoClp <= 0 && nTodas > 0)
+                {
+                    <span class="pc-saldo-ok"><i class="bi bi-check-circle-fill"></i> Cuenta al día</span>
+                }
+            </div>
+        </div>
+    </section>
 
-                        <!-- Detalle Recibo -->
-                        <tr class="collapse row-detail" id="fact-@op.Id">
-                            <td colspan="5">
-                                <div class="receipt-box">
-                                    <div class="receipt-title"><i class="bi bi-list-check me-2 text-primary"></i> Desglose de Cobros y Facturas Emitidas</div>
-                                    <table class="receipt-table">
-                                        <thead>
-                                            <tr>
-                                                <th class="ps-2">Concepto Cobrado</th>
-                                                <th class="text-center">N° Documento</th>
-                                                <th class="text-center">Moneda</th>
-                                                <th class="text-end">Valor Neto</th>
-                                                <th class="text-center pe-2">Estado</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            @foreach (var tx in ingresos)
-                                            {
-                                                <tr>
-                                                    <td class="ps-2 fw-bold">@tx.Concepto</td>
-                                                    <td class="text-center font-mono text-muted">@(string.IsNullOrWhiteSpace(tx.NumeroDocumento) ? "-" : tx.NumeroDocumento)</td>
-                                                    <td class="text-center">@tx.Moneda</td>
-                                                    <td class="text-end font-mono">@tx.MontoNeto.ToString("N2")</td>
-                                                    <td class="text-center pe-2">
-                                                        <span class="badge-hollow @(tx.EstadoFila == "PAGADO" || tx.EstadoFila == "CONCILIADO" ? "badge-ok" : "badge-warn")" style="font-size: 8px;">@(tx.EstadoFila ?? "PENDIENTE")</span>
-                                                    </td>
-                                                </tr>
-                                            }
-                                        </tbody>
-                                    </table>
-                                                                        <div class="text-end mt-3 d-flex gap-2 justify-content-end">
-                                        <a href="?handler=DescargarExcel&id=@op.Id" class="btn btn-sm btn-light border fw-bold text-dark px-3" style="font-size: 11px;"><i class="bi bi-file-earmark-excel me-1"></i> Excel</a>
-                                        <a href="?handler=DescargarPdf&id=@op.Id" class="btn btn-sm btn-light border fw-bold text-dark px-3" style="font-size: 11px;"><i class="bi bi-file-earmark-pdf me-1"></i> Descargar PDF</a>
-                                    </div>
+    <!-- =====================================================
+         2. KPIs
+         ===================================================== -->
+    <section class="pc-kpis pc-reveal">
+        <div class="pc-kpi" style="--k:#6d2d9e;">
+            <div class="pc-kpi-ico"><i class="bi bi-receipt"></i></div>
+            <div class="pc-kpi-label">Total facturado</div>
+            <div class="pc-kpi-value">$<span data-count="@Model.TotalFacturadoGlobal.ToString("0", CultureInfo.InvariantCulture)">@Model.TotalFacturadoGlobal.ToString("N0", es)</span><small>USD</small></div>
+            <div class="pc-kpi-foot">
+                @if (gTotClp > 0) { <span class="mono">+ CLP $@gTotClp.ToString("N0", es)</span> } else { <span>En el periodo seleccionado</span> }
+            </div>
+        </div>
+        <div class="pc-kpi" style="--k:#059669;">
+            <div class="pc-kpi-ico"><i class="bi bi-check2-circle"></i></div>
+            <div class="pc-kpi-label">Pagado</div>
+            <div class="pc-kpi-value">$<span data-count="@gPagUsd.ToString("0", CultureInfo.InvariantCulture)">@gPagUsd.ToString("N0", es)</span><small>USD</small></div>
+            <div class="pc-kpi-foot">Pagos y conciliaciones registradas</div>
+        </div>
+        <div class="pc-kpi" style="--k:#ea580c;">
+            <div class="pc-kpi-ico"><i class="bi bi-hourglass-split"></i></div>
+            <div class="pc-kpi-label">Operaciones con saldo</div>
+            <div class="pc-kpi-value" data-count="@nConSaldo">@nConSaldo</div>
+            <div class="pc-kpi-foot">de @nTodas en el listado</div>
+        </div>
+        <div class="pc-kpi" style="--k:#2563eb;">
+            <div class="pc-kpi-ico"><i class="bi bi-patch-check"></i></div>
+            <div class="pc-kpi-label">Operaciones saldadas</div>
+            <div class="pc-kpi-value" data-count="@nPagadas">@nPagadas</div>
+            <div class="pc-kpi-foot">Sin cobros pendientes</div>
+        </div>
+    </section>
+
+    <!-- =====================================================
+         3. FILTROS + ESTADO CONSOLIDADO
+         ===================================================== -->
+    <section class="pc-tools pc-reveal">
+        <div class="pc-panel">
+            <h6 class="pc-panel-title"><i class="bi bi-sliders" style="background:#f5f0ff; color:#6d2d9e;"></i> Filtrar facturas</h6>
+            <form method="get">
+                <div class="pc-ffields">
+                    <div class="pc-field">
+                        <label for="FechaDesde">Desde</label>
+                        <div class="pc-input-wrap"><i class="bi bi-calendar3"></i><input type="date" asp-for="FechaDesde"></div>
+                    </div>
+                    <div class="pc-field">
+                        <label for="FechaHasta">Hasta</label>
+                        <div class="pc-input-wrap"><i class="bi bi-calendar3"></i><input type="date" asp-for="FechaHasta"></div>
+                    </div>
+                    <div class="pc-field pc-field-search">
+                        <label for="SearchString">Búsqueda</label>
+                        <div class="pc-input-wrap"><i class="bi bi-search"></i><input type="text" asp-for="SearchString" placeholder="Booking o N° de documento..." autocomplete="off"></div>
+                    </div>
+                    <button type="submit" class="pc-btn pc-btn-dark"><i class="bi bi-funnel"></i> Filtrar</button>
+                </div>
+            </form>
+            @if (hayFiltros)
+            {
+                <div class="pc-activef">
+                    @if (Model.FechaDesde.HasValue) { <span class="pc-chipf"><i class="bi bi-calendar-event"></i> Desde @Model.FechaDesde.Value.ToString("dd MMM yyyy", es)</span> }
+                    @if (Model.FechaHasta.HasValue) { <span class="pc-chipf"><i class="bi bi-calendar-event"></i> Hasta @Model.FechaHasta.Value.ToString("dd MMM yyyy", es)</span> }
+                    @if (!string.IsNullOrEmpty(Model.SearchString)) { <span class="pc-chipf"><i class="bi bi-search"></i> "@Model.SearchString"</span> }
+                    <a href="/PortalCliente/Facturas" class="pc-clear"><i class="bi bi-x-circle"></i> Limpiar filtros</a>
+                </div>
+            }
+        </div>
+
+        <div class="pc-panel">
+            <h6 class="pc-panel-title"><i class="bi bi-file-earmark-arrow-down" style="background:#ecfdf5; color:#059669;"></i> Estado consolidado <span class="sub">Excel o PDF</span></h6>
+            <form method="get" id="pcConsForm">
+                <div class="pc-presets">
+                    <button type="button" class="pc-preset active" data-preset="mes">Este mes</button>
+                    <button type="button" class="pc-preset" data-preset="mesAnt">Mes anterior</button>
+                    <button type="button" class="pc-preset" data-preset="3m">Últimos 3 meses</button>
+                    <button type="button" class="pc-preset" data-preset="anio">Este año</button>
+                </div>
+                <div class="pc-cons-fields">
+                    <div class="pc-field">
+                        <label for="consDesde">Desde</label>
+                        <div class="pc-input-wrap"><i class="bi bi-calendar3"></i><input type="date" id="consDesde" name="desde" required value="@iniMes.ToString("yyyy-MM-dd")"></div>
+                    </div>
+                    <div class="pc-field">
+                        <label for="consHasta">Hasta</label>
+                        <div class="pc-input-wrap"><i class="bi bi-calendar3"></i><input type="date" id="consHasta" name="hasta" required value="@hoy.ToString("yyyy-MM-dd")"></div>
+                    </div>
+                </div>
+                <div class="pc-cons-actions">
+                    <button type="submit" formaction="?handler=DescargarConsolidadoExcel" class="pc-btn pc-btn-xls"><i class="bi bi-file-earmark-excel-fill"></i> Excel</button>
+                    <button type="submit" formaction="?handler=DescargarConsolidadoPdf" class="pc-btn pc-btn-grad"><i class="bi bi-file-earmark-pdf-fill"></i> PDF</button>
+                </div>
+            </form>
+        </div>
+    </section>
+
+    <!-- =====================================================
+         4. LISTADO DE OPERACIONES FACTURADAS
+         ===================================================== -->
+    <section class="pc-reveal">
+        <div class="pc-section-head">
+            <div>
+                <span class="pc-eyebrow">Detalle por operación</span>
+                <h2 class="pc-section-title">Mis facturas <span class="count">@nTodas</span></h2>
+            </div>
+            @if (nTodas > 0)
+            {
+                <div class="pc-seg" role="tablist" aria-label="Filtrar por estado">
+                    <button type="button" class="active" data-filter="todas">Todas <span class="n">@nTodas</span></button>
+                    <button type="button" data-filter="saldo">Con saldo <span class="n">@nConSaldo</span></button>
+                    <button type="button" data-filter="pagada">Pagadas <span class="n">@nPagadas</span></button>
+                </div>
+            }
+        </div>
+
+        @if (ops.Any())
+        {
+            <div class="pc-invs">
+                @{ int idx = 0; }
+                @foreach (var op in ops)
+                {
+                    var ingresos = (op.TransaccionesFinancieras ?? new List<TransaccionesFinanciera>()).Where(EsIngreso).ToList();
+                    var baseTx = ingresos.Where(t => t.GrupoCobro != "Extracosto").ToList();
+                    var extras = ingresos.Where(t => t.GrupoCobro == "Extracosto").ToList();
+
+                    decimal totUsd = ingresos.Where(t => t.Moneda == "USD").Sum(t => t.MontoNeto);
+                    decimal pagUsd = ingresos.Where(t => t.Moneda == "USD" && EsPagado(t.EstadoFila)).Sum(t => t.MontoNeto);
+                    decimal totClp = ingresos.Where(t => t.Moneda == "CLP").Sum(t => t.MontoNeto);
+                    decimal pagClp = ingresos.Where(t => t.Moneda == "CLP" && EsPagado(t.EstadoFila)).Sum(t => t.MontoNeto);
+
+                    bool tienePendientes = ingresos.Any(t => !EsPagado(t.EstadoFila));
+                    decimal baseBar = totUsd > 0 ? totUsd : totClp;
+                    decimal pagBar = totUsd > 0 ? pagUsd : pagClp;
+                    int pct = baseBar > 0 ? (int)Math.Round(pagBar / baseBar * 100) : (tienePendientes ? 0 : 100);
+
+                    string estadoTxt = !tienePendientes ? "Pagado" : (pct > 0 ? "Pago parcial" : "Con saldo");
+                    string estadoCls = !tienePendientes ? "ok" : (pct > 0 ? "info" : "warn");
+                    int nDocsOp = ingresos.Where(t => !string.IsNullOrWhiteSpace(t.NumeroDocumento)).Select(t => t.NumeroDocumento).Distinct().Count();
+                    string pol = op.IdPuertoOrigenNavigation?.NombrePuerto ?? "Origen";
+                    string pod = op.IdPuertoDestinoNavigation?.NombrePuerto ?? "Destino";
+
+                    <article class="pc-inv @(tienePendientes ? "" : "is-paid")" id="inv-@op.Id" data-cat="@(tienePendientes ? "saldo" : "pagada")" style="--i:@(idx++);">
+                        <div class="pc-inv-head" role="button" tabindex="0" data-bs-toggle="collapse" data-bs-target="#fact-@op.Id" aria-expanded="false" aria-controls="fact-@op.Id">
+
+                            <div class="pc-c-id">
+                                <div class="pc-inv-ico"><i class="bi @(tienePendientes ? "bi-receipt" : "bi-receipt-cutoff")"></i></div>
+                                <div style="min-width:0;">
+                                    <span class="pc-lbl">Booking</span>
+                                    <span class="pc-bkg mono">@(op.NumeroBooking ?? "S/N")</span>
+                                    <span class="pc-date mono">@(op.FechaCreacion?.ToString("dd MMM yyyy", es) ?? "—")</span>
                                 </div>
-                            </td>
-                        </tr>
-                    }
+                            </div>
+
+                            <div class="pc-c-route">
+                                <div class="pc-mroute">
+                                    <span title="@pol">@pol</span><i class="bi bi-arrow-right"></i><span title="@pod">@pod</span>
+                                </div>
+                                <span class="pc-docs"><i class="bi bi-files me-1"></i>@ingresos.Count @(ingresos.Count == 1 ? "concepto" : "conceptos") · @nDocsOp @(nDocsOp == 1 ? "documento" : "documentos")</span>
+                            </div>
+
+                            <div class="pc-c-pay">
+                                <span class="pc-lbl">Avance de pago</span>
+                                <div class="pc-paybar"><div data-w="@pct"></div></div>
+                                <div class="pc-paytxt"><span><b>@pct%</b> pagado</span><span class="mono">@(totUsd > 0 ? $"USD {pagUsd.ToString("N0", es)}" : $"CLP {pagClp.ToString("N0", es)}")</span></div>
+                            </div>
+
+                            <div class="pc-c-amount">
+                                <div class="pc-amount mono"><small>USD</small>$@totUsd.ToString("N2", es)</div>
+                                @if (totClp > 0)
+                                {
+                                    <span class="pc-amount-clp mono">CLP $@totClp.ToString("N0", es)</span>
+                                }
+                                <span class="pc-pill @estadoCls">@estadoTxt</span>
+                            </div>
+
+                            <div class="pc-c-act">
+                                <span class="pc-chev"><i class="bi bi-chevron-down"></i></span>
+                            </div>
+                        </div>
+
+                        <div class="collapse pc-collapse" id="fact-@op.Id">
+                            <div class="pc-receipt">
+                                <div class="pc-receipt-grid">
+                                    <div class="pc-rcard">
+                                        @foreach (var grupo in new[] { (Titulo: "Servicios base", Items: baseTx), (Titulo: "Extracostos", Items: extras) })
+                                        {
+                                            if (!grupo.Items.Any()) { continue; }
+                                            <div class="pc-rgroup"><span>@grupo.Titulo</span><b>@grupo.Items.Count @(grupo.Items.Count == 1 ? "ítem" : "ítems")</b></div>
+                                            <table class="pc-rtable">
+                                                <thead>
+                                                    <tr>
+                                                        <th>Concepto</th>
+                                                        <th>N° documento</th>
+                                                        <th style="text-align:right;">Valor neto</th>
+                                                        <th style="text-align:right;">Estado</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    @foreach (var tx in grupo.Items)
+                                                    {
+                                                        bool txPag = EsPagado(tx.EstadoFila);
+                                                        <tr>
+                                                            <td class="concept">@tx.Concepto</td>
+                                                            <td class="doc mono">@(string.IsNullOrWhiteSpace(tx.NumeroDocumento) ? "—" : tx.NumeroDocumento)</td>
+                                                            <td class="mono" style="text-align:right; white-space:nowrap;"><span class="pc-cur me-1">@tx.Moneda</span> @tx.MontoNeto.ToString(tx.Moneda == "CLP" ? "N0" : "N2", es)</td>
+                                                            <td style="text-align:right;">
+                                                                <span class="pc-st @(txPag ? "ok" : "warn")"><i class="bi @(txPag ? "bi-check2" : "bi-clock")"></i> @(tx.EstadoFila ?? "Pendiente")</span>
+                                                            </td>
+                                                        </tr>
+                                                    }
+                                                </tbody>
+                                            </table>
+                                        }
+                                    </div>
+
+                                    <aside class="pc-summary">
+                                        <span class="pc-eyebrow d-block mb-2">Resumen</span>
+                                        @if (totUsd > 0 || totClp == 0)
+                                        {
+                                            <div class="pc-summary-cur">
+                                                <div class="pc-srow"><span>Total USD</span><b class="mono">$@totUsd.ToString("N2", es)</b></div>
+                                                <div class="pc-srow"><span>Pagado</span><b class="mono" style="color:var(--pc-ok);">− $@pagUsd.ToString("N2", es)</b></div>
+                                                <div class="pc-srow total"><span>Saldo USD</span><b class="mono @(totUsd - pagUsd <= 0 ? "zero" : "")">$@((totUsd - pagUsd).ToString("N2", es))</b></div>
+                                            </div>
+                                        }
+                                        @if (totClp > 0)
+                                        {
+                                            <div class="pc-summary-cur">
+                                                <div class="pc-srow"><span>Total CLP</span><b class="mono">$@totClp.ToString("N0", es)</b></div>
+                                                <div class="pc-srow"><span>Pagado</span><b class="mono" style="color:var(--pc-ok);">− $@pagClp.ToString("N0", es)</b></div>
+                                                <div class="pc-srow total"><span>Saldo CLP</span><b class="mono @(totClp - pagClp <= 0 ? "zero" : "")">$@((totClp - pagClp).ToString("N0", es))</b></div>
+                                            </div>
+                                        }
+                                        <div class="pc-summary-actions">
+                                            <a href="?handler=DescargarExcel&id=@op.Id" class="pc-btn pc-btn-xls"><i class="bi bi-file-earmark-excel"></i> Excel</a>
+                                            <a href="?handler=DescargarPdf&id=@op.Id" class="pc-btn pc-btn-dark"><i class="bi bi-file-earmark-pdf"></i> PDF</a>
+                                        </div>
+                                    </aside>
+                                </div>
+                            </div>
+                        </div>
+                    </article>
+                }
+            </div>
+
+            <div id="pcFilterEmpty" class="pc-empty mt-2" hidden>
+                <div class="pc-empty-ico"><i class="bi bi-funnel"></i></div>
+                <h5>Nada por aquí</h5>
+                <p>No hay facturas con este estado en el listado actual.</p>
+            </div>
+        }
+        else
+        {
+            <div class="pc-empty">
+                <div class="pc-empty-ico"><i class="bi bi-receipt"></i></div>
+                @if (hayFiltros)
+                {
+                    <h5>Sin facturas para estos filtros</h5>
+                    <p>Ajusta el rango de fechas o la búsqueda e inténtalo de nuevo.</p>
+                    <a href="/PortalCliente/Facturas" class="pc-btn pc-btn-dark"><i class="bi bi-arrow-counterclockwise"></i> Ver todas</a>
                 }
                 else
                 {
-                    <tr><td colspan="5" class="text-center py-5 text-muted"><i class="bi bi-inbox fs-2 opacity-25 d-block mb-2"></i> No se registran facturas en este periodo.</td></tr>
+                    <h5>Aún no hay facturas emitidas</h5>
+                    <p>La liquidación se emite automáticamente al cierre de cada operación.</p>
+                    <a href="/PortalCliente/Operaciones" class="pc-btn pc-btn-grad"><i class="bi bi-arrow-left"></i> Volver a mis operaciones</a>
                 }
-            </tbody>
-        </table>
-    </div>
+            </div>
+        }
+    </section>
 </div>
 
 @section Scripts {
     <script>
-        document.addEventListener("DOMContentLoaded", function() {
-            var reveals = document.querySelectorAll(".reveal");
-            for (var i = 0; i < reveals.length; i++) {
-                reveals[i].classList.add("active"); // Simple fade in si tienes la clase .reveal.active en el layout
+        document.addEventListener('DOMContentLoaded', function () {
+            const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+            // ===== Reveal on scroll =====
+            const reveals = document.querySelectorAll('.pc-reveal');
+            if ('IntersectionObserver' in window && !reduce) {
+                const io = new IntersectionObserver((entries) => {
+                    entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); } });
+                }, { threshold: 0.08, rootMargin: '0px 0px -40px 0px' });
+                reveals.forEach(el => io.observe(el));
+            } else {
+                reveals.forEach(el => el.classList.add('in'));
             }
+
+            // ===== Count-up =====
+            document.querySelectorAll('[data-count]').forEach(el => {
+                const target = parseFloat(el.dataset.count) || 0;
+                if (reduce || target === 0) return;
+                const dur = 1200, t0 = performance.now();
+                const step = (now) => {
+                    const p = Math.min((now - t0) / dur, 1);
+                    el.textContent = Math.round(target * (1 - Math.pow(1 - p, 3))).toLocaleString('es-CL');
+                    if (p < 1) requestAnimationFrame(step);
+                };
+                requestAnimationFrame(step);
+            });
+
+            // ===== Anillo y barras =====
+            requestAnimationFrame(() => setTimeout(() => {
+                document.querySelectorAll('.pc-ring-bar').forEach(c => {
+                    const circ = parseFloat(c.getAttribute('stroke-dasharray'));
+                    const pct = Math.min(Math.max(parseFloat(c.dataset.pct) || 0, 0), 100);
+                    c.style.strokeDashoffset = circ * (1 - pct / 100);
+                });
+                document.querySelectorAll('[data-w]').forEach(el => el.style.width = el.dataset.w + '%');
+            }, 150));
+
+            // ===== Estado abierto + teclado =====
+            document.querySelectorAll('.pc-collapse').forEach(c => {
+                const card = c.closest('.pc-inv');
+                const head = card.querySelector('.pc-inv-head');
+                c.addEventListener('show.bs.collapse', () => { card.classList.add('is-open'); head.setAttribute('aria-expanded', 'true'); });
+                c.addEventListener('hide.bs.collapse', () => { card.classList.remove('is-open'); head.setAttribute('aria-expanded', 'false'); });
+            });
+            document.querySelectorAll('.pc-inv-head').forEach(h => {
+                h.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); h.click(); } });
+            });
+
+            // ===== Abrir factura desde el Index (#fact-ID) =====
+            if (location.hash && location.hash.startsWith('#fact-')) {
+                const target = document.querySelector(location.hash);
+                if (target && window.bootstrap) {
+                    bootstrap.Collapse.getOrCreateInstance(target, { toggle: false }).show();
+                    setTimeout(() => target.closest('.pc-inv')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 250);
+                }
+            }
+
+            // ===== Filtro por estado =====
+            const chips = document.querySelectorAll('.pc-seg [data-filter]');
+            chips.forEach(c => c.addEventListener('click', () => {
+                const f = c.dataset.filter;
+                chips.forEach(x => x.classList.toggle('active', x === c));
+                let visibles = 0;
+                document.querySelectorAll('.pc-inv').forEach(s => {
+                    const ok = f === 'todas' || s.dataset.cat === f;
+                    s.style.display = ok ? '' : 'none';
+                    if (ok) visibles++;
+                });
+                const empty = document.getElementById('pcFilterEmpty');
+                if (empty) empty.hidden = visibles > 0;
+            }));
+
+            // ===== Presets del consolidado =====
+            const fmt = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+            const desde = document.getElementById('consDesde');
+            const hasta = document.getElementById('consHasta');
+            const presets = document.querySelectorAll('[data-preset]');
+            presets.forEach(b => b.addEventListener('click', () => {
+                const hoy = new Date();
+                let d1, d2 = hoy;
+                switch (b.dataset.preset) {
+                    case 'mes': d1 = new Date(hoy.getFullYear(), hoy.getMonth(), 1); break;
+                    case 'mesAnt': d1 = new Date(hoy.getFullYear(), hoy.getMonth() - 1, 1); d2 = new Date(hoy.getFullYear(), hoy.getMonth(), 0); break;
+                    case '3m': d1 = new Date(hoy.getFullYear(), hoy.getMonth() - 2, 1); break;
+                    case 'anio': d1 = new Date(hoy.getFullYear(), 0, 1); break;
+                }
+                desde.value = fmt(d1); hasta.value = fmt(d2);
+                presets.forEach(x => x.classList.toggle('active', x === b));
+            }));
+            [desde, hasta].forEach(i => i.addEventListener('input', () => presets.forEach(x => x.classList.remove('active'))));
+
+            document.getElementById('pcConsForm').addEventListener('submit', e => {
+                if (desde.value && hasta.value && desde.value > hasta.value) {
+                    e.preventDefault();
+                    hasta.setCustomValidity('La fecha "Hasta" debe ser posterior a "Desde".');
+                    hasta.reportValidity();
+                    hasta.addEventListener('input', () => hasta.setCustomValidity(''), { once: true });
+                }
+            });
         });
     </script>
 }

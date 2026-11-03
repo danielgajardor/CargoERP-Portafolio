@@ -1,0 +1,211 @@
+/* =========================================================================
+   CONTROL FINANCIERO — CAPA PREMIUM
+   Mismo lenguaje visual que Detalle de Operación (wwwroot/css/detalle-premium.css):
+   gradiente morado/violeta, Plus Jakarta Sans, sombras "glow", radios grandes.
+   Solo propiedades visuales — ningún handler de formulario (verificación AGA,
+   Nota de Cobro, subida de factura/comprobante, componentes de Gate) ni la
+   lógica de agrupación de filas fue tocada.
+
+   Por qué va en un archivo aparte y todo acotado a .cf-premium: esta vista
+   comparte nombres de clase (.workspace-nav, .ws-btn, .atilson-tabs,
+   .table-main-grid, .badge-estado, .btn-xs...) con otras pantallas de
+   Finanzas (Cobranza, AcuerdosOperativos, MainBoard) que todavía no pasaron
+   por este rediseño — si esto se cargara sin acotar, se verían afectadas
+   sin haber sido revisadas. Acotando todo a .cf-premium, esas vistas no
+   cambian en absoluto.
+   ========================================================================= */
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600&display=swap');
+
+/* ---------- 0. Tokens ---------- */
+.cf-premium {
+    --cf-brand: #6d2d9e;
+    --cf-brand-2: #8b5cf6;
+    --cf-deep: #2c1b4d;
+    --cf-ink: #140c26;
+    --cf-muted: #6b6880;
+    --cf-faint: #a19eb3;
+    --cf-line: #ece8f3;
+    --cf-soft: #f8f7fc;
+    --cf-tint: #f4eefb;
+    --cf-grad: linear-gradient(135deg, #6d2d9e 0%, #8b5cf6 55%, #60a5fa 100%);
+    --cf-shadow: 0 1px 2px rgba(20,12,38,.04), 0 18px 40px -26px rgba(44,27,77,.28);
+    --cf-shadow-lg: 0 30px 70px -30px rgba(44,27,77,.55);
+
+    /* Esta vista ya traía su propio alias local (--atilson-slate-900/500,
+       --atilson-bg-soft, --atilson-border → design-system.css) para no
+       tocar los ~40 usos de esas variables repartidos en el archivo —
+       se realinean acá al mismo truco, esta vez al sistema premium. */
+    --atilson-slate-900: #140c26;
+    --atilson-slate-500: #6b6880;
+    --atilson-bg-soft: #f8f7fc;
+    --atilson-border: #ece8f3;
+
+    font-family: 'Plus Jakarta Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+    padding-bottom: 48px;
+}
+.cf-premium .mono, .cf-premium .font-monospace {
+    font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Consolas, monospace !important;
+}
+
+body:has(.cf-premium) {
+    background:
+        radial-gradient(1100px 460px at 100% -10%, rgba(139,92,246,.06), transparent 60%),
+        #f5f4f9;
+}
+
+/* ---------- 1. Encabezado de página ---------- */
+.cf-premium .page-header__icon {
+    background: var(--cf-grad) !important; color: #fff !important;
+    box-shadow: 0 10px 20px -10px rgba(109,45,158,.6);
+}
+.cf-premium .page-header h1, .cf-premium .page-header__title { letter-spacing: -.5px !important; }
+
+/* ---------- 2. Workspace nav (Main Board / Control Financiero / ...) ---------- */
+.cf-premium .workspace-nav {
+    background: #fff !important; border-color: var(--cf-line) !important; box-shadow: var(--cf-shadow) !important;
+    padding: 5px !important; border-radius: 14px !important;
+}
+.cf-premium .ws-btn { border-radius: 10px !important; font-weight: 800 !important; }
+.cf-premium .ws-btn:hover { background: var(--cf-tint) !important; color: var(--cf-brand) !important; }
+.cf-premium .ws-btn.active {
+    background: linear-gradient(135deg, #2c1b4d, #5b2a8a) !important; color: #fff !important;
+    box-shadow: 0 10px 20px -10px rgba(44,27,77,.7) !important;
+}
+
+/* ---------- 3. Pestañas Egresos / Ingresos / Resumen ----------
+   Se conserva el color de acento por pestaña (verde/rojo/índigo) que ya
+   existía — ahora en una barra flotante con el mismo lenguaje que la
+   barra de pestañas de Detalle de Operación, fija arriba para poder
+   cambiar de pestaña sin perder el scroll en tablas largas. */
+.cf-premium .atilson-tabs {
+    position: sticky; top: 10px; z-index: 30;
+    background: rgba(255,255,255,.92); backdrop-filter: blur(14px) saturate(160%); -webkit-backdrop-filter: blur(14px) saturate(160%);
+    border: 1px solid var(--cf-line) !important; border-radius: 16px; box-shadow: var(--cf-shadow);
+    padding: 6px 18px 0 !important; gap: 26px !important;
+}
+.cf-premium .atilson-tabs .nav-link { font-weight: 800 !important; padding: 10px 2px !important; }
+.cf-premium .atilson-tabs .nav-link.active { font-weight: 900 !important; }
+
+/* ---------- 4. Tablas principales ---------- */
+.cf-premium .table-responsive {
+    border: 1px solid var(--cf-line); border-radius: 18px; box-shadow: var(--cf-shadow);
+    background: #fff;
+    /* No overflow:hidden acá: .table-responsive necesita seguir scrolleando
+       en horizontal en pantallas angostas (comportamiento propio de
+       Bootstrap) — las esquinas se redondean en el thead directamente. */
+}
+.cf-premium .table-main-grid > thead > tr > th {
+    border-bottom-color: var(--cf-ink) !important; letter-spacing: .6px !important;
+    background: var(--cf-soft) !important;
+}
+.cf-premium .table-main-grid > thead > tr > th:first-child { border-top-left-radius: 17px; }
+.cf-premium .table-main-grid > thead > tr > th:last-child { border-top-right-radius: 17px; }
+.cf-premium .table-main-grid > tbody > tr.main-row > td { border-bottom-color: var(--cf-line) !important; }
+.cf-premium .table-main-grid > tbody > tr.main-row:hover > td { background-color: var(--cf-tint) !important; }
+
+/* Barra de acento por tipo de fila — mismo código de color (ingreso/egreso/
+   resumen), solo un poco más gruesa y con el borde redondeado del resto. */
+.cf-premium .row-ingreso > td:first-child,
+.cf-premium .row-egreso > td:first-child,
+.cf-premium .row-resumen > td:first-child { border-left-width: 4px !important; }
+
+/* Chevron de expandir/colapsar: Bootstrap ya pone aria-expanded en la fila
+   disparadora (tiene data-bs-toggle="collapse" + data-bs-target) — solo
+   faltaba usarlo para rotar el ícono; antes se quedaba siempre apuntando
+   a la derecha aunque la fila estuviera abierta. */
+.cf-premium .main-row .bi-chevron-right { transition: transform .25s ease; display: inline-block; }
+.cf-premium .main-row[aria-expanded="true"] .bi-chevron-right { transform: rotate(90deg); color: var(--cf-brand) !important; }
+
+/* ---------- 5. Filas anidadas (detalle por Booking) ---------- */
+.cf-premium .nested-container { background-color: var(--cf-soft); }
+.cf-premium .nested-table thead th {
+    background-color: var(--cf-tint) !important; color: var(--cf-brand) !important; border-bottom-color: var(--cf-line) !important;
+}
+.cf-premium .nested-table tbody td { border-bottom-color: var(--cf-line) !important; color: var(--cf-ink); }
+.cf-premium .nested-table tbody tr:hover td { background-color: #fff; }
+.cf-premium .row-group-header td { background-color: var(--cf-tint) !important; color: var(--cf-brand) !important; border-bottom-color: var(--cf-line) !important; }
+.cf-premium .row-grupo-u { background-color: var(--cf-soft) !important; }
+.cf-premium .icon-chevron-u { color: var(--cf-faint) !important; }
+.cf-premium .badge-contador-u { background: var(--cf-line) !important; color: var(--cf-muted) !important; border-radius: 999px !important; }
+
+/* ---------- 6. Badges de estado y responsabilidad ---------- */
+.cf-premium .badge-estado, .cf-premium .badge-pendiente-comercial, .cf-premium .badge-resp-atilson, .cf-premium .badge-resp-cliente {
+    border-radius: 999px !important; letter-spacing: .4px !important;
+}
+.cf-premium .badge-estado { font-weight: 800 !important; box-shadow: 0 1px 2px rgba(20,12,38,.06); }
+
+/* ---------- 7. Alerta "Pendiente cierre Acuerdo" ----------
+   Se conserva el pulso (es la señal de que Comercial debe actuar); solo
+   se suaviza la forma para que no se vea como un elemento suelto. */
+.cf-premium .alerta-comercial-banner { box-shadow: inset 0 1px 0 rgba(255,255,255,.4); }
+.cf-premium .badge-pendiente-comercial { box-shadow: 0 1px 2px rgba(220,38,38,.15); }
+
+/* ---------- 8. Botones y controles ---------- */
+.cf-premium .btn { border-radius: 10px !important; transition: all .18s ease !important; }
+.cf-premium .btn-xs { border-radius: 7px !important; font-weight: 800 !important; }
+.cf-premium .btn-action-col { border-radius: 8px !important; }
+.cf-premium .btn-action-col:hover, .cf-premium .btn-xs:hover { transform: translateY(-1px); box-shadow: 0 6px 14px -8px rgba(20,12,38,.35); }
+.cf-premium .btn-dark {
+    background: linear-gradient(135deg, #2c1b4d, #5b2a8a) !important; border: 0 !important;
+    box-shadow: 0 10px 22px -12px rgba(44,27,77,.85) !important;
+}
+.cf-premium .btn-dark:hover:not(:disabled) { background: linear-gradient(135deg, #3a2363, #6d2d9e) !important; }
+.cf-premium .btn-outline-dark:hover { background: var(--cf-ink) !important; border-color: var(--cf-ink) !important; }
+.cf-premium .btn-outline-success:hover { background: var(--success) !important; }
+
+.cf-premium .form-control, .cf-premium .form-select, .cf-premium .input-group-text {
+    border-radius: 9px !important; border-color: var(--cf-line) !important;
+}
+.cf-premium .form-control:focus {
+    border-color: var(--cf-brand-2) !important; box-shadow: 0 0 0 4px rgba(139,92,246,.12) !important;
+}
+.cf-premium .form-control.is-invalid:focus { box-shadow: 0 0 0 4px rgba(220,38,38,.12) !important; }
+.cf-premium .form-check-input:checked { background-color: var(--cf-ink) !important; border-color: var(--cf-ink) !important; }
+.cf-premium .form-check-input:focus { border-color: var(--cf-brand-2) !important; box-shadow: 0 0 0 4px rgba(139,92,246,.12) !important; }
+
+/* ---------- 9. Alertas globales (bloqueos de seguridad, errores) ---------- */
+.cf-premium .alert-danger { border-radius: 14px !important; }
+
+/* ---------- 10. Responsive ---------- */
+@media (max-width: 767.98px) {
+    .cf-premium .atilson-tabs { position: static; gap: 14px !important; overflow-x: auto; flex-wrap: nowrap; }
+    .cf-premium .workspace-nav { flex-wrap: wrap; }
+}
+@media (prefers-reduced-motion: reduce) {
+    .cf-premium .main-row .bi-chevron-right, .cf-premium .btn { transition: none !important; }
+}
+
+/* ---------- Resumen por concepto (oct-2026) ---------- */
+.cf-res-tabla td { vertical-align: middle; }
+.cf-res-tabla .cf-res-grupo td {
+    background: #f1f5f9 !important; font-size: 11px; font-weight: 800; text-transform: uppercase;
+    letter-spacing: .4px; color: #0f172a; border-top: 1px solid #e2e8f0;
+}
+.cf-res-cuenta { font-weight: 600; text-transform: none; letter-spacing: 0; color: #94a3b8; margin-left: 6px; }
+.cf-res-tabla .cf-res-fila td { font-size: 12px; }
+.cf-res-concepto { font-weight: 600; color: #1e293b; }
+.cf-res-chip {
+    display: inline-block; margin-left: 6px; padding: 0 7px; border-radius: 999px; border: 1px solid #e2e8f0;
+    background: #f8fafc; color: #64748b; font-size: 9.5px; font-weight: 700; line-height: 16px; vertical-align: middle;
+}
+.cf-res-chip--ext { color: #b91c1c; background: #fef2f2; border-color: #fecaca; }
+.cf-res-chip--pend { color: #b45309; background: #fffbeb; border-color: #fde68a; }
+.cf-res-monto { font-family: var(--bs-font-monospace, monospace); font-size: 12px; color: #475569; white-space: nowrap; }
+.cf-res-monto + .cf-res-monto { margin-top: 2px; }
+.cf-res-pos { color: #15803d; font-weight: 700; }
+.cf-res-neg { color: #dc2626; font-weight: 700; }
+.cf-res-cero { color: #94a3b8; }
+.cf-res-margen { font-size: 11.5px; color: #64748b; font-weight: 700; }
+.cf-res-tabla tfoot .cf-res-total td {
+    background: #0f172a !important; color: #fff !important; font-size: 11.5px; font-weight: 800;
+    text-transform: uppercase; letter-spacing: .4px; border: 0;
+}
+.cf-res-tabla tfoot .cf-res-monto { color: #e2e8f0; }
+.cf-res-tabla tfoot .cf-res-pos { color: #86efac; }
+.cf-res-tabla tfoot .cf-res-neg { color: #fca5a5; }
+.cf-res-nota { font-size: 11px; color: #64748b; padding: 8px 18px 10px; }
+
+/* Exentos e equivalencia en CLP (oct-2026) */
+.cf-exento { display: inline-block; font-family: inherit; font-size: 11px; font-weight: 800; letter-spacing: .3px; color: #475569; background: #f1f5f9; border: 1px solid #e2e8f0; border-radius: 999px; padding: 2px 10px; }
+.cf-equiv { display: block; font-size: 9.5px; color: #94a3b8; font-weight: 600; white-space: nowrap; }
+.cf-res-total--clp td { background: #f8f7fc; color: #33246f; }

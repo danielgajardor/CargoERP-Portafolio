@@ -1,0 +1,41 @@
+@* Clientes en la landing (nov-2026): una cinta de logos que avanza lento y se detiene al pasar
+   el mouse. Para agregar un cliente: copiar su logo original a Herramientas/logos_clientes_originales/,
+   correr Herramientas/preparar_logos_clientes.py (lo deja parejo en wwwroot/img/clientes/) y
+   sumarlo a esta lista con el mismo nombre de archivo. *@
+@{
+    var clientes = new (string Archivo, string Nombre)[]
+    {
+        ("anakena", "Anakena"),
+        ("queenfrut", "Queenfrut"),
+        ("carmencita-export", "Carmencita Export"),
+        ("frutamerica", "Frutamerica"),
+        ("olivar-export", "Olivar Export"),
+        ("vission-fresh", "Vission Fresh"),
+        ("frutexsa", "Frutexsa"),
+        ("land-growers-chile", "Land Growers Chile"),
+        ("santisfrut", "Santisfrut"),
+        ("promar", "Promar Productos Congelados"),
+        ("sur-nut-chile", "Sur Nut Chile"),
+        ("terrakoy", "Terrakoy"),
+        ("vitakai", "Vitakai"),
+    };
+}
+<section class="clientes" id="clientes" aria-labelledby="clTitulo">
+    <div class="contenedor clientes-cab">
+        <h2 class="titular section-title" id="clTitulo">Llevamos lo que Chile exporta.</h2>
+        <p class="section-subtitle">Exportadores de fruta fresca, pasas, frutos secos y congelados confían en nosotros para que su carga llegue a tiempo a todo el mundo.</p>
+    </div>
+    <div class="clientes-cinta" style="--n:@clientes.Length">
+        <ul class="clientes-pista">
+            @for (int vuelta = 0; vuelta < 2; vuelta++)
+            {
+                foreach (var c in clientes)
+                {
+                    <li class="cliente" aria-hidden="@(vuelta == 1 ? "true" : null)">
+                        <img src="~/img/clientes/@(c.Archivo).png" alt="@(vuelta == 0 ? c.Nombre : "")" width="220" height="100" loading="lazy" decoding="async" asp-append-version="true" />
+                    </li>
+                }
+            }
+        </ul>
+    </div>
+</section>

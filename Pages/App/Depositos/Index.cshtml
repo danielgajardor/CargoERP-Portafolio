@@ -1,0 +1,149 @@
+﻿@page
+@model AtilsonCargoSpa.Pages.App.Depositos.IndexModel
+@using AtilsonCargoSpa.Services
+@{
+    ViewData["Title"] = "Maestro de Depósitos";
+}
+<link rel="stylesheet" href="~/css/maestros.css" asp-append-version="true" />
+
+<div class="container-fluid py-4 mx">
+    <header class="mx-cabecera">
+        <div>
+            <div class="mx-miga">Maestros</div>
+            <h1 class="mx-titulo">Depósitos</h1>
+            <p class="mx-subtitulo">Depósitos de vacíos y extraportuarios. La ciudad se usa para encontrar la tarifa de transporte.</p>
+        </div>
+        <div class="mx-acciones">
+            <a asp-page="./Edit" class="mx-btn mx-btn-primario"><i class="bi bi-plus-lg"></i> Nuevo depósito</a>
+        </div>
+    </header>
+
+    <div class="mx-barra">
+        <div class="mx-buscar">
+            <i class="bi bi-search" aria-hidden="true"></i>
+            <input type="search" data-mx-filtro value="@Model.Q" placeholder="Buscar por nombre, ciudad, naviera o dirección…" aria-label="Buscar depósito" autocomplete="off" />
+        </div>
+        <div class="mx-filtro-extra">
+            <select data-mx-filtro-extra data-buscador="si" aria-label="Filtrar por ciudad">
+                <option value="">Todas las ciudades</option>
+                @if (Model.SinCiudad > 0)
+                {
+                    <option value="sin-ciudad" selected="@(Model.F == "sin-ciudad")">Sin ciudad (@Model.SinCiudad)</option>
+                }
+                @foreach (var c in Model.OpcionesCiudad)
+                {
+                    <option value="@c.Valor" selected="@(Model.F == c.Valor)">@c.Texto</option>
+                }
+            </select>
+        </div>
+        <nav class="mx-segmentos" aria-label="Estado">
+            <a asp-route-estado="activos" class="@(Model.Estado == "activos" ? "activo" : "")">Activos<span class="mx-cuenta">@Model.TotalActivos</span></a>
+            <a asp-route-estado="inactivos" class="@(Model.Estado == "inactivos" ? "activo" : "")">Inactivos<span class="mx-cuenta">@Model.TotalInactivos</span></a>
+            @if (Model.PorValidar > 0 || Model.Estado == "porvalidar")
+            {
+                <a asp-route-estado="porvalidar" class="@(Model.Estado == "porvalidar" ? "activo" : "")">Por validar<span class="mx-cuenta">@Model.PorValidar</span></a>
+            }
+            <a asp-route-estado="todos" class="@(Model.Estado == "todos" ? "activo" : "")">Todos</a>
+        </nav>
+        <span class="mx-total" data-mx-total>@Model.Filas.Count registros</span>
+    </div>
+
+    @if (Model.SinCiudad > 0 && Model.Estado != "inactivos")
+    {
+        <div class="alert alert-warning d-flex align-items-center gap-2 py-2 px-3 mb-3" style="font-size:13px;border-radius:10px;">
+            <i class="bi bi-exclamation-triangle-fill"></i>
+            <span><strong>@Model.SinCiudad depósito(s) sin ciudad.</strong> Sin ciudad no se puede encontrar la tarifa de transporte y el flete queda «Por asignar». Filtra por «Sin ciudad» para completarlos.</span>
+        </div>
+    }
+
+    <div class="mx-tabla-wrap">
+        <table class="mx-tabla" data-mx-tabla>
+            <thead>
+                <tr>
+                    <th>Depósito</th>
+                    <th>Ciudad</th>
+                    <th>Naviera</th>
+                    <th>Última modificación</th>
+                    <th>Estado</th>
+                    <th class="mx-col-acciones"><span class="visually-hidden">Acciones</span></th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var f in Model.Filas)
+                {
+                    var d = f.Deposito;
+                    <tr data-mx-texto="@d.NombreDeposito @f.Ciudad @f.Naviera @d.Direccion @d.Pais @f.Cliente" data-mx-extra="@(d.IdCiudad.HasValue && f.Ciudad != null ? d.IdCiudad.Value.ToString() : "sin-ciudad")"
+                        class="@(f.Activo ? "" : "mx-inactivo") @(Model.Resaltar == d.Id ? "mx-resaltado" : "")">
+                        <td>
+                            <a asp-page="./Edit" asp-route-id="@d.Id" class="mx-nombre text-decoration-none">@d.NombreDeposito</a>
+                            <span class="mx-sec">@(string.IsNullOrWhiteSpace(d.Direccion) ? "Sin dirección" : d.Direccion)</span>
+                            @if (f.Cliente != null)
+                            {
+                                <span class="mx-sec"><i class="bi bi-person-badge"></i> Propio de @f.Cliente</span>
+                            }
+                        </td>
+                        <td>
+                            @if (f.Ciudad != null)
+                            {
+                                @f.Ciudad
+                            }
+                            else
+                            {
+                                <span class="mx-pill mx-pill-warn"><i class="bi bi-exclamation-triangle"></i> Sin ciudad</span>
+                            }
+                        </td>
+                        <td>@(f.Naviera ?? "Multinaviera")</td>
+                        <td class="mx-mod">
+                            @(string.IsNullOrWhiteSpace(d.UsuarioModificador) ? "—" : d.UsuarioModificador)
+                            <small>@MaestrosAuditoria.FormatoFecha(d.FechaModificacion)</small>
+                        </td>
+                        <td>
+                            @if (f.Activo && !d.Validado)
+                            {
+                                <span class="mx-pill mx-pill-warn" title="Registrado por el cliente en el portal">Por validar</span>
+                            }
+                            else if (f.Activo)
+                            {
+                                <span class="mx-pill mx-pill-ok">Activo</span>
+                            }
+                            else
+                            {
+                                <span class="mx-pill mx-pill-off">Inactivo</span>
+                            }
+                        </td>
+                        <td class="mx-col-acciones">
+                            @if (f.Activo && !d.Validado)
+                            {
+                                <form method="post" asp-page-handler="Validar" asp-route-id="@d.Id" asp-route-estado="@Model.Estado"
+                                      data-mx-confirmar="@($"¿Validar el depósito «{d.NombreDeposito}»? Revisa antes que el nombre y la ciudad estén correctos.")">
+                                    <button type="submit" class="mx-btn mx-btn-ok mx-btn-sm"><i class="bi bi-patch-check"></i> Validar</button>
+                                </form>
+                            }
+                            <a asp-page="./Edit" asp-route-id="@d.Id" class="mx-btn mx-btn-secundario mx-btn-sm"><i class="bi bi-pencil"></i> Editar</a>
+                            <form method="post" asp-page-handler="CambiarEstado" asp-route-id="@d.Id" asp-route-activar="@(!f.Activo)" asp-route-estado="@Model.Estado"
+                                  data-mx-confirmar="@(f.Activo ? $"¿Desactivar el depósito «{d.NombreDeposito}»? Dejará de aparecer al crear o editar operaciones." : $"¿Reactivar el depósito «{d.NombreDeposito}»?")">
+                                @if (f.Activo)
+                                {
+                                    <button type="submit" class="mx-btn mx-btn-peligro mx-btn-sm" title="Desactivar" aria-label="Desactivar"><i class="bi bi-slash-circle"></i></button>
+                                }
+                                else
+                                {
+                                    <button type="submit" class="mx-btn mx-btn-ok mx-btn-sm"><i class="bi bi-arrow-counterclockwise"></i> Reactivar</button>
+                                }
+                            </form>
+                        </td>
+                    </tr>
+                }
+                <tr data-mx-sin-coincidencias hidden><td colspan="6" class="mx-vacio"><i class="bi bi-search"></i>Ningún depósito coincide con la búsqueda.</td></tr>
+                @if (!Model.Filas.Any())
+                {
+                    <tr><td colspan="6" class="mx-vacio"><i class="bi bi-box-seam"></i>No hay depósitos @(Model.Estado == "inactivos" ? "inactivos" : "registrados").</td></tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+@section Scripts {
+    <script src="~/js/maestros.js" asp-append-version="true"></script>
+}

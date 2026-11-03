@@ -30,5 +30,17 @@ public partial class Deposito
     public virtual Naviera? IdNavieraNavigation { get; set; }
     public string? Pais { get; set; }
 
+    // Portal (oct-2026): depósito propio de un cliente (null = depósito de Atilson,
+    // visible para todos) y su validación por Atilson.
+    public int? IdCliente { get; set; }
+
+    public bool RegistradoPorCliente { get; set; }
+
+    public bool Validado { get; set; } = true;
+
+    public DateTime? FechaValidacion { get; set; }
+
+    public string? UsuarioValidacion { get; set; }
+
     public virtual ICollection<Operacione> Operaciones { get; set; } = new List<Operacione>();
 }

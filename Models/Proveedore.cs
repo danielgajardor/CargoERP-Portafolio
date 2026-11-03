@@ -10,7 +10,7 @@ public partial class Proveedore
     public string? Rut { get; set; }
 
     public string NombreProveedor { get; set; } = null!;
-
+    public string? RazonSocial { get; set; }
     public int IdTipoProveedor { get; set; }
 
     public string? Contacto { get; set; }
@@ -18,7 +18,6 @@ public partial class Proveedore
     public string? CorreoOperativo { get; set; }
 
     public byte? Activo { get; set; }
-
     public int? IdCiudad { get; set; }
 
     public virtual Ciudade? IdCiudadNavigation { get; set; }

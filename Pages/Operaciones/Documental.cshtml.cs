@@ -88,6 +88,8 @@ namespace AtilsonCargoSpa.Pages.Operaciones
         public async Task<IActionResult> OnPostDeleteAsync(int? id)
         {
             if (id == null) return NotFound();
+            // Bookings cancelados: nunca se eliminan (minuta Roleos/Cancelaciones oct-2026).
+            if (await AtilsonCargoSpa.Helpers.BookingCanceladoHelper.EstaCanceladoAsync(_context, id.Value)) return RedirectToPage("./Documental");
             var operacion = await _context.Operaciones.FindAsync(id);
             if (operacion != null) { operacion.IsDeleted = true; await _context.SaveChangesAsync(); }
             return RedirectToPage("./Documental");

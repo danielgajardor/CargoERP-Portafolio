@@ -2,435 +2,268 @@
 @model AtilsonCargoSpa.Pages.LoginModel
 @{
     Layout = null;
+    bool abrirInterno = !Model.VieneDelPortal && !string.IsNullOrEmpty(Model.ReturnUrl);
 }
 <!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Inicia Sesión - Atilson Cargo ERP</title>
+    <title>Iniciar sesión · Atilson Cargo</title>
+    <meta name="theme-color" content="#160e2f" />
+    <link rel="icon" type="image/svg+xml" href="~/img/marca/atilson-isotipo.svg" asp-append-version="true" />
     <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="~/css/marca-acceso.css" asp-append-version="true" />
 
     <style>
-            :root {
-                --atilson-dark: #2c1b4d; /* Color interno */
-                --atilson-client: #0284c7; /* Azul para clientes */
-                --txt-main: #0f172a;
-                --txt-muted: #64748b;
-                --border-soft: #e2e8f0;
-                --bg-active: var(--atilson-client);
-            }
+        /* Misma marca que la landing: panel índigo con el globo Atilson y formulario en blanco. */
+        html, body { height: 100%; }
+        .login { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); min-height: 100vh; }
 
-            body {
-                font-family: 'Inter', sans-serif;
-                background-color: #ffffff;
-                margin: 0;
-                height: 100vh;
-                overflow: hidden;
-            }
+        .login .ac-marca { display: flex; flex-direction: column; justify-content: space-between; padding: 40px 56px 36px; min-height: 100vh; }
+        .login .ac-globo { width: min(66%, 540px); right: -14%; bottom: -18%; }
+        .login-mensaje { max-width: 420px; margin-top: 16vh; margin-bottom: auto; position: relative; }
+        .login-mensaje h2 { font-size: clamp(36px, 3.6vw, 52px); margin-bottom: 18px; }
+        .login-mensaje p { color: #d6d0ec; font-size: 18px; line-height: 1.6; margin: 0; }
+        .login-pie { color: #a59fc0; font-size: 14px; }
 
-            .login-container {
-                display: flex;
-                height: 100vh;
-            }
+        .login-form { display: flex; flex-direction: column; padding: 32px 40px; }
+        .login-form-top { display: flex; justify-content: flex-end; }
+        .login-caja { width: 100%; max-width: 420px; margin: auto; padding: 24px 0; }
 
-            /* PANEL IZQUIERDO */
-            .left-panel {
-                flex: 1;
-                background: linear-gradient(135deg, var(--bg-active) 0%, #0f172a 100%);
-                display: flex;
-                flex-direction: column;
-                justify-content: center;
-                align-items: center;
-                color: white;
-                position: relative;
-                overflow: hidden;
-                transition: background 0.5s ease;
-            }
+        .login-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; background: var(--niebla); padding: 5px; border-radius: 999px; margin-bottom: 36px; }
+        .login-tab {
+            border: 0; background: transparent; border-radius: 999px;
+            padding: 11px 14px; font-size: 15px; font-weight: 600; color: var(--gris);
+            display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+            transition: background-color .2s, color .2s, box-shadow .2s;
+        }
+        .login-tab:hover { color: var(--tinta); }
+        .login-tab.active { background: #fff; color: var(--indigo); box-shadow: 0 1px 0 var(--linea), 0 6px 16px -10px rgba(30,24,53,.4); }
 
-                .left-panel::before {
-                    content: '';
-                    position: absolute;
-                    top: 0;
-                    left: 0;
-                    right: 0;
-                    bottom: 0;
-                    background-image: radial-gradient(rgba(255,255,255,0.1) 1px, transparent 1px);
-                    background-size: 24px 24px;
-                    opacity: 0.6;
-                }
+        .login-title { font-size: 36px; margin-bottom: 8px; }
+        .login-subtitle { color: var(--gris); font-size: 16px; margin-bottom: 28px; }
 
-            .brand-content {
-                z-index: 1;
-                text-align: center;
-                padding: 2rem;
-            }
+        .login-aviso { display: flex; gap: 10px; align-items: flex-start; border-radius: 12px; padding: 12px 14px; font-size: 15px; margin-bottom: 22px; }
+        .login-aviso i { font-size: 18px; line-height: 1.3; }
+        .login-aviso.error { background: #fdecec; color: #8a1c1c; }
+        .login-aviso.info { background: var(--niebla); color: var(--indigo-700); }
 
-            .brand-logo {
-                max-width: 220px;
-                margin-bottom: 2rem;
-                filter: brightness(0) invert(1);
-            }
+        .campo { margin-bottom: 18px; }
+        .campo label { display: block; font-size: 14px; font-weight: 600; margin-bottom: 7px; }
+        .campo-input { position: relative; }
+        .campo-input input {
+            width: 100%; height: 52px;
+            border: 1px solid var(--linea); border-radius: 12px;
+            padding: 0 16px; font-size: 16px; color: var(--tinta); background: #fff;
+            transition: border-color .2s, box-shadow .2s;
+        }
+        .campo-input input:focus { outline: none; border-color: var(--indigo); box-shadow: 0 0 0 4px rgba(68,48,148,.14); }
+        .campo-input input[type=password], .campo-input input.con-ojo { padding-right: 52px; }
+        .ver-clave {
+            position: absolute; right: 6px; top: 6px; width: 40px; height: 40px;
+            border: 0; background: transparent; border-radius: 10px; color: var(--gris); font-size: 18px;
+        }
+        .ver-clave:hover { background: var(--niebla); color: var(--indigo); }
 
-            .brand-title {
-                font-weight: 800;
-                font-size: 28px;
-                letter-spacing: -0.5px;
-                margin-bottom: 10px;
-                transition: opacity 0.3s;
-            }
+        .login .ac-btn { width: 100%; margin-top: 10px; padding: 15px 26px; }
+        .login-ayuda { text-align: center; margin-top: 28px; color: var(--gris); font-size: 15px; }
+        .login-ayuda a { color: var(--indigo); font-weight: 700; text-decoration: none; }
+        .login-ayuda a:hover { text-decoration: underline; text-underline-offset: 4px; }
 
-            .brand-subtitle {
-                font-weight: 400;
-                font-size: 15px;
-                color: rgba(255,255,255,0.7);
-                max-width: 350px;
-                margin: 0 auto;
-                line-height: 1.6;
-                transition: opacity 0.3s;
-            }
+        /* Cargando (se mantiene el aviso al enviar) */
+        #loader-overlay {
+            position: fixed; inset: 0; z-index: 9999;
+            background: rgba(255,255,255,.96); backdrop-filter: blur(4px);
+            display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px;
+            opacity: 0; visibility: hidden; transition: opacity .3s;
+        }
+        #loader-overlay.active { opacity: 1; visibility: visible; }
+        .pulse-logo { width: 84px; height: auto; animation: latido 1.4s ease-in-out infinite; }
+        .loading-text { color: var(--indigo); font-weight: 600; font-size: 16px; }
+        @@keyframes latido { 0%, 100% { transform: scale(1); opacity: 1; } 50% { transform: scale(.92); opacity: .6; } }
 
-            /* PANEL DERECHO */
-            .right-panel {
-                flex: 1;
-                display: flex;
-                flex-direction: column;
-                justify-content: center;
-                align-items: center;
-                background-color: #ffffff;
-                position: relative;
-            }
-
-            /* PESTAÑAS (TABS) MODERNAS */
-            .login-tabs {
-                display: flex;
-                background: #f1f5f9;
-                padding: 5px;
-                border-radius: 12px;
-                margin-bottom: 30px;
-                width: 100%;
-            }
-
-            .login-tab {
-                flex: 1;
-                text-align: center;
-                padding: 10px 15px;
-                font-size: 13px;
-                font-weight: 700;
-                color: var(--txt-muted);
-                border-radius: 8px;
-                cursor: pointer;
-                transition: all 0.3s ease;
-                text-transform: uppercase;
-                letter-spacing: 0.5px;
-            }
-
-                .login-tab.active {
-                    background: white;
-                    color: var(--bg-active);
-                    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
-                }
-
-            /* BOTÓN VOLVER ELEGANTE */
-            .btn-back-home {
-                position: absolute;
-                top: 40px;
-                right: 40px;
-                text-decoration: none;
-                color: var(--txt-muted);
-                font-size: 13px;
-                font-weight: 600;
-                display: flex;
-                align-items: center;
-                gap: 8px;
-                padding: 8px 16px;
-                border-radius: 50px;
-                transition: all 0.3s ease;
-                border: 1px solid transparent;
-            }
-
-                .btn-back-home:hover {
-                    color: var(--txt-main);
-                    background-color: #f8fafc;
-                    border-color: var(--border-soft);
-                }
-
-            .form-wrapper {
-                width: 100%;
-                max-width: 380px;
-                padding: 2rem;
-            }
-
-            .login-title {
-                font-size: 26px;
-                font-weight: 800;
-                color: var(--txt-main);
-                letter-spacing: -0.5px;
-                margin-bottom: 5px;
-            }
-
-            .login-subtitle {
-                font-size: 13px;
-                color: var(--txt-muted);
-                margin-bottom: 25px;
-            }
-
-            .form-label {
-                font-size: 11px;
-                font-weight: 800;
-                color: var(--txt-muted);
-                text-transform: uppercase;
-                letter-spacing: 0.5px;
-                margin-bottom: 6px;
-            }
-
-            .form-control {
-                font-size: 14px;
-                padding: 14px 16px;
-                border-radius: 8px;
-                border: 1px solid var(--border-soft);
-                background-color: #f8fafc;
-                margin-bottom: 20px;
-                transition: all 0.2s;
-            }
-
-                .form-control:focus {
-                    border-color: var(--bg-active);
-                    box-shadow: 0 0 0 4px rgba(2, 132, 199, 0.1);
-                    background-color: #ffffff;
-                }
-
-            .btn-login {
-                background-color: var(--bg-active);
-                color: white;
-                border: none;
-                border-radius: 8px;
-                padding: 14px;
-                font-size: 14px;
-                font-weight: 700;
-                width: 100%;
-                transition: all 0.3s ease;
-            }
-
-                .btn-login:hover {
-                    transform: translateY(-1px);
-                    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-                    color: white;
-                }
-
-            /* LOADER */
-            #loader-overlay {
-                position: fixed;
-                top: 0;
-                left: 0;
-                width: 100%;
-                height: 100%;
-                background-color: rgba(255, 255, 255, 0.95);
-                backdrop-filter: blur(5px);
-                z-index: 9999;
-                display: flex;
-                flex-direction: column;
-                justify-content: center;
-                align-items: center;
-                opacity: 0;
-                visibility: hidden;
-                transition: opacity 0.4s ease;
-            }
-
-                #loader-overlay.active {
-                    opacity: 1;
-                    visibility: visible;
-                }
-
-            .pulse-logo {
-                max-width: 150px;
-                margin-bottom: 20px;
-                animation: pulse 1.5s infinite cubic-bezier(0.4, 0, 0.2, 1);
-            }
-
-            .loading-dots span {
-                display: inline-block;
-                width: 8px;
-                height: 8px;
-                background-color: var(--bg-active);
-                border-radius: 50%;
-                margin: 0 3px;
-                animation: bounce 1.4s infinite ease-in-out both;
-            }
-
-                .loading-dots span:nth-child(1) {
-                    animation-delay: -0.32s;
-                }
-
-                .loading-dots span:nth-child(2) {
-                    animation-delay: -0.16s;
-                }
-
-            .loading-text {
-                color: var(--bg-active);
-                font-weight: 800;
-                font-size: 14px;
-                letter-spacing: 1px;
-                text-transform: uppercase;
-                margin-top: 15px;
-            }
-
-            @@keyframes pulse {
-                0%, 100% {
-                    opacity: 1;
-                    transform: scale(1);
-                }
-
-                50% {
-                    opacity: 0.5;
-                    transform: scale(0.95);
-                }
-            }
-
-            @@keyframes bounce {
-                0%, 80%, 100% {
-                    transform: scale(0);
-                }
-
-                40% {
-                    transform: scale(1);
-                }
-            }
+        /* Celular: el panel de marca pasa a ser una cabecera */
+        @@media (max-width: 991px) {
+            .login { grid-template-columns: 1fr; }
+            .login .ac-marca { min-height: 0; padding: 22px 20px 30px; }
+            .login .ac-marca-logo img { height: 44px; }
+            .login .ac-globo { width: 190px; right: -70px; bottom: -64px; }
+            .login-mensaje { margin: 22px 0 0; max-width: 64%; }
+            .login-mensaje h2 { font-size: 30px; margin-bottom: 8px; }
+            .login-mensaje p { font-size: 15px; }
+            .login-pie { display: none; }
+            .login-form { padding: 16px 20px 40px; }
+            .login-form-top { display: none; }
+            .login-caja { padding-top: 12px; margin-top: 0; }
+            .login-title { font-size: 30px; }
+        }
     </style>
 </head>
-<body>
+<body class="ac-body">
 
-    <div id="loader-overlay">
-        <img src="~/img/Atilson.png" alt="Cargando" class="pulse-logo" />
-        <div class="loading-dots"><span></span><span></span><span></span></div>
-        <div class="loading-text" id="loaderText">Ingresando al Portal...</div>
+    <div id="loader-overlay" role="status" aria-live="polite">
+        <img src="~/img/marca/atilson-isotipo.svg" alt="" class="pulse-logo" asp-append-version="true" />
+        <div class="loading-text" id="loaderText">Entrando al portal…</div>
     </div>
 
-    <div class="login-container">
-        <div class="left-panel d-none d-lg-flex" id="leftPanel">
-            <div class="brand-content">
-                <img src="~/img/Atilson.png" alt="Atilson Cargo" class="brand-logo" />
-                <h2 class="brand-title" id="panelTitle">Portal de Clientes</h2>
-                <p class="brand-subtitle" id="panelSubtitle">Accede a tus embarques, documentos y facturación en tiempo real.</p>
-            </div>
-        </div>
-
-        <div class="right-panel">
-            <a href="/" class="btn-back-home">
-                <i class="bi bi-arrow-left"></i> Volver a la web
+    <div class="login">
+        <aside class="ac-marca" style="--iso: url('@Url.Content("~/img/marca/atilson-isotipo.svg")')">
+            <a href="/" class="ac-marca-logo" aria-label="Atilson Cargo, ir al sitio">
+                <img src="~/img/marca/atilson-logo-blanco.svg" alt="Atilson Servicios Logísticos" asp-append-version="true" />
             </a>
+            <div class="ac-globo" aria-hidden="true">
+                <img src="https://images.unsplash.com/photo-1494412651409-8963ce7935a7?auto=format&fit=crop&w=1200&q=80" alt="">
+            </div>
+            <div class="login-mensaje">
+                <h2 class="ac-titular" id="panelTitle">Tu carga, siempre a la vista.</h2>
+                <p id="panelSubtitle">Sigue tus embarques, revisa documentos y facturas, y cotiza nuevos servicios desde el portal.</p>
+            </div>
+            <div class="login-pie">© @DateTime.Now.Year Atilson Cargo SpA · Valparaíso, Chile</div>
+        </aside>
 
-            <div class="form-wrapper">
-                <div class="d-block d-lg-none text-center mb-4">
-                    <img src="~/img/Atilson.png" alt="Atilson Cargo" style="max-height: 45px;" />
+        <main class="login-form">
+            <div class="login-form-top">
+                <a href="/" class="ac-volver"><i class="bi bi-arrow-left"></i> Volver al sitio</a>
+            </div>
+
+            <div class="login-caja">
+                <div class="login-tabs" role="tablist" aria-label="Tipo de acceso">
+                    <button type="button" class="login-tab active" id="tabCliente" role="tab" aria-selected="true" onclick="switchLogin('cliente')">
+                        <i class="bi bi-box-seam"></i> Clientes
+                    </button>
+                    <button type="button" class="login-tab" id="tabInterno" role="tab" aria-selected="false" onclick="switchLogin('interno')">
+                        <i class="bi bi-person-badge"></i> Equipo Atilson
+                    </button>
                 </div>
 
-                <div class="login-tabs">
-                    <div class="login-tab active" id="tabCliente" onclick="switchLogin('cliente')">
-                        <i class="bi bi-person-badge me-1"></i> Clientes
-                    </div>
-                    <div class="login-tab" id="tabInterno" onclick="switchLogin('interno')">
-                        <i class="bi bi-building-lock me-1"></i> Interno
-                    </div>
-                </div>
-
-                <h1 class="login-title" id="formTitle">Bienvenido(a)</h1>
-                <p class="login-subtitle" id="formSubtitle">Ingresa tu correo autorizado para ver tu carga.</p>
+                <h1 class="ac-titular login-title" id="formTitle">Inicia sesión</h1>
+                <p class="login-subtitle" id="formSubtitle">Entra con el correo y la contraseña de tu empresa.</p>
 
                 @if (!string.IsNullOrEmpty(Model.ErrorMessage))
                 {
-                    <div class="alert alert-danger" style="font-size: 13px; border-radius: 8px;">
-                        <i class="bi bi-exclamation-octagon-fill me-2"></i> @Model.ErrorMessage
+                    <div class="login-aviso error" role="alert">
+                        <i class="bi bi-exclamation-circle"></i><span>@Model.ErrorMessage</span>
+                    </div>
+                }
+                else if (Model.BookingBuscado != null)
+                {
+                    <div class="login-aviso info" id="avisoBooking">
+                        <i class="bi bi-search"></i><span>Inicia sesión y te mostramos el booking <b>@Model.BookingBuscado</b>.</span>
                     </div>
                 }
 
-                <form method="post" id="loginForm">
-                    <label class="form-label">Correo Electrónico</label>
-                    <input asp-for="Correo" type="email" id="inpCorreo" class="form-control" placeholder="ejemplo@empresa.com" required autofocus />
-
-                    <label class="form-label">Contraseña Segura</label>
-                    <input asp-for="Password" type="password" id="inpPass" class="form-control" placeholder="••••••••" required />
-
-                    <button type="submit" class="btn-login mt-2" id="btnSubmit">
-                        Entrar al Portal
-                    </button>
-
-                    <div style="text-align: center; margin-top: 30px; font-size: 12px; color: var(--txt-muted); font-weight: 500;">
-                        <span id="helpText">¿Necesitas acceso a tus embarques?</span> <br />
-                        <a href="#" style="color: var(--txt-main); font-weight: 700; text-decoration: none;">Contacta a tu ejecutivo(a) Atilson</a>
+                <form method="post" id="loginForm" novalidate>
+                    <input type="hidden" asp-for="ReturnUrl" />
+                    <div class="campo">
+                        <label for="inpCorreo">Correo</label>
+                        <div class="campo-input">
+                            <input asp-for="Correo" type="email" id="inpCorreo" placeholder="nombre@empresa.cl" autocomplete="username" required autofocus />
+                        </div>
                     </div>
+                    <div class="campo">
+                        <label for="inpPass">Contraseña</label>
+                        <div class="campo-input">
+                            <input asp-for="Password" type="password" id="inpPass" autocomplete="current-password" required />
+                            <button type="button" class="ver-clave" id="btnVerClave" aria-label="Mostrar contraseña" aria-pressed="false"><i class="bi bi-eye"></i></button>
+                        </div>
+                    </div>
+
+                    <button type="submit" class="ac-btn" id="btnSubmit">Entrar al portal</button>
+
+                    <p class="login-ayuda">
+                        <span id="helpText">¿Tu empresa aún no tiene cuenta?</span>
+                        <a href="/Registro" id="linkAyuda">Registra tu empresa</a>
+                    </p>
                 </form>
             </div>
-        </div>
+        </main>
     </div>
 
     <script>
-            function switchLogin(type) {
-                const root = document.documentElement;
-
-                // Tab Elements
-                const tabCliente = document.getElementById('tabCliente');
-                const tabInterno = document.getElementById('tabInterno');
-
-                // Text Elements
-                const panelTitle = document.getElementById('panelTitle');
-                const panelSubtitle = document.getElementById('panelSubtitle');
-                const formTitle = document.getElementById('formTitle');
-                const formSubtitle = document.getElementById('formSubtitle');
-                const btnSubmit = document.getElementById('btnSubmit');
-                const helpText = document.getElementById('helpText');
-                const loaderText = document.getElementById('loaderText');
-                const inpCorreo = document.getElementById('inpCorreo');
-
-                if(type === 'cliente') {
-                    root.style.setProperty('--bg-active', 'var(--atilson-client)');
-                    tabCliente.classList.add('active');
-                    tabInterno.classList.remove('active');
-
-                    panelTitle.innerText = "Portal de Clientes";
-                    panelSubtitle.innerText = "Accede a tus embarques, documentos y facturación en tiempo real.";
-                    formTitle.innerText = "Bienvenido(a)";
-                    formSubtitle.innerText = "Ingresa tu correo autorizado para ver tu carga.";
-                    btnSubmit.innerText = "Entrar al Portal";
-                    helpText.innerText = "¿Necesitas acceso a tus embarques?";
-                    loaderText.innerText = "Ingresando al Portal...";
-                    inpCorreo.placeholder = "ejemplo@empresa.com";
-
-                    // Efecto focus color azul
-                    root.style.setProperty('--focus-color', 'rgba(2, 132, 199, 0.1)');
-                } else {
-                    root.style.setProperty('--bg-active', 'var(--atilson-dark)');
-                    tabInterno.classList.add('active');
-                    tabCliente.classList.remove('active');
-
-                    panelTitle.innerText = "Ecosistema ERP";
-                    panelSubtitle.innerText = "Plataforma centralizada para el control de operaciones y logística.";
-                    formTitle.innerText = "Acceso Interno";
-                    formSubtitle.innerText = "Ingresa tus credenciales corporativas";
-                    btnSubmit.innerText = "Iniciar Sesión Segura";
-                    helpText.innerText = "¿Problemas con tu cuenta de empleado?";
-                    loaderText.innerText = "Autenticando credenciales...";
-                    inpCorreo.placeholder = "ejemplo@atilson.com";
-
-                    // Efecto focus color morado
-                    root.style.setProperty('--focus-color', 'rgba(44, 27, 77, 0.1)');
-                }
+        // Las dos pestañas usan el mismo formulario: solo cambian los textos y el enlace de ayuda.
+        // La pestaña elegida se recuerda para que tras un error no vuelva a "Clientes".
+        const TEXTOS = {
+            cliente: {
+                panelTitle: 'Tu carga, siempre a la vista.',
+                panelSubtitle: 'Sigue tus embarques, revisa documentos y facturas, y cotiza nuevos servicios desde el portal.',
+                formSubtitle: 'Entra con el correo y la contraseña de tu empresa.',
+                boton: 'Entrar al portal',
+                ayuda: '¿Tu empresa aún no tiene cuenta?',
+                enlace: 'Registra tu empresa', href: '/Registro',
+                cargando: 'Entrando al portal…',
+                placeholder: 'nombre@empresa.cl'
+            },
+            interno: {
+                panelTitle: 'Operaciones, comercial y finanzas en un solo lugar.',
+                panelSubtitle: 'El sistema de gestión del equipo Atilson Cargo.',
+                formSubtitle: 'Entra con tu correo corporativo.',
+                boton: 'Entrar al sistema',
+                ayuda: '¿Eres del equipo y aún no tienes cuenta?',
+                enlace: 'Solicita tu cuenta', href: '/RegistroEquipo',
+                cargando: 'Entrando al sistema…',
+                placeholder: 'nombre@cargoflow-demo.cl'
             }
+        };
 
-            document.getElementById('loginForm').addEventListener('submit', function(e) {
-                var correo = document.getElementById('inpCorreo').value;
-                var pass = document.getElementById('inpPass').value;
+        function switchLogin(type) {
+            const t = TEXTOS[type] ? type : 'cliente';
+            const x = TEXTOS[t];
+            const tabCliente = document.getElementById('tabCliente');
+            const tabInterno = document.getElementById('tabInterno');
+            tabCliente.classList.toggle('active', t === 'cliente');
+            tabInterno.classList.toggle('active', t === 'interno');
+            tabCliente.setAttribute('aria-selected', t === 'cliente');
+            tabInterno.setAttribute('aria-selected', t === 'interno');
 
-                if(correo.trim() !== '' && pass.trim() !== '') {
-                    e.preventDefault();
-                    document.getElementById('loader-overlay').classList.add('active');
-                    setTimeout(function() {
-                        document.getElementById('loginForm').submit();
-                    }, 1500);
-                }
-            });
+            document.getElementById('panelTitle').innerText = x.panelTitle;
+            document.getElementById('panelSubtitle').innerText = x.panelSubtitle;
+            document.getElementById('formSubtitle').innerText = x.formSubtitle;
+            document.getElementById('btnSubmit').innerText = x.boton;
+            document.getElementById('helpText').innerText = x.ayuda;
+            const link = document.getElementById('linkAyuda');
+            link.innerText = x.enlace;
+            link.href = x.href;
+            document.getElementById('loaderText').innerText = x.cargando;
+            document.getElementById('inpCorreo').placeholder = x.placeholder;
+            const aviso = document.getElementById('avisoBooking');
+            if (aviso) aviso.hidden = t !== 'cliente';
+            try { sessionStorage.setItem('atilson.login.tab', t); } catch (e) { }
+        }
+
+        (function () {
+            let inicial = '@(Model.VieneDelPortal ? "cliente" : abrirInterno ? "interno" : "")' || null;
+            if (!inicial) { try { inicial = sessionStorage.getItem('atilson.login.tab'); } catch (e) { } }
+            if (inicial === 'interno') switchLogin('interno');
+        })();
+
+        document.getElementById('btnVerClave').addEventListener('click', function () {
+            const inp = document.getElementById('inpPass');
+            const ver = inp.type === 'password';
+            inp.type = ver ? 'text' : 'password';
+            inp.classList.toggle('con-ojo', ver);
+            this.setAttribute('aria-pressed', ver);
+            this.setAttribute('aria-label', ver ? 'Ocultar contraseña' : 'Mostrar contraseña');
+            this.innerHTML = ver ? '<i class="bi bi-eye-slash"></i>' : '<i class="bi bi-eye"></i>';
+            inp.focus();
+        });
+
+        document.getElementById('loginForm').addEventListener('submit', function (e) {
+            const correo = document.getElementById('inpCorreo');
+            const pass = document.getElementById('inpPass');
+            if (correo.value.trim() === '' || pass.value.trim() === '') {
+                e.preventDefault();
+                (correo.value.trim() === '' ? correo : pass).focus();
+                return;
+            }
+            e.preventDefault();
+            document.getElementById('loader-overlay').classList.add('active');
+            setTimeout(function () { document.getElementById('loginForm').submit(); }, 900);
+        });
     </script>
 </body>
 </html>

@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.AspNetCore.Mvc.Rendering;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -15,6 +16,11 @@ using Microsoft.AspNetCore.Hosting;
 
 namespace AtilsonCargoSpa.Pages.Operaciones
 {
+    // NOTA (auditoría oct-2026): este archivo comparte ~20 handlers "OnPost*" de nombre
+    // idéntico con Pages/Operaciones/Index.cshtml.cs. Se revisó línea por línea cada par —
+    // ver la nota completa en IndexModel (Pages/Operaciones/Index.cshtml.cs) para el detalle
+    // de qué se encontró y por qué la unificación real queda pendiente para una sesión con
+    // compilador disponible.
     public class DetalleModel : PageModel, AtilsonCargoSpa.Models.IOperacionesConsultaPageModel
     {
         private readonly AtilsonContext _context;
@@ -22,6 +28,7 @@ namespace AtilsonCargoSpa.Pages.Operaciones
 
         private readonly IWebHostEnvironment _env;
         private readonly EmailService _emailService;
+        private readonly ILogger<DetalleModel> _logger;
 
         public List<SelectListItem> ListaCadenasAlmacen { get; set; } = new();
         public List<ConductorAutoDto> ChoferesHistorialAlmacen { get; set; } = new();
@@ -33,12 +40,13 @@ namespace AtilsonCargoSpa.Pages.Operaciones
             public string? Telefono { get; set; }
             public string? Patente { get; set; }
         }
-        public DetalleModel(AtilsonContext context, FinanzasSyncService finanzasSync, IWebHostEnvironment env, EmailService emailService)
+        public DetalleModel(AtilsonContext context, FinanzasSyncService finanzasSync, IWebHostEnvironment env, EmailService emailService, ILogger<DetalleModel> logger)
         {
             _context = context;
             _finanzasSync = finanzasSync;
             _env = env;
             _emailService = emailService;
+            _logger = logger;
         }
 
         public Operacione Op { get; set; } = default!;
@@ -53,6 +61,16 @@ namespace AtilsonCargoSpa.Pages.Operaciones
         // contenedores, todos deben tener su FechaRetiroDestino registrada.
         public bool OperacionCerrada { get; set; }
         public DateTime? FechaCierreMasReciente { get; set; }
+
+        // Acuerdo Collect que aplica a este booking (oct-2026): naviera y cliente.
+        public TarifaCollect? AcuerdoCollectNaviera { get; set; }
+        public TarifaCollect? AcuerdoCollectCliente { get; set; }
+
+        // Costo sugerido para la próxima Corrección de BL (catálogo de la naviera).
+        public RecargoNavieraHelper.SugerenciaRecargo? SugerenciaCorreccionBl { get; set; }
+
+        /// <summary>Archivo de respaldo de la última reapertura (si se adjuntó).</summary>
+        public (string Ruta, string Nombre)? RespaldoReapertura { get; set; }
 
         public async Task<IActionResult> OnGetAsync(int id)
         {
@@ -78,6 +96,9 @@ namespace AtilsonCargoSpa.Pages.Operaciones
             if (op == null) return NotFound();
 
             Op = op;
+            if (TraspasoFinanzas.EstaReabierta(op)
+                && (await new TraspasoFinanzasService(_context).RespaldosUltimaReaperturaAsync(new[] { op.Id })).TryGetValue(op.Id, out var respaldo))
+                RespaldoReapertura = respaldo;
 
             int s = op.IdTipoServicio ?? 0;
             ReqMaritimo = new[] { 1, 2, 3, 5, 8, 9, 10, 12 }.Contains(s);
@@ -111,18 +132,19 @@ namespace AtilsonCargoSpa.Pages.Operaciones
             ViewData["TarifasMaritimo"] = await _context.TarifasMaestras.Where(t => t.EsActiva && t.Categoria == "Marítimo").OrderBy(t => t.Concepto).ToListAsync();
             ViewData["TarifasTerrestre"] = await _context.TarifasMaestras.Where(t => t.EsActiva && t.Categoria == "Terrestre").OrderBy(t => t.Concepto).ToListAsync();
             ViewData["TarifasDocumental"] = await _context.TarifasMaestras.Where(t => t.EsActiva && t.Categoria == "Documental").OrderBy(t => t.Concepto).ToListAsync();
-            ViewData["IdNaviera"] = new SelectList(_context.Navieras.Where(n => n.Activo == 1), "Id", "NombreNaviera");
+            await ExtracostoFormulario.CargarListasAsync(_context, ViewData);
+            // Navieras operativas en orden alfabético; si la operación tiene una que ya no
+            // está activa, se incluye igual para no perderla al editar.
+            ViewData["IdNaviera"] = new SelectList(await _context.Navieras
+                .Where(n => n.Activo == 1 || n.Id == op.IdNaviera)
+                .OrderBy(n => n.NombreNaviera)
+                .ToListAsync(), "Id", "NombreNaviera");
             ViewData["PuertosList"] = await _context.Puertos.Where(p => p.Activo == 1).OrderBy(p => p.NombrePuerto).ToListAsync();
             ViewData["IdAgenciaAduana"] = new SelectList(await _context.AgenciasAduanas.ToListAsync(), "Id", "NombreAgencia");
             ViewData["DepositosList"] = await _context.Depositos.Where(d => d.Activo == 1).OrderBy(d => d.NombreDeposito).ToListAsync();
             ViewData["PlantasList"] = await _context.Plantas.Include(p => p.Ciudad).Where(p => p.Activo).ToListAsync();
-            var proveedoresTransporteRaw = await _context.Proveedores.Where(p => p.Activo == 1 && (p.IdTipoProveedor == 2 || p.IdTipoProveedor == 10)).ToListAsync();
-            ViewData["ProveedoresTransporteList"] = proveedoresTransporteRaw
-                .Where(p => !string.IsNullOrWhiteSpace(p.NombreProveedor))
-                .GroupBy(p => p.NombreProveedor.Trim().ToUpper())
-                .Select(g => g.First())
-                .OrderBy(p => p.NombreProveedor)
-                .ToList();
+            // Transportistas: todos los proveedores activos menos los depósitos (tipo 12).
+            ViewData["ProveedoresTransporteList"] = await TransportistaHelper.ListarAsync(_context);
             var cadenasAlmacen = await _context.Proveedores
     .Include(p => p.IdCiudadNavigation)
     .Where(p => p.IdTipoProveedor == 12 && p.Activo == 1)
@@ -157,7 +179,20 @@ namespace AtilsonCargoSpa.Pages.Operaciones
                 FechaCierreMasReciente = fechas.Any() ? fechas.Max() : null;
             }
 
-            return Page();
+            if (ReqMaritimo)
+                SugerenciaCorreccionBl = await CorreccionBlHelper.SugerirCostoAsync(_context, op, DateTime.Now);
+
+            if (ReqMaritimo && AcuerdoCollectHelper.EsCollect(op))
+            {
+                try
+                {
+                    var tarifasCollect = await _context.TarifasCollect.AsNoTracking().Where(t => t.EsActiva && t.IdNaviera == op.IdNaviera).ToListAsync();
+                    DateTime fechaCollect = op.EtdPol ?? DateTime.Now;
+                    AcuerdoCollectNaviera = AcuerdoCollectHelper.Elegir(tarifasCollect, TarifaCollect.TipoNaviera, null, op.IdNaviera, op.IdPuertoOrigenNavigation?.NombrePuerto, op.IdPuertoDestinoNavigation?.NombrePuerto, op.Commodity, fechaCollect);
+                    AcuerdoCollectCliente = AcuerdoCollectHelper.Elegir(tarifasCollect, TarifaCollect.TipoCliente, op.IdCliente, op.IdNaviera, op.IdPuertoOrigenNavigation?.NombrePuerto, op.IdPuertoDestinoNavigation?.NombrePuerto, op.Commodity, fechaCollect);
+                }
+                catch (Exception) { /* falta el script de TarifasCollect */ }
+            }
 
             return Page();
         }
@@ -198,16 +233,18 @@ namespace AtilsonCargoSpa.Pages.Operaciones
                 }
 
                 docDb.ZonaCourier = docDb.TipoCourier == "Internacional" ? CourierZonas.ObtenerZona(docDb.PaisCourier) : null;
-                docDb.EmpresaCourier = Request.Form["docUpdates.EmpresaCourier"].FirstOrDefault();
+                docDb.EmpresaCourier = AtilsonCargoSpa.Helpers.CourierHelper.Normalizar(Request.Form["docUpdates.EmpresaCourier"].FirstOrDefault());
                 docDb.TrackingCourier = Request.Form["docUpdates.TrackingCourier"].FirstOrDefault();
                 string baseConcept = docDb.TipoCourier == "Internacional" ? $"COURIER INTERNACIONAL {docDb.ZonaCourier}" : "COURIER NACIONAL";
-                var tarifaCourier = await _context.TarifasMaestras.FirstOrDefaultAsync(t => t.EsActiva && t.Categoria == "Courier" && t.Concepto.ToUpper() == baseConcept.ToUpper());
+                // Tarifa de la empresa de courier asignada (DHL/FedEx/Chilexpress); si no hay, la general.
+                var tarifasCourierConcepto = await _context.TarifasMaestras.Where(t => t.EsActiva && t.Categoria == "Courier" && t.Concepto.ToUpper() == baseConcept.ToUpper()).ToListAsync();
+                var tarifaCourier = AtilsonCargoSpa.Helpers.CourierHelper.ElegirTarifaCosto(tarifasCourierConcepto, baseConcept, docDb.EmpresaCourier);
                 docDb.ValorCourier = tarifaCourier?.ValorNeto;
 
                 if (Request.Form.ContainsKey("docUpdates.NumFullSet")) docDb.NumFullSet = Request.Form["docUpdates.NumFullSet"].FirstOrDefault();
                 if (Request.Form.ContainsKey("docUpdates.TrackingDhl")) docDb.TrackingDhl = Request.Form["docUpdates.TrackingDhl"].FirstOrDefault();
-                if (Request.Form.ContainsKey("docUpdates.LogFullSet")) docDb.LogFullSet = Request.Form["docUpdates.LogFullSet"].FirstOrDefault();
-                if (Request.Form.ContainsKey("docUpdates.LogDhl")) docDb.LogDhl = Request.Form["docUpdates.LogDhl"].FirstOrDefault();
+                if (Request.Form.ContainsKey("docUpdates.LogFullSet")) docDb.LogFullSet = DocumentalHelpers.SanitizarLogHtml(Request.Form["docUpdates.LogFullSet"].FirstOrDefault());
+                if (Request.Form.ContainsKey("docUpdates.LogDhl")) docDb.LogDhl = DocumentalHelpers.SanitizarLogHtml(Request.Form["docUpdates.LogDhl"].FirstOrDefault());
 
                 string uploadsFolderCourier = Path.Combine(_env.WebRootPath, "uploads", "documentos");
                 if (!Directory.Exists(uploadsFolderCourier)) Directory.CreateDirectory(uploadsFolderCourier);
@@ -242,7 +279,7 @@ namespace AtilsonCargoSpa.Pages.Operaciones
             var tx = op.TransaccionesFinancieras?
                 .FirstOrDefault(t => t.TipoMovimiento == "EGRESO" && (t.Concepto ?? "").Contains(conceptoBusqueda));
             if (tx == null) return (null, null, false, conceptoBusqueda);
-            bool pendiente = tx.MontoNeto == 0m && !tx.TarifaManual;
+            bool pendiente = AtilsonCargoSpa.Helpers.TransaccionesHelper.EsTarifaPendiente(tx);
             return (tx.ResponsablePago, tx.Responsable, pendiente, tx.Concepto);
         }
 
@@ -441,7 +478,7 @@ namespace AtilsonCargoSpa.Pages.Operaciones
                 }
                 return new JsonResult(new { success = false, message = "No se recibió ningún archivo." });
             }
-            catch (Exception ex) { return new JsonResult(new { success = false, message = ex.Message }); }
+            catch (Exception ex) { _logger.LogError(ex, "Error no controlado en {Clase}", nameof(DetalleModel)); return new JsonResult(new { success = false, message = ex.Message }); }
         }
 
         public async Task<IActionResult> OnPostEnviarCorreoTransporteAsync(int id, string correoDestino, string copiaCc, string asunto, string cuerpoHtml, string tipoCorreo)
@@ -468,7 +505,7 @@ namespace AtilsonCargoSpa.Pages.Operaciones
                 await _context.SaveChangesAsync();
                 return new JsonResult(new { success = true });
             }
-            catch (Exception ex) { return new JsonResult(new { success = false, message = ex.Message }); }
+            catch (Exception ex) { _logger.LogError(ex, "Error no controlado en {Clase}", nameof(DetalleModel)); return new JsonResult(new { success = false, message = ex.Message }); }
         }
         // Mismo motor de sincronización que ya usa IndexModel — trasladado tal cual,
         // con el fix de match por depósito+tamaño+tipo+Full/Vacío que ya aplicamos
@@ -604,7 +641,7 @@ namespace AtilsonCargoSpa.Pages.Operaciones
                 await _context.SaveChangesAsync();
                 return new JsonResult(new { success = true });
             }
-            catch (Exception ex) { return new JsonResult(new { success = false, message = ex.Message }); }
+            catch (Exception ex) { _logger.LogError(ex, "Error no controlado en {Clase}", nameof(DetalleModel)); return new JsonResult(new { success = false, message = ex.Message }); }
         }
 
         public async Task<IActionResult> OnPostGuardarDocBaseAsync(int IdOperacion, string Campo, string? Valor, IFormFile? Archivo)
@@ -741,12 +778,23 @@ namespace AtilsonCargoSpa.Pages.Operaciones
                 string elarMsg = ElarDate.HasValue ? $" | ELAR: {ElarDate.Value.ToString("dd/MM/yyyy HH:mm")}" : "";
                 if (costoLar == null)
                 {
-                    op.ExtracostosOperacions.Add(new ExtracostosOperacion { TipoCosto = "Late Arrival (LAR)", Motivo = $"LAR {(EstadoLar == "AUTORIZADO LAR" ? "Autorizado" : "Ingresado")}. Nuevo Cut-Off: {LateArrival?.ToString("dd/MM/yyyy HH:mm") ?? "N/A"}{elarMsg}", Monto = 0, Moneda = "USD", Evidencia = evidenciaGuardada ?? op.EvidenciaLar ?? "Generado automáticamente por sistema", FechaCreacion = DateTime.Now, UsuarioCreador = User.Identity?.Name ?? "Sistema" });
+                    // Fase 2: precarga el monto desde el catálogo de recargos por naviera si
+                    // hay un match claro (naviera + tipo de contenedor, cuando se conoce);
+                    // si no, queda en 0 igual que antes, para que alguien lo complete a mano.
+                    string? tipoContenedorLar = IdUnidadTecnica.HasValue
+                        ? op.Unidadestecnicas.FirstOrDefault(u => u.Id == IdUnidadTecnica.Value)?.TipoContenedor
+                        : null;
+                    var sugerenciaLar = await RecargoNavieraHelper.SugerirLateArrivalAsync(_context, op.IdNaviera, tipoContenedorLar);
+                    string motivoLar = $"LAR {(EstadoLar == "AUTORIZADO LAR" ? "Autorizado" : "Ingresado")}. Nuevo Cut-Off: {LateArrival?.ToString("dd/MM/yyyy HH:mm") ?? "N/A"}{elarMsg}";
+                    if (sugerenciaLar != null) motivoLar += $" | {sugerenciaLar.NotaCatalogo}";
+                    op.ExtracostosOperacions.Add(new ExtracostosOperacion { TipoCosto = "Late Arrival (LAR)", Motivo = motivoLar, Monto = sugerenciaLar?.Monto ?? 0, Moneda = sugerenciaLar?.Moneda ?? "USD", Evidencia = evidenciaGuardada ?? op.EvidenciaLar ?? "Generado automáticamente por sistema", FechaCreacion = DateTime.Now, UsuarioCreador = User.Identity?.Name ?? "Sistema" });
                 }
                 else if (ElarDate.HasValue && !costoLar.Motivo.Contains("ELAR"))
                 {
                     costoLar.Motivo += elarMsg;
                 }
+                // ELAR: además del aviso en el LAR, genera su propio cobro Marítimo.
+                await RecargoNavieraHelper.AsegurarExtraLateArrivalAsync(_context, op, ElarDate, evidenciaGuardada ?? op.EvidenciaLar, User.Identity?.Name ?? "Sistema");
             }
 
             op.FechaModificacion = DateTime.Now; op.CorreoClienteEnviado = false;
@@ -848,7 +896,7 @@ namespace AtilsonCargoSpa.Pages.Operaciones
                 docDb.LogFactura = F("docUpdates.LogFactura");
                 docDb.LogPacking = F("docUpdates.LogPacking");
                 docDb.LogExtra = F("docUpdates.LogExtra");
-                docDb.LogLibreVenta = Request.Form["docUpdates.LogLibreVenta"].FirstOrDefault();
+                docDb.LogLibreVenta = DocumentalHelpers.SanitizarLogHtml(Request.Form["docUpdates.LogLibreVenta"].FirstOrDefault());
 
                 docDb.NumCap1 = F("docUpdates.NumCap1"); docDb.NumCap2 = F("docUpdates.NumCap2"); docDb.NumCap3 = F("docUpdates.NumCap3"); docDb.NumCap4 = F("docUpdates.NumCap4");
                 docDb.NumCoa1 = F("docUpdates.NumCoa1"); docDb.NumDt1 = F("docUpdates.NumDt1");
@@ -908,15 +956,15 @@ namespace AtilsonCargoSpa.Pages.Operaciones
 
                 docDb.ObsOrigen = F("docUpdates.ObsOrigen");
                 docDb.ObsCaptura = F("docUpdates.ObsCaptura");
-                docDb.LogOrigen = Request.Form["docUpdates.LogOrigen"].FirstOrDefault();
-                docDb.LogFitosanitario = Request.Form["docUpdates.LogFitosanitario"].FirstOrDefault();
-                docDb.LogSanitario = Request.Form["docUpdates.LogSanitario"].FirstOrDefault();
-                docDb.LogCaptura = Request.Form["docUpdates.LogCaptura"].FirstOrDefault();
-                docDb.LogCoa = Request.Form["docUpdates.LogCoa"].FirstOrDefault();
-                docDb.LogDt = Request.Form["docUpdates.LogDt"].FirstOrDefault();
-                docDb.LogCodaut = Request.Form["docUpdates.LogCodaut"].FirstOrDefault();
-                docDb.LogClave = Request.Form["docUpdates.LogClave"].FirstOrDefault();
-                docDb.LogNeppex = Request.Form["docUpdates.LogNeppex"].FirstOrDefault();
+                docDb.LogOrigen = DocumentalHelpers.SanitizarLogHtml(Request.Form["docUpdates.LogOrigen"].FirstOrDefault());
+                docDb.LogFitosanitario = DocumentalHelpers.SanitizarLogHtml(Request.Form["docUpdates.LogFitosanitario"].FirstOrDefault());
+                docDb.LogSanitario = DocumentalHelpers.SanitizarLogHtml(Request.Form["docUpdates.LogSanitario"].FirstOrDefault());
+                docDb.LogCaptura = DocumentalHelpers.SanitizarLogHtml(Request.Form["docUpdates.LogCaptura"].FirstOrDefault());
+                docDb.LogCoa = DocumentalHelpers.SanitizarLogHtml(Request.Form["docUpdates.LogCoa"].FirstOrDefault());
+                docDb.LogDt = DocumentalHelpers.SanitizarLogHtml(Request.Form["docUpdates.LogDt"].FirstOrDefault());
+                docDb.LogCodaut = DocumentalHelpers.SanitizarLogHtml(Request.Form["docUpdates.LogCodaut"].FirstOrDefault());
+                docDb.LogClave = DocumentalHelpers.SanitizarLogHtml(Request.Form["docUpdates.LogClave"].FirstOrDefault());
+                docDb.LogNeppex = DocumentalHelpers.SanitizarLogHtml(Request.Form["docUpdates.LogNeppex"].FirstOrDefault());
 
                 if (sagModalidadCambio) RegistrarLogSagModalidad(docDb, sagModalidadNueva!, User.Identity?.Name ?? "Sistema");
 
@@ -933,6 +981,7 @@ namespace AtilsonCargoSpa.Pages.Operaciones
             }
             catch (Exception ex)
             {
+                _logger.LogError(ex, "Error no controlado en {Clase}", nameof(DetalleModel));
                 if (Request.Headers["X-Requested-With"] == "XMLHttpRequest") return new JsonResult(new { success = false, message = ex.Message });
                 TempData["ErrorMsg"] = "Error al guardar: " + ex.Message;
             }
@@ -971,7 +1020,7 @@ namespace AtilsonCargoSpa.Pages.Operaciones
                 op.FechaModificacion = DateTime.Now; await _context.SaveChangesAsync();
                 return new JsonResult(new { success = true });
             }
-            catch (Exception ex) { return new JsonResult(new { success = false, message = ex.Message }); }
+            catch (Exception ex) { _logger.LogError(ex, "Error no controlado en {Clase}", nameof(DetalleModel)); return new JsonResult(new { success = false, message = ex.Message }); }
         }
 
         private void RegistrarLogSagModalidad(OperacionesDocumentale doc, string nuevaModalidad, string usuario)
@@ -1075,10 +1124,11 @@ namespace AtilsonCargoSpa.Pages.Operaciones
 
         // ===== Marítimo — copiado tal cual del handler real de Index.cshtml.cs =====
         public async Task<IActionResult> OnPostQuickEditMaritimoAsync(
-            int IdOperacion, int? IdNaviera, string? Nave, string? TipoTarifaMaritima, string? Transbordo,
-            int? IdPuertoOrigen, int? IdPuertoDestino, string? TerminalTerrestreStr,
-            DateTime? EtdPol, DateTime? EtaPod, DateTime? FechaStacking, DateTime? CutOffMatriz,
-            DateTime? LateArrival, DateTime? ElarDate)
+    int IdOperacion, int? IdNaviera, string? Nave, string? TipoTarifaMaritima, string? Transbordo,
+    int? IdPuertoOrigen, int? IdPuertoDestino, string? TerminalTerrestreStr,
+    DateTime? EtdPol, DateTime? EtaPod, DateTime? FechaStacking, DateTime? CutOffMatriz,
+    DateTime? LateArrival, DateTime? ElarDate, DateTime? EtdReal, DateTime? EtaReal,
+    int? CondicionPago, string? PropietarioContrato)
         {
             var operacion = await _context.Operaciones
                 .Include(o => o.OperacionesTerrestres)
@@ -1102,6 +1152,20 @@ namespace AtilsonCargoSpa.Pages.Operaciones
             if (Request.Form.ContainsKey("CutOffMatriz")) operacion.CutOffMatriz = CutOffMatriz;
             if (Request.Form.ContainsKey("LateArrival")) operacion.LateArrival = LateArrival;
             if (Request.Form.ContainsKey("ElarDate")) operacion.ElarDate = ElarDate;
+            if (Request.Form.ContainsKey("EtdReal")) operacion.EtdReal = EtdReal;
+            if (Request.Form.ContainsKey("EtaReal")) operacion.EtaReal = EtaReal;
+            // Modalidad Collect/No Prepaid: cambiar esto re-sincroniza automáticamente
+            // (SincronizarAsync corre abajo) y pasa de generar "Flete Marítimo" a
+            // generar "Rebate Marítimo (Naviera/Cliente)" en TransaccionesFinanciera.
+            if (Request.Form.ContainsKey("CondicionPago") && CondicionPago.HasValue) operacion.CondicionPago = CondicionPago.Value;
+            // Propietario de Contrato (oct-2026): solo valores de la lista; "Otros" con texto.
+            if (Request.Form.ContainsKey("PropietarioContrato"))
+                AplicarPropietarioContrato(operacion, PropietarioContrato, Request.Form["PropietarioContratoOtro"].ToString());
+
+            // Depósito de retiro vacío (oct-2026): con tramo marítimo se define aquí y se
+            // replica a Terrestre (que lo muestra solo como información).
+            if (Request.Form.ContainsKey("DepositoRetiro"))
+                AplicarDepositoRetiro(operacion, Request.Form["DepositoRetiro"].ToString(), "MARITIMO");
 
             if (Request.Form.ContainsKey("TerminalTerrestreStr"))
             {
@@ -1117,7 +1181,7 @@ namespace AtilsonCargoSpa.Pages.Operaciones
             operacion.FechaModificacion = DateTime.Now;
             operacion.UsuarioModificador = User.Identity?.Name ?? "Sistema";
             operacion.CorreoClienteEnviado = false;
-            RegistrarHito(operacion, "MARITIMO", $"Datos marítimos actualizados — Naviera: {IdNaviera?.ToString() ?? "-"} | Nave: {Nave ?? "-"} | Tarifa: {TipoTarifaMaritima ?? "-"} | ETD: {EtdPol?.ToString("dd/MM HH:mm") ?? "-"}");
+            RegistrarHito(operacion, "MARITIMO", $"Datos marítimos actualizados — Naviera: {IdNaviera?.ToString() ?? "-"} | Nave: {Nave ?? "-"} | Tarifa: {TipoTarifaMaritima ?? "-"} | ETD: {EtdPol?.ToString("dd/MM HH:mm") ?? "-"} | Cond. Pago: {CondicionPago?.ToString() ?? "-"}");
 
             await _context.SaveChangesAsync();
             await _finanzasSync.SincronizarAsync(IdOperacion, User.Identity?.Name ?? "Sistema");
@@ -1168,8 +1232,10 @@ namespace AtilsonCargoSpa.Pages.Operaciones
             else
             {
                 responsablePago = (pagoGate ?? "").Contains("Agencia", StringComparison.OrdinalIgnoreCase) ? "AGENCIA" : "ATILSON";
-                responsable = gestionaGate == "Atilson entrega concesión incluido para cliente" ? "ATILSON" : "CLIENTE";
+                responsable = "CLIENTE";
             }
+            // "Gate out incluido para cliente": el Gate OUT lo asume Atilson (el Gate IN se cobra igual).
+            bool gateOutIncluido = gestionaGate == "Gate out incluido para cliente" || gestionaGate == "Atilson entrega concesión incluido para cliente";
 
             var txsGate = await _context.TransaccionesFinancieras
                 .Where(t => t.IdOperacion == idOperacion && t.TipoMovimiento == "EGRESO" &&
@@ -1181,57 +1247,335 @@ namespace AtilsonCargoSpa.Pages.Operaciones
             foreach (var tx in txsGate)
             {
                 tx.ResponsablePago = responsablePago;
-                tx.Responsable = responsable;
+                tx.Responsable = gateOutIncluido && (tx.Concepto ?? "").Contains("Gate OUT Contenedor") ? "ATILSON" : responsable;
                 tx.FechaModificacion = DateTime.Now;
                 tx.UsuarioModificador = User.Identity?.Name ?? "Sistema";
             }
             await _context.SaveChangesAsync();
         }
 
-        // ===== Matriz y B/L — copiado tal cual de Index.cshtml.cs =====
+        public string? ObtenerAcuerdoSugerido(Operacione op)
+        {
+            // Esta sugerencia (y el "no cobro" que implica) es una condición comercial
+            // exclusiva del cliente especial (Promar) — nunca se ofrece a un cliente
+            // estándar, aunque el puerto de destino coincida con una regla de ReglasTlc.
+            if (op.IdClienteNavigation?.EsClienteEspecial != true) return null;
+
+            string? pais = op.IdPuertoDestinoNavigation?.Pais?.Trim().ToUpper();
+            if (string.IsNullOrEmpty(pais)) return null;
+
+            string? puerto = op.IdPuertoDestinoNavigation?.NombrePuerto?.Trim().ToUpper();
+
+            var reglas = _context.ReglasTlc
+                .Where(r => r.EsActiva && r.Pais.ToUpper() == pais)
+                .ToList();
+
+            // Prioriza una regla específica de puerto sobre una regla general de país.
+            var reglaEspecifica = reglas.FirstOrDefault(r => !string.IsNullOrEmpty(r.Puerto) && r.Puerto.Trim().ToUpper() == puerto);
+            var reglaGeneral = reglas.FirstOrDefault(r => string.IsNullOrEmpty(r.Puerto));
+
+            return (reglaEspecifica ?? reglaGeneral)?.AcuerdoOrigenKey;
+        }
+
+        // ===== Matriz y B/L =====
+        // oct-2026: el Tipo de emisión (y el Lugar de emisión si es Originales) se
+        // maneja en "Gestión de Matriz" y es obligatorio. La "Corrección de BL" ya no se
+        // guarda acá: tiene su propio botón y handler (OnPostRegistrarCorreccionBlAsync),
+        // porque puede haber varias correcciones y cada una genera su costo.
         public async Task<IActionResult> OnPostUpdateMatrizAsync(int IdOperacion, bool MatrizPresentada, IFormFile? EvidenciaMatriz, IFormFile? EvidenciaEnvioNaviera, string? NumeroBL, IFormFile? ArchivoBL)
         {
-            var op = await _context.Operaciones.Include(o => o.OperacionesDocumentales).FirstOrDefaultAsync(o => o.Id == IdOperacion);
-            if (op != null)
+            bool esAjax = Request.Headers["X-Requested-With"] == "XMLHttpRequest";
+            IActionResult Error(string mensaje)
             {
-                var docDb = op.OperacionesDocumentales.OrderBy(x => x.Id).FirstOrDefault();
-                if (docDb == null) { docDb = new OperacionesDocumentale { FechaCreacion = DateTime.Now, UsuarioCreador = User.Identity?.Name ?? "Sistema", Activo = true }; op.OperacionesDocumentales.Add(docDb); }
-                docDb.MatrizPresentada = MatrizPresentada;
-                if (Request.Form.ContainsKey("docUpdates.LogMatriz")) docDb.LogMatriz = Request.Form["docUpdates.LogMatriz"].FirstOrDefault();
-
-                if (Request.Form.ContainsKey("TipoEmisionBlMarker"))
-                {
-                    var seleccionadosBl = Request.Form["TipoEmisionBl"].Where(v => !string.IsNullOrWhiteSpace(v)).ToArray();
-                    op.TipoEmisionBl = seleccionadosBl.Any() ? string.Join(",", seleccionadosBl) : null;
-                    op.TipoEmisionBlOtro = seleccionadosBl.Contains("OTRO") ? Request.Form["TipoEmisionBlOtro"].ToString()?.Trim() : null;
-                    op.UbicacionOriginalesDestino = seleccionadosBl.Contains("ORIGINALES") ? Request.Form["UbicacionOriginalesDestino"].ToString()?.Trim() : null;
-                }
-
-                string uploadsFolder = Path.Combine(_env.WebRootPath, "uploads", "evidencias");
-                if (!Directory.Exists(uploadsFolder)) Directory.CreateDirectory(uploadsFolder);
-                if (EvidenciaMatriz != null && EvidenciaMatriz.Length > 0) { string uNameMatriz = $"{op.Id}_Matriz_{DateTime.Now.Ticks}_{Path.GetFileName(EvidenciaMatriz.FileName).Replace(" ", "_")}"; using (var stream = new FileStream(Path.Combine(uploadsFolder, uNameMatriz), FileMode.Create)) await EvidenciaMatriz.CopyToAsync(stream); docDb.EvidenciaMatriz = $"/uploads/evidencias/{uNameMatriz}"; }
-                if (EvidenciaEnvioNaviera != null && EvidenciaEnvioNaviera.Length > 0) { string uNameEnvio = $"{op.Id}_EnvioNaviera_{DateTime.Now.Ticks}_{Path.GetFileName(EvidenciaEnvioNaviera.FileName).Replace(" ", "_")}"; using (var stream = new FileStream(Path.Combine(uploadsFolder, uNameEnvio), FileMode.Create)) await EvidenciaEnvioNaviera.CopyToAsync(stream); }
-                if (ArchivoBL != null && ArchivoBL.Length > 0) { string uNameBL = $"{op.Id}_BL_{DateTime.Now.Ticks}_{Path.GetFileName(ArchivoBL.FileName).Replace(" ", "_")}"; using (var stream = new FileStream(Path.Combine(uploadsFolder, uNameBL), FileMode.Create)) await ArchivoBL.CopyToAsync(stream); docDb.RutaBL = $"/uploads/evidencias/{uNameBL}"; }
-
-                op.FechaModificacion = DateTime.Now; op.UsuarioModificador = User.Identity?.Name ?? "Sistema";
-                RegistrarHito(op, "DOCUMENTAL", $"Matriz actualizada — Presentada: {(MatrizPresentada ? "✓ Confirmada" : "Pendiente")} | B/L: {NumeroBL ?? "-"}");
-                op.CorreoClienteEnviado = false;
-
-                await _context.SaveChangesAsync();
-                await _finanzasSync.SincronizarAsync(IdOperacion, User.Identity?.Name ?? "Sistema");
-
-                if (Request.Headers["X-Requested-With"] == "XMLHttpRequest") return new JsonResult(new { success = true });
-                TempData["SuccessMsg"] = "Documentación de Matriz y B/L actualizada correctamente.";
+                if (esAjax) return new JsonResult(new { success = false, message = mensaje });
+                TempData["ErrorMsg"] = mensaje;
+                return RedirectToPage(new { id = IdOperacion });
             }
+
+            var op = await _context.Operaciones.Include(o => o.OperacionesDocumentales).FirstOrDefaultAsync(o => o.Id == IdOperacion);
+            if (op == null) return Error("Operación no encontrada.");
+
+            // 1) Validar todo antes de tocar nada.
+            EmisionBlHelper.Seleccion? emisionMatriz = null;
+            if (Request.Form.ContainsKey("TipoEmisionBlMarker"))
+            {
+                emisionMatriz = EmisionBlHelper.LeerFormulario(Request.Form);
+                var errEmision = EmisionBlHelper.Validar(emisionMatriz, tipoObligatorio: true);
+                if (errEmision != null) return Error($"Gestión de Matriz: {errEmision}");
+            }
+
+            // 2) Guardar Matriz / B/L.
+            var docDb = op.OperacionesDocumentales.OrderBy(x => x.Id).FirstOrDefault();
+            if (docDb == null) { docDb = new OperacionesDocumentale { FechaCreacion = DateTime.Now, UsuarioCreador = User.Identity?.Name ?? "Sistema", Activo = true }; op.OperacionesDocumentales.Add(docDb); }
+            docDb.MatrizPresentada = MatrizPresentada;
+            if (!string.IsNullOrWhiteSpace(NumeroBL)) docDb.NumeroBL = NumeroBL.Trim();
+            if (Request.Form.ContainsKey("docUpdates.LogMatriz")) docDb.LogMatriz = DocumentalHelpers.SanitizarLogHtml(Request.Form["docUpdates.LogMatriz"].FirstOrDefault());
+
+            string emisionAntes = EmisionBlHelper.Resumen(op);
+            if (emisionMatriz != null) EmisionBlHelper.Aplicar(op, emisionMatriz);
+
+            string uploadsFolder = Path.Combine(_env.WebRootPath, "uploads", "evidencias");
+            if (!Directory.Exists(uploadsFolder)) Directory.CreateDirectory(uploadsFolder);
+            if (EvidenciaMatriz != null && EvidenciaMatriz.Length > 0) { string uNameMatriz = $"{op.Id}_Matriz_{DateTime.Now.Ticks}_{Path.GetFileName(EvidenciaMatriz.FileName).Replace(" ", "_")}"; using (var stream = new FileStream(Path.Combine(uploadsFolder, uNameMatriz), FileMode.Create)) await EvidenciaMatriz.CopyToAsync(stream); docDb.EvidenciaMatriz = $"/uploads/evidencias/{uNameMatriz}"; }
+            if (EvidenciaEnvioNaviera != null && EvidenciaEnvioNaviera.Length > 0) { string uNameEnvio = $"{op.Id}_EnvioNaviera_{DateTime.Now.Ticks}_{Path.GetFileName(EvidenciaEnvioNaviera.FileName).Replace(" ", "_")}"; using (var stream = new FileStream(Path.Combine(uploadsFolder, uNameEnvio), FileMode.Create)) await EvidenciaEnvioNaviera.CopyToAsync(stream); }
+            if (ArchivoBL != null && ArchivoBL.Length > 0) { string uNameBL = $"{op.Id}_BL_{DateTime.Now.Ticks}_{Path.GetFileName(ArchivoBL.FileName).Replace(" ", "_")}"; using (var stream = new FileStream(Path.Combine(uploadsFolder, uNameBL), FileMode.Create)) await ArchivoBL.CopyToAsync(stream); docDb.RutaBL = $"/uploads/evidencias/{uNameBL}"; }
+
+            string emisionDespues = EmisionBlHelper.Resumen(op);
+            op.FechaModificacion = DateTime.Now; op.UsuarioModificador = User.Identity?.Name ?? "Sistema";
+            RegistrarHito(op, "DOCUMENTAL", $"Matriz actualizada — Presentada: {(MatrizPresentada ? "✓ Confirmada" : "Pendiente")} | B/L: {NumeroBL ?? "-"} | Emisión: {(emisionDespues == "" ? "-" : emisionDespues)}");
+            if (emisionAntes != emisionDespues)
+                RegistrarHito(op, "MARITIMO", $"Emisión B/L actualizada desde Matriz — {(emisionAntes == "" ? "Sin emisión" : emisionAntes)} → {emisionDespues}");
+            op.CorreoClienteEnviado = false;
+
+            await _context.SaveChangesAsync();
+            await _finanzasSync.SincronizarAsync(IdOperacion, User.Identity?.Name ?? "Sistema");
+
+            if (esAjax) return new JsonResult(new { success = true });
+            TempData["SuccessMsg"] = "Documentación de Matriz y B/L actualizada correctamente.";
             return RedirectToPage(new { id = IdOperacion });
         }
+
+        // Corrección de BL (oct-2026). Puede haber varias por booking ("Primera corrección",
+        // "Segunda corrección"...), cada una con uno o más motivos. Cada corrección queda
+        // guardada como un extracosto Marítimo propio (fecha, hora, usuario, motivos,
+        // evidencia y costo de la naviera) y FinanzasSyncService la refleja en Control
+        // Financiero como una línea nueva. Si entre los motivos está "Cambio emisión" o
+        // "Cambio lugar de emisión", el valor nuevo se aplica a la operación (Matriz,
+        // Documental y Finanzas), igual que antes.
+        public async Task<IActionResult> OnPostRegistrarCorreccionBlAsync(int IdOperacion, List<string>? MotivosCorreccionBl, string? CorreccionBlComentario, IFormFile? EvidenciaCorreccionBl, string? MontoCorreccionBl, string? MonedaCorreccionBl)
+        {
+            IActionResult Error(string mensaje) => new JsonResult(new { success = false, message = $"Corrección de BL: {mensaje}" });
+
+            var op = await _context.Operaciones
+                .Include(o => o.ExtracostosOperacions)
+                .FirstOrDefaultAsync(o => o.Id == IdOperacion && !o.IsDeleted);
+            if (op == null) return new JsonResult(new { success = false, message = "Operación no encontrada." });
+
+            // Motivos marcados, en el mismo orden de la lista.
+            var marcados = (MotivosCorreccionBl ?? new List<string>())
+                .Select(EmisionBlHelper.NormalizarMotivo)
+                .Where(m => m != null).Select(m => m!)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            var motivos = EmisionBlHelper.MotivosCorreccion.Where(m => marcados.Contains(m))
+                .Concat(marcados.Where(m => !EmisionBlHelper.MotivosCorreccion.Contains(m)))
+                .ToList();
+            if (motivos.Count == 0) return Error("marca al menos un motivo.");
+
+            string? comentario = string.IsNullOrWhiteSpace(CorreccionBlComentario) ? null : CorreccionBlComentario.Trim();
+            if (comentario != null && comentario.Length > 400) comentario = comentario.Substring(0, 400);
+            bool cambioEmision = motivos.Contains(EmisionBlHelper.MotivoCambioEmision);
+            bool cambioLugar = motivos.Contains(EmisionBlHelper.MotivoCambioLugar);
+            var vigente = EmisionBlHelper.DesdeOperacion(op);
+
+            // "Cambio emisión" (pasar a otro tipo) y "Cambio lugar de emisión" (mismo
+            // Originales, otro lugar) se excluyen entre sí.
+            if (cambioEmision && cambioLugar)
+                return Error("marca solo uno entre \"Cambio emisión\" y \"Cambio lugar de emisión\".");
+
+            EmisionBlHelper.Seleccion? emisionCorregida = null;
+            string? lugarCorregido = null;
+            if (cambioEmision)
+            {
+                // Si el nuevo tipo es Originales, el lugar se elige en el mismo bloque.
+                emisionCorregida = EmisionBlHelper.LeerFormulario(Request.Form, "CorreccionTipoEmisionBl", "CorreccionTipoEmisionBlOtro", "CorreccionLugarEmision");
+                var errCorr = EmisionBlHelper.Validar(emisionCorregida, tipoObligatorio: true);
+                if (errCorr != null) return Error(errCorr);
+                if (emisionCorregida.Tipo == vigente.Tipo && emisionCorregida.Tipo != EmisionBlHelper.Otro)
+                    return Error("el nuevo tipo de emisión es igual al actual.");
+            }
+            else if (cambioLugar)
+            {
+                if (!vigente.TieneOriginales)
+                    return Error("\"Cambio lugar de emisión\" solo aplica cuando la emisión es Originales.");
+                lugarCorregido = EmisionBlHelper.NormalizarNombre(Request.Form["CorreccionLugarEmision"].ToString());
+                if (string.IsNullOrWhiteSpace(lugarCorregido) || !EmisionBlHelper.LugaresEmision.Contains(lugarCorregido))
+                    return Error("selecciona el nuevo Lugar de emisión.");
+                if (lugarCorregido == vigente.Lugar)
+                    return Error("el nuevo Lugar de emisión es igual al actual.");
+            }
+            if (motivos.Contains(EmisionBlHelper.MotivoOtros) && comentario == null)
+                return Error("con el motivo \"Otros\" debes escribir las observaciones.");
+
+            // Costo: el que indicó la ejecutiva; si lo dejó vacío, el del catálogo de la
+            // naviera; si no hay, 0 (queda "por valorizar" en Finanzas).
+            DateTime ahora = DateTime.Now;
+            string usuario = User.Identity?.Name ?? "Sistema";
+            decimal monto = 0m;
+            string moneda = string.IsNullOrWhiteSpace(MonedaCorreccionBl) ? "USD" : MonedaCorreccionBl.Trim().ToUpperInvariant();
+            if (moneda != "CLP" && moneda != "USD") moneda = "USD";
+            string? notaCosto = null;
+            var sugerencia = await CorreccionBlHelper.SugerirCostoAsync(_context, op, ahora);
+            string montoTexto = (MontoCorreccionBl ?? "").Trim().Replace(" ", "");
+            if (montoTexto != "")
+            {
+                if (montoTexto.Contains(',') && !montoTexto.Contains('.')) montoTexto = montoTexto.Replace(',', '.');
+                if (!decimal.TryParse(montoTexto, System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture, out monto) || monto < 0)
+                    return Error("el costo indicado no es un número válido.");
+                bool esSugerido = sugerencia != null && monto == sugerencia.Monto && string.Equals(moneda, sugerencia.Moneda, StringComparison.OrdinalIgnoreCase);
+                notaCosto = monto <= 0 ? "Sin costo"
+                    : esSugerido ? sugerencia!.NotaCatalogo
+                    : $"{CorreccionBlHelper.FormatearMonto(monto, moneda)} (ingresado por {usuario})";
+            }
+            else
+            {
+                if (sugerencia != null)
+                {
+                    monto = sugerencia.Monto;
+                    moneda = string.IsNullOrWhiteSpace(sugerencia.Moneda) ? "USD" : sugerencia.Moneda;
+                    notaCosto = sugerencia.NotaCatalogo;
+                }
+                else notaCosto = "Por valorizar en Finanzas";
+            }
+
+            string uploadsFolder = Path.Combine(_env.WebRootPath, "uploads", "evidencias");
+            if (!Directory.Exists(uploadsFolder)) Directory.CreateDirectory(uploadsFolder);
+            string? rutaEvidencia = null;
+            if (EvidenciaCorreccionBl != null && EvidenciaCorreccionBl.Length > 0)
+            {
+                string uNameCorrBl = $"{op.Id}_CorreccionBL_{ahora.Ticks}_{Path.GetFileName(EvidenciaCorreccionBl.FileName).Replace(" ", "_")}";
+                using (var stream = new FileStream(Path.Combine(uploadsFolder, uNameCorrBl), FileMode.Create)) await EvidenciaCorreccionBl.CopyToAsync(stream);
+                rutaEvidencia = $"/uploads/evidencias/{uNameCorrBl}";
+            }
+
+            // Cambios de emisión / lugar que trae la corrección.
+            string detalleCambio = "";
+            if (emisionCorregida != null)
+            {
+                string antes = EmisionBlHelper.Resumen(op);
+                EmisionBlHelper.Aplicar(op, emisionCorregida);
+                detalleCambio = $"Emisión {(antes == "" ? "sin definir" : antes)} → {EmisionBlHelper.Resumen(op)}";
+                op.CorreccionBlNuevoValor = op.TipoEmisionBl;
+            }
+            else if (lugarCorregido != null)
+            {
+                detalleCambio = $"Lugar de emisión {op.UbicacionOriginalesDestino ?? "-"} → {lugarCorregido}";
+                op.UbicacionOriginalesDestino = lugarCorregido;
+                op.CorreccionBlNuevoValor = lugarCorregido;
+            }
+            else op.CorreccionBlNuevoValor = null;
+
+            int numero = CorreccionBlHelper.SiguienteNumero(op);
+            string ordinal = CorreccionBlHelper.Ordinal(numero);
+            op.ExtracostosOperacions.Add(new ExtracostosOperacion
+            {
+                TipoCosto = CorreccionBlHelper.TipoCosto(numero),
+                Motivo = CorreccionBlHelper.ArmarMotivo(motivos, detalleCambio, comentario, notaCosto),
+                Monto = monto,
+                Moneda = moneda,
+                GrupoOperativo = CorreccionBlHelper.GrupoOperativo,
+                Evidencia = rutaEvidencia ?? CorreccionBlHelper.EvidenciaSinArchivo,
+                FechaCreacion = ahora,
+                UsuarioCreador = usuario
+            });
+
+            // La última corrección también queda en los campos de la operación (los usa el
+            // asunto del correo a la naviera). TipoCorreccionBl guarda un solo motivo, como antes.
+            op.TipoCorreccionBl = motivos[0];
+            op.CorreccionBlComentario = comentario;
+            if (rutaEvidencia != null) op.EvidenciaCorreccionBl = rutaEvidencia;
+
+            string obs = comentario == null ? "" : $" · Obs: {LimpiarParaHistorial(comentario)}";
+            string costoHito = monto > 0 ? $" · Costo: {CorreccionBlHelper.FormatearMonto(monto, moneda)} + IVA" : " · Costo: por valorizar";
+            RegistrarHito(op, "MARITIMO", $"{ordinal} de BL registrada — Motivos: {string.Join(", ", motivos)}{(detalleCambio == "" ? "" : $" — {detalleCambio}")}{obs}{costoHito}");
+            op.FechaModificacion = ahora; op.UsuarioModificador = usuario;
+            if (detalleCambio != "") op.CorreoClienteEnviado = false;
+
+            await _context.SaveChangesAsync();
+            await _finanzasSync.SincronizarAsync(IdOperacion, usuario);
+
+            return new JsonResult(new { success = true, numero, message = $"{ordinal} registrada." });
+        }
+
+        // Tipo y Lugar de emisión desde la sección Documental: escribe en los mismos
+        // campos que "Gestión de Matriz", así ambas pantallas muestran siempre lo mismo.
+        public async Task<IActionResult> OnPostGuardarEmisionBlAsync(int IdOperacion)
+        {
+            var op = await _context.Operaciones.FirstOrDefaultAsync(o => o.Id == IdOperacion);
+            if (op == null) return new JsonResult(new { success = false, message = "Operación no encontrada." });
+
+            var seleccion = EmisionBlHelper.LeerFormulario(Request.Form);
+            var err = EmisionBlHelper.Validar(seleccion, tipoObligatorio: true);
+            if (err != null) return new JsonResult(new { success = false, message = err });
+
+            string antes = EmisionBlHelper.Resumen(op);
+            EmisionBlHelper.Aplicar(op, seleccion);
+            string despues = EmisionBlHelper.Resumen(op);
+            if (antes != despues)
+            {
+                RegistrarHito(op, "DOCUMENTAL", $"Emisión B/L actualizada desde Documental — {(antes == "" ? "Sin emisión" : antes)} → {despues}");
+                op.FechaModificacion = DateTime.Now; op.UsuarioModificador = User.Identity?.Name ?? "Sistema";
+                op.CorreoClienteEnviado = false;
+                await _context.SaveChangesAsync();
+                await _finanzasSync.SincronizarAsync(IdOperacion, User.Identity?.Name ?? "Sistema");
+            }
+            return new JsonResult(new { success = true });
+        }
+
+        // ===== Depósito de retiro vacío (oct-2026) =====
+        // Dónde se define según el servicio: con tramo marítimo, en Marítimo; solo
+        // terrestre, en Terrestre (como siempre); solo documental, en Documental. Siempre
+        // se guarda en el registro terrestre principal (DepositoRetiro), que es el que usa
+        // FinanzasSyncService para la tarifa del Gate del depósito, y se replica a los
+        // contenedores que no tenían uno distinto.
+        private bool AplicarDepositoRetiro(Operacione op, string? deposito, string modulo)
+        {
+            string? nuevo = string.IsNullOrWhiteSpace(deposito) ? null : deposito.Trim();
+            var principal = op.OperacionesTerrestres.FirstOrDefault(x => x.IdUnidadTecnica == null);
+            if (principal == null)
+            {
+                if (nuevo == null) return false;
+                principal = new OperacionesTerrestre { IdOperacion = op.Id, FechaCreacion = DateTime.Now, UsuarioCreador = User.Identity?.Name ?? "Sistema", Activo = true };
+                op.OperacionesTerrestres.Add(principal);
+            }
+            string? anterior = string.IsNullOrWhiteSpace(principal.DepositoRetiro) ? null : principal.DepositoRetiro.Trim();
+            if (string.Equals(anterior, nuevo, StringComparison.OrdinalIgnoreCase)) return false;
+
+            principal.DepositoRetiro = nuevo;
+            principal.FechaModificacion = DateTime.Now;
+            principal.UsuarioModificador = User.Identity?.Name ?? "Sistema";
+            foreach (var terrUnidad in op.OperacionesTerrestres.Where(x => x.IdUnidadTecnica != null))
+            {
+                if (string.IsNullOrWhiteSpace(terrUnidad.DepositoRetiro) || string.Equals(terrUnidad.DepositoRetiro.Trim(), anterior, StringComparison.OrdinalIgnoreCase))
+                    terrUnidad.DepositoRetiro = nuevo;
+            }
+            RegistrarHito(op, modulo, $"Depósito retiro vacío: {anterior ?? "sin definir"} → {nuevo ?? "sin definir"}");
+            return true;
+        }
+
+        // Depósito de retiro vacío desde Documental (servicio solo documental).
+        public async Task<IActionResult> OnPostGuardarDepositoRetiroAsync(int IdOperacion, string? DepositoRetiro)
+        {
+            var op = await _context.Operaciones.Include(o => o.OperacionesTerrestres).FirstOrDefaultAsync(o => o.Id == IdOperacion && !o.IsDeleted);
+            if (op == null) return new JsonResult(new { success = false, message = "Operación no encontrada." });
+            if (string.IsNullOrWhiteSpace(DepositoRetiro)) return new JsonResult(new { success = false, message = "Selecciona el depósito de retiro vacío." });
+
+            if (AplicarDepositoRetiro(op, DepositoRetiro, "DOCUMENTAL"))
+            {
+                op.FechaModificacion = DateTime.Now;
+                op.UsuarioModificador = User.Identity?.Name ?? "Sistema";
+                await _context.SaveChangesAsync();
+                await _finanzasSync.SincronizarAsync(IdOperacion, User.Identity?.Name ?? "Sistema");
+            }
+            return new JsonResult(new { success = true });
+        }
+
+        public const string PrefijoHitoCorreccionBl = "Corrección de BL — ";
+
+        private static string LimpiarParaHistorial(string texto) =>
+            texto.Replace("|", "/").Replace("\r", " ").Replace("\n", " ").Trim();
 
         // ===== Responsabilidad (Pagado Por / Responsable) — copiado tal cual =====
         public async Task<IActionResult> OnPostGuardarResponsabilidadAsync(int idOperacion, string concepto, string pagadoPor, string responsable)
         {
-            var transacciones = await _context.TransaccionesFinancieras
-                .Where(t => t.IdOperacion == idOperacion && t.Concepto == concepto)
-                .ToListAsync();
+            // El flete marítimo va por contenedor (oct-2026): "Flete Marítimo (MSC)" aplica también a
+            // "Flete Marítimo (Uxx) (MSC)" de los demás contenedores.
+            bool esFleteMar = (concepto ?? "").StartsWith("Flete Marítimo");
+            var transacciones = (await _context.TransaccionesFinancieras
+                .Where(t => t.IdOperacion == idOperacion && (t.Concepto == concepto || (esFleteMar && t.Concepto.StartsWith("Flete Marítimo"))))
+                .ToListAsync())
+                .Where(t => t.Concepto == concepto || System.Text.RegularExpressions.Regex.Replace(t.Concepto ?? "", @"\s*\(U\d+\)", "") == concepto)
+                .ToList();
 
             if (!transacciones.Any())
                 return new JsonResult(new { success = false, message = "No se encontró el concepto." });
@@ -1251,48 +1595,22 @@ namespace AtilsonCargoSpa.Pages.Operaciones
 
         public async Task<IActionResult> OnPostAddCostoAsync(int id)
         {
+            // Ventana "Reportar extracosto" (oct-2026): lectura y validación en ExtracostoFormulario.
             bool isAjax = Request.Headers["X-Requested-With"] == "XMLHttpRequest";
-            string nombreUsuario = User.Identity?.Name ?? "Sistema";
-            var tipo = Request.Form["NuevoCosto.TipoCosto"];
-            var motivo = Request.Form["NuevoCosto.Motivo"];
-            var responsable = Request.Form["NuevoCosto.Responsable"];
-            var responsableGestion = Request.Form["NuevoCosto.ResponsableGestion"];
-            var grupoOperativo = Request.Form["NuevoCosto.GrupoOperativo"];
-            var monedaForm = Request.Form["NuevoCosto.Moneda"];
-            decimal.TryParse(Request.Form["NuevoCosto.Monto"], System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out decimal montoForm);
-            var file = Request.Form.Files.GetFile("NuevoCosto.Evidencia");
-
-            if (!string.IsNullOrEmpty(tipo) && file != null && file.Length > 0 && montoForm > 0)
+            var r = await ExtracostoFormulario.CrearAsync(_context, _env, Request.Form, id, User.Identity?.Name ?? "Sistema");
+            if (!r.Ok)
             {
-                string uploadsFolder = Path.Combine(_env.WebRootPath, "uploads", "evidencias");
-                if (!Directory.Exists(uploadsFolder)) Directory.CreateDirectory(uploadsFolder);
-                string uName = $"{id}_Costo_{DateTime.Now.Ticks}_{Path.GetFileName(file.FileName).Replace(" ", "_")}";
-                using (var s = new FileStream(Path.Combine(uploadsFolder, uName), FileMode.Create)) { await file.CopyToAsync(s); }
-                var costo = new ExtracostosOperacion
-                {
-                    IdOperacion = id,
-                    TipoCosto = tipo,
-                    Motivo = motivo,
-                    Responsable = responsable,
-                    ResponsableGestion = responsableGestion,
-                    GrupoOperativo = string.IsNullOrWhiteSpace(grupoOperativo) ? null : grupoOperativo.ToString(),
-                    Moneda = string.IsNullOrWhiteSpace(monedaForm) ? "CLP" : monedaForm.ToString(),
-                    Monto = montoForm,
-                    Evidencia = $"/uploads/evidencias/{uName}",
-                    FechaCreacion = DateTime.Now,
-                    UsuarioCreador = nombreUsuario
-                };
-                _context.ExtracostosOperacions.Add(costo);
-                var opCosto = await _context.Operaciones.FindAsync(id);
-                if (opCosto != null) { RegistrarHito(opCosto, "GENERAL", $"Extracosto reportado — Tipo: {tipo} | Valor: {costo.Moneda} {montoForm:N0} | Gestiona: {responsableGestion} | Paga: {responsable} | Motivo: {motivo}"); }
-
-                await _context.SaveChangesAsync();
-                await _finanzasSync.SincronizarAsync(id, User.Identity?.Name ?? "Sistema");
-
-                if (isAjax) return new JsonResult(new { success = true });
-                TempData["SuccessMsg"] = "Incidencia financiera reportada exitosamente.";
+                if (isAjax) return new JsonResult(new { success = false, message = r.Mensaje });
+                TempData["ErrorMsg"] = r.Mensaje;
+                return RedirectToPage(new { id });
             }
-            else if (isAjax) return new JsonResult(new { success = false, message = "Faltan datos obligatorios (categoría, valor o evidencia)." });
+            var opCosto = await _context.Operaciones.FindAsync(id);
+            if (opCosto != null) RegistrarHito(opCosto, "GENERAL", r.TextoHito);
+            await _context.SaveChangesAsync();
+            await _finanzasSync.SincronizarAsync(id, User.Identity?.Name ?? "Sistema");
+
+            if (isAjax) return new JsonResult(new { success = true, message = r.Mensaje });
+            TempData["SuccessMsg"] = r.Mensaje;
             return RedirectToPage(new { id });
         }
 
@@ -1308,11 +1626,20 @@ namespace AtilsonCargoSpa.Pages.Operaciones
             return (esSpot, dias);
         }
 
+        // oct-2026 (minuta Roleos/Cancelaciones/No Show):
+        //  - La condición de tarifa (Spot/Contrato) se confirma en el mismo registro y
+        //    queda guardada en la operación.
+        //  - Spot: con "DiasPenalidadRoleo" días o menos al ETD (7 por defecto) la
+        //    penalidad es automática; la ejecutiva puede indicar el monto USD por
+        //    contenedor (por defecto el de la naviera).
+        //  - Contrato: sin costo (salvo naviera marcada "aplica a todo evento").
+        //  - El extracosto queda en USD y Finanzas no lo convierte a CLP.
+        //  - Nunca se elimina nada: cada registro queda en el historial del booking.
         public async Task<IActionResult> OnPostRegistrarRoleoCancelacionAsync(
             int idOperacion, int? idUnidadTecnica, string tipo, string? penalidadOverride, string? comentario,
             int cantidadContenedoresAfectados,
             string? nuevaNave, DateTime? nuevoEtd, DateTime? nuevoEta, DateTime? nuevoStacking, DateTime? nuevoCierreDocumental,
-            bool datosNuevosPendientes)
+            bool datosNuevosPendientes, string? tipoTarifa, string? montoPenalidadUsd)
         {
             if (tipo != "ROLEO" && tipo != "CANCELACION_NOSHOW")
                 return new JsonResult(new { success = false, message = "Tipo no reconocido." });
@@ -1324,11 +1651,43 @@ namespace AtilsonCargoSpa.Pages.Operaciones
             if (op == null) return new JsonResult(new { success = false, message = "Operación no encontrada." });
 
             string usuario = User.Identity?.Name ?? "Operaciones";
-            var (sugerida, dias) = CalcularPenalidadSugerida(op.IdNavieraNavigation, op.EtdPol, op.TipoTarifaMaritima);
 
-            string penalidadFinal = !string.IsNullOrWhiteSpace(penalidadOverride) && penalidadOverride != "AUTOMATICO"
-                ? penalidadOverride
-                : (sugerida ? "SI" : "NO");
+            string tarifaNormalizada = (tipoTarifa ?? "").Trim().ToUpperInvariant();
+            if (tarifaNormalizada == "SPOT" || tarifaNormalizada == "CONTRATO")
+            {
+                if (op.TipoTarifaMaritima != tarifaNormalizada)
+                {
+                    RegistrarHito(op, "MARITIMO", $"Condición de tarifa: {op.TipoTarifaMaritima ?? "-"} → {tarifaNormalizada} (al registrar roleo/cancelación)");
+                    op.TipoTarifaMaritima = tarifaNormalizada;
+                }
+            }
+            else if (string.IsNullOrWhiteSpace(op.TipoTarifaMaritima))
+            {
+                return new JsonResult(new { success = false, message = "Indica la condición de tarifa (Spot o Contrato)." });
+            }
+
+            var (sugerida, dias) = CalcularPenalidadSugerida(op.IdNavieraNavigation, op.EtdPol, op.TipoTarifaMaritima);
+            bool contratoSinCosto = op.TipoTarifaMaritima == "CONTRATO" && op.IdNavieraNavigation?.PenalidadRoleoSiempreAplica != true;
+
+            string penalidadFinal = contratoSinCosto
+                ? "NO"
+                : (!string.IsNullOrWhiteSpace(penalidadOverride) && penalidadOverride != "AUTOMATICO"
+                    ? penalidadOverride
+                    : (sugerida ? "SI" : "NO"));
+
+            decimal? montoUnitarioUsd = op.IdNavieraNavigation?.MontoPenalidadRoleoUsd;
+            if (!contratoSinCosto && !string.IsNullOrWhiteSpace(montoPenalidadUsd)
+                && decimal.TryParse(montoPenalidadUsd.Trim(), System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture, out var montoIngresado)
+                && montoIngresado >= 0)
+            {
+                montoUnitarioUsd = montoIngresado;
+            }
+            // Cancelación / No Show no cambia de nave: no hay itinerario nuevo.
+            if (tipo == "CANCELACION_NOSHOW")
+            {
+                datosNuevosPendientes = false;
+                nuevaNave = null; nuevoEtd = null; nuevoEta = null; nuevoStacking = null; nuevoCierreDocumental = null;
+            }
 
             var registro = new RoleoCancelacion
             {
@@ -1342,7 +1701,7 @@ namespace AtilsonCargoSpa.Pages.Operaciones
                 PenalidadSistemaSugiere = sugerida,
                 PenalidadConfirmada = penalidadFinal,
                 CantidadContenedoresAfectados = cantidadContenedoresAfectados < 1 ? 1 : cantidadContenedoresAfectados,
-                MontoPenalidadUnitarioUsd = op.IdNavieraNavigation?.MontoPenalidadRoleoUsd,
+                MontoPenalidadUnitarioUsd = montoUnitarioUsd,
                 Comentario = comentario?.Trim(),
                 NuevaNave = nuevaNave,
                 NuevoEtd = nuevoEtd,
@@ -1383,7 +1742,11 @@ namespace AtilsonCargoSpa.Pages.Operaciones
                 UsuarioCreador = usuario
             });
 
-            RegistrarHito(op, "MARITIMO", $"{nombreTipo} registrado — {textoPenalidad}{textoDias}" + (datosNuevosPendientes ? " | Nuevo itinerario PENDIENTE de confirmar." : $" | Nueva nave: {nuevaNave ?? "-"}"));
+            string textoItinerario = tipo == "CANCELACION_NOSHOW"
+                ? " · Booking cancelado: queda visible en el registro operativo."
+                : (datosNuevosPendientes ? " · Nuevo itinerario PENDIENTE de confirmar." : $" · Nueva nave: {nuevaNave ?? "-"}");
+            string textoMonto = penalidadFinal == "SI" ? (montoTotal > 0 ? $" USD {montoTotal:0.##}." : " Monto por valorizar.") : "";
+            RegistrarHito(op, "MARITIMO", $"{nombreTipo} registrado ({op.TipoTarifaMaritima}) — {textoPenalidad}{textoMonto}{textoDias}{textoItinerario}");
 
             await _context.SaveChangesAsync();
             await _finanzasSync.SincronizarAsync(idOperacion, User.Identity?.Name ?? "Sistema");
@@ -1420,7 +1783,7 @@ namespace AtilsonCargoSpa.Pages.Operaciones
             return new JsonResult(new { success = true });
         }
 
-        public async Task<IActionResult> OnPostActualizarPenalidadRoleoAsync(int idRegistro, string penalidad)
+        public async Task<IActionResult> OnPostActualizarPenalidadRoleoAsync(int idRegistro, string penalidad, string? montoPenalidadUsd)
         {
             var registro = await _context.RoleosCancelaciones
                 .Include(r => r.IdOperacionNavigation).ThenInclude(op => op.ExtracostosOperacions)
@@ -1428,6 +1791,12 @@ namespace AtilsonCargoSpa.Pages.Operaciones
             if (registro == null) return new JsonResult(new { success = false, message = "Registro no encontrado." });
 
             registro.PenalidadConfirmada = penalidad;
+            if (penalidad == "SI" && !string.IsNullOrWhiteSpace(montoPenalidadUsd)
+                && decimal.TryParse(montoPenalidadUsd.Trim(), System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture, out var montoIngresado)
+                && montoIngresado >= 0)
+            {
+                registro.MontoPenalidadUnitarioUsd = montoIngresado;
+            }
             var op = registro.IdOperacionNavigation;
 
             if (op != null)
@@ -1455,6 +1824,65 @@ namespace AtilsonCargoSpa.Pages.Operaciones
             await _context.SaveChangesAsync();
             return new JsonResult(new { success = true, penalidad = registro.PenalidadConfirmada });
         }
+        private static void AplicarPropietarioContrato(Operacione op, string? valor, string? otro)
+        {
+            op.PropietarioContrato = Operacione.NormalizarPropietarioContrato(valor);
+            op.PropietarioContratoOtro = op.PropietarioContrato == "OTROS" && !string.IsNullOrWhiteSpace(otro)
+                ? otro.Trim().ToUpper()
+                : null;
+        }
+
+        // Datos del embarque (Booking, Naviera, Nave, Propietario de Contrato) desde el
+        // encabezado de Detalle: sirve para TODOS los servicios, también los que no
+        // tienen pestaña Marítimo (Terrestre / Documental).
+        public async Task<IActionResult> OnPostEditarEmbarqueAsync(int idOperacion, string? numeroBooking, int? idNaviera, string? nave, string? propietarioContrato, string? propietarioContratoOtro, string? commodity, int? condicionPago, string? numeroInstructivo)
+        {
+            var op = await _context.Operaciones.Include(o => o.IdNavieraNavigation).FirstOrDefaultAsync(o => o.Id == idOperacion);
+            if (op == null) return new JsonResult(new { success = false, message = "Operación no encontrada." });
+
+            if (string.IsNullOrWhiteSpace(numeroBooking)) return new JsonResult(new { success = false, message = "El Booking es obligatorio." });
+            if (!idNaviera.HasValue || !await _context.Navieras.AnyAsync(n => n.Id == idNaviera.Value))
+                return new JsonResult(new { success = false, message = "Selecciona la Naviera." });
+            var propietario = Operacione.NormalizarPropietarioContrato(propietarioContrato);
+            if (propietario == null) return new JsonResult(new { success = false, message = "Selecciona el Propietario de Contrato." });
+            if (propietario == "OTROS" && string.IsNullOrWhiteSpace(propietarioContratoOtro))
+                return new JsonResult(new { success = false, message = "Especifica el Propietario de Contrato (Otros)." });
+
+            string antes = $"{op.NumeroBooking} / {op.IdNavieraNavigation?.NombreNaviera} / {op.Nave ?? "-"} / {op.PropietarioContratoTexto}";
+            op.NumeroBooking = numeroBooking.Trim().ToUpper();
+            op.IdNaviera = idNaviera.Value;
+            op.Nave = string.IsNullOrWhiteSpace(nave) ? null : nave.Trim().ToUpper();
+            AplicarPropietarioContrato(op, propietario, propietarioContratoOtro);
+            // Commodity y Condición de pago (oct-2026): definen el acuerdo Collect que aplica.
+            string antesCollect = $"{AcuerdoCollectHelper.TextoCondicionPago(op.CondicionPago)} / {op.Commodity ?? "-"}";
+            if (Request.Form.ContainsKey("commodity") && !string.IsNullOrWhiteSpace(commodity)) op.Commodity = CommodityHelper.Normalizar(commodity);
+            if (Request.Form.ContainsKey("condicionPago") && condicionPago is >= 1 and <= 5) op.CondicionPago = condicionPago.Value;
+            string despuesCollect = $"{AcuerdoCollectHelper.TextoCondicionPago(op.CondicionPago)} / {op.Commodity ?? "-"}";
+            if (antesCollect != despuesCollect) RegistrarHito(op, "MARITIMO", $"Condición de pago / commodity: {antesCollect} → {despuesCollect}");
+
+            // N° de instructivo (oct-2026): editable desde la cabecera del Detalle.
+            if (Request.Form.ContainsKey("numeroInstructivo"))
+            {
+                string? instr = string.IsNullOrWhiteSpace(numeroInstructivo) ? null : numeroInstructivo.Trim().ToUpper();
+                if (instr != null && instr.Length > 60) instr = instr.Substring(0, 60);
+                if (instr != op.NumeroInstructivo)
+                {
+                    RegistrarHito(op, "GENERAL", $"N° instructivo: {op.NumeroInstructivo ?? "-"} → {instr ?? "-"}");
+                    op.NumeroInstructivo = instr;
+                }
+            }
+
+            string nombreNaviera = await _context.Navieras.Where(n => n.Id == op.IdNaviera).Select(n => n.NombreNaviera).FirstOrDefaultAsync() ?? "-";
+            RegistrarHito(op, "GENERAL", $"Datos del embarque: {antes} → {op.NumeroBooking} / {nombreNaviera} / {op.Nave ?? "-"} / {op.PropietarioContratoTexto}");
+            op.FechaModificacion = DateTime.Now;
+            op.UsuarioModificador = User.Identity?.Name ?? "Sistema";
+            op.CorreoClienteEnviado = false;
+
+            await _context.SaveChangesAsync();
+            await _finanzasSync.SincronizarAsync(idOperacion, User.Identity?.Name ?? "Sistema");
+            return new JsonResult(new { success = true });
+        }
+
         private void RegistrarHito(Operacione op, string modulo, string descripcion)
         {
             string usuario = User.Identity?.Name ?? "Sistema";
@@ -1467,15 +1895,54 @@ namespace AtilsonCargoSpa.Pages.Operaciones
             string conceptoExacto = $"{conceptoBusqueda} (U{idUnidadTecnica})";
             var tx = op.TransaccionesFinancieras?.FirstOrDefault(t => t.TipoMovimiento == "EGRESO" && t.Concepto == conceptoExacto);
             if (tx == null) return (null, null, false, conceptoExacto);
-            bool pendiente = tx.MontoNeto == 0m && !tx.TarifaManual;
+            bool pendiente = AtilsonCargoSpa.Helpers.TransaccionesHelper.EsTarifaPendiente(tx);
             return (tx.ResponsablePago, tx.Responsable, pendiente, tx.Concepto);
+        }
+
+        /// <summary>
+        /// Indicador de solo lectura del Gate Out (oct-2026): si tiene costo para Atilson y si se
+        /// le cobra al cliente, según las filas "Gate OUT Contenedor" que genera Finanzas.
+        /// Clase: "con" | "sin" | "pend" | "na".
+        /// </summary>
+        public (string Clase, string Titulo, string Detalle) EstadoCostoGateOut(Operacione op)
+        {
+            if (op.TipoGate != "OUT" && op.TipoGate != "IN/OUT")
+                return ("na", "Gate Out no aplica", string.IsNullOrWhiteSpace(op.TipoGate) ? "Elige el tipo de movimiento y guarda el Gate." : "Este booking solo tiene Gate IN.");
+            var filas = (op.TransaccionesFinancieras ?? new List<TransaccionesFinanciera>())
+                .Where(t => (t.Concepto ?? "").StartsWith("Gate OUT Contenedor")).ToList();
+            var egresos = filas.Where(t => t.TipoMovimiento == "EGRESO").ToList();
+            var ingresos = filas.Where(t => t.TipoMovimiento == "INGRESO").ToList();
+            string cobro = op.GestionaGate == "Cliente gestiona directo" ? "El cliente lo gestiona y paga directo."
+                : op.GestionaGate == "Gate out incluido para cliente" ? "Incluido para el cliente: no se le cobra aparte."
+                : ingresos.Any(t => t.MontoNeto > 0) ? $"Se cobra al cliente {MontoTexto(ingresos.First(t => t.MontoNeto > 0))} por contenedor."
+                : ingresos.Any() && ingresos.All(t => t.EstadoFila == "NO FACTURABLE" || (t.MontoNeto == 0 && AcuerdoCollectHelper.EsMarcaSinCosto(t.JustificacionManual))) ? "No se cobra al cliente."
+                : "Cobro al cliente por definir.";
+            if (!egresos.Any())
+                return ("pend", "Gate Out sin calcular", "Guarda el Gate para que Finanzas calcule el costo.");
+            if (egresos.Any(t => t.MontoNeto > 0))
+            {
+                var e = egresos.First(t => t.MontoNeto > 0);
+                return ("con", "Gate Out CON costo", $"{MontoTexto(e)} por contenedor ({egresos.Count} contenedor{(egresos.Count == 1 ? "" : "es")}). {cobro}");
+            }
+            if (egresos.All(t => t.EstadoFila == "PENDIENTE VALORIZAR" && !t.TarifaManual))
+                return ("pend", "Gate Out sin tarifa", $"No hay tarifa para este depósito/naviera: queda por asignar en Finanzas. {cobro}");
+            return ("sin", "Gate Out SIN costo", $"La tarifa de este depósito/naviera es $ 0. {cobro}");
+        }
+
+        private static string MontoTexto(TransaccionesFinanciera t)
+        {
+            string m = string.IsNullOrWhiteSpace(t.Moneda) ? "CLP" : t.Moneda!;
+            string v = t.MontoNeto.ToString(m == "CLP" ? "N0" : "N2", new System.Globalization.CultureInfo("es-CL"));
+            string txt = m == "CLP" ? "$ " + v : m + " " + v;
+            if (t.MontoOriginalUsd is > 0) txt += $" (USD {t.MontoOriginalUsd.Value.ToString("N2", new System.Globalization.CultureInfo("es-CL"))})";
+            return txt;
         }
 
         public bool HayTarifaPendiente(Operacione op, params string[] conceptosBusqueda)
         {
             if (op.TransaccionesFinancieras == null) return false;
             return conceptosBusqueda.Any(cb => op.TransaccionesFinancieras.Any(t =>
-                t.TipoMovimiento == "EGRESO" && (t.Concepto ?? "").Contains(cb) && t.MontoNeto == 0m && !t.TarifaManual));
+                t.TipoMovimiento == "EGRESO" && (t.Concepto ?? "").Contains(cb) && AtilsonCargoSpa.Helpers.TransaccionesHelper.EsTarifaPendiente(t)));
         }
 
         public bool HayTarifaPendiente(Operacione op, int idUnidadTecnica, params string[] conceptosBusqueda)
@@ -1484,7 +1951,7 @@ namespace AtilsonCargoSpa.Pages.Operaciones
             return conceptosBusqueda.Any(cb =>
             {
                 string conceptoExacto = $"{cb} (U{idUnidadTecnica})";
-                return op.TransaccionesFinancieras.Any(t => t.TipoMovimiento == "EGRESO" && t.Concepto == conceptoExacto && t.MontoNeto == 0m && !t.TarifaManual);
+                return op.TransaccionesFinancieras.Any(t => t.TipoMovimiento == "EGRESO" && t.Concepto == conceptoExacto && AtilsonCargoSpa.Helpers.TransaccionesHelper.EsTarifaPendiente(t));
             });
         }
 
@@ -1492,7 +1959,7 @@ namespace AtilsonCargoSpa.Pages.Operaciones
         {
             var tx = op.TransaccionesFinancieras?.FirstOrDefault(t => t.TipoMovimiento == "EGRESO" && t.Concepto == conceptoExacto);
             if (tx == null) return (null, null, false, conceptoExacto);
-            bool pendiente = tx.MontoNeto == 0m && !tx.TarifaManual;
+            bool pendiente = AtilsonCargoSpa.Helpers.TransaccionesHelper.EsTarifaPendiente(tx);
             return (tx.ResponsablePago, tx.Responsable, pendiente, tx.Concepto);
         }
 
@@ -1721,6 +2188,18 @@ namespace AtilsonCargoSpa.Pages.Operaciones
             if (modalidad != "GRUPAL" && modalidad != "INDIVIDUAL") return new JsonResult(new { success = false, message = "Modalidad inválida." });
             var op = await _context.Operaciones.Include(o => o.OperacionesDocumentales).FirstOrDefaultAsync(o => o.Id == idOperacion);
             if (op == null) return new JsonResult(new { success = false, message = "Operación no encontrada." });
+
+            // Cobro al cliente de Honorarios y DUS: no depende de certificados guardados.
+            if (certKey == "aga")
+            {
+                string anterior = op.ModalidadCobroAgencia ?? "INDIVIDUAL";
+                op.ModalidadCobroAgencia = modalidad;
+                op.FechaModificacion = DateTime.Now;
+                RegistrarHito(op, "DOCUMENTAL", $"Cobro al cliente de Honorarios y DUS: {(modalidad == "GRUPAL" ? "un solo cobro (grupal)" : "por contenedor")} (antes: {(anterior == "GRUPAL" ? "grupal" : "por contenedor")})");
+                await _context.SaveChangesAsync();
+                await _finanzasSync.SincronizarAsync(idOperacion, User.Identity?.Name ?? "Sistema");
+                return new JsonResult(new { success = true });
+            }
 
             string? actual = certKey switch { "ori" => op.ModalidadCertOrigen, "fit" => op.ModalidadCertFito, "san" => op.ModalidadCertSanitario, "cap" => op.ModalidadCertCaptura, _ => null };
             if (ModalidadCertBloqueada(op, certKey) && actual != modalidad)

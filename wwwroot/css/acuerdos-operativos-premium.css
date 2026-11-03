@@ -1,0 +1,149 @@
+/* =========================================================================
+   ACUERDOS OPERATIVOS (COMERCIAL) — CAPA PREMIUM
+   Mismo lenguaje visual que Detalle de Operación y Control Financiero:
+   gradiente morado/violeta, Plus Jakarta Sans, sombras "glow", radios grandes.
+   Solo propiedades visuales — ningún handler de formulario (guardarAcuerdos,
+   agregarTramoInterplanta, abrirModalHistorial) ni la lógica de agrupación
+   de conceptos (EsConceptoAgrupableAcu) fue tocada.
+
+   Por qué va en un archivo aparte y todo acotado a .ao-premium: esta vista
+   comparte nombres de clase genéricos (.workspace-nav, .ws-btn,
+   .search-wrapper, .search-input, .table-container...) con casi todas las
+   demás pantallas del sistema (Finanzas, Operaciones, Portal, App/*) que
+   todavía no pasaron por este rediseño — si esto se cargara sin acotar, se
+   verían afectadas sin haber sido revisadas. Acotando todo a .ao-premium,
+   esas vistas no cambian en absoluto.
+   ========================================================================= */
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600&display=swap');
+
+/* ---------- 0. Tokens ---------- */
+.ao-premium {
+    --ao-brand: #6d2d9e;
+    --ao-brand-2: #8b5cf6;
+    --ao-deep: #2c1b4d;
+    --ao-ink: #140c26;
+    --ao-muted: #6b6880;
+    --ao-faint: #a19eb3;
+    --ao-line: #ece8f3;
+    --ao-soft: #f8f7fc;
+    --ao-tint: #f4eefb;
+    --ao-grad: linear-gradient(135deg, #6d2d9e 0%, #8b5cf6 55%, #60a5fa 100%);
+    --ao-shadow: 0 1px 2px rgba(20,12,38,.04), 0 18px 40px -26px rgba(44,27,77,.28);
+    --ao-shadow-lg: 0 30px 70px -30px rgba(44,27,77,.55);
+
+    /* Esta vista define sus propios alias locales (--atilson-dark, --txt-main,
+       --border-soft, --bg-light) en su <style> inline, delegados al sistema de
+       diseño compartido — se realinean acá al mismo truco, esta vez al
+       sistema premium, sin tocar ninguno de los ~70 usos de esas variables
+       repartidos en el archivo. */
+    --atilson-dark: #140c26;
+    --txt-main: #6b6880;
+    --border-soft: #ece8f3;
+    --bg-light: #f8f7fc;
+
+    font-family: 'Plus Jakarta Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+    padding-bottom: 48px;
+}
+.ao-premium .font-monospace {
+    font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Consolas, monospace !important;
+}
+
+body:has(.ao-premium) {
+    background:
+        radial-gradient(1100px 460px at 100% -10%, rgba(139,92,246,.06), transparent 60%),
+        #f5f4f9;
+}
+
+/* ---------- 1. Encabezado de página ---------- */
+.ao-premium .page-header__icon {
+    background: var(--ao-grad) !important; color: #fff !important;
+    box-shadow: 0 10px 20px -10px rgba(109,45,158,.6);
+}
+.ao-premium .page-header h1, .ao-premium .page-header__title { letter-spacing: -.5px !important; }
+
+/* ---------- 2. Buscador ---------- */
+.ao-premium .search-input {
+    border-radius: 10px !important; border-color: var(--ao-line) !important;
+    box-shadow: var(--ao-shadow);
+}
+.ao-premium .search-input:focus {
+    border-color: var(--ao-brand-2) !important; box-shadow: 0 0 0 4px rgba(139,92,246,.12) !important;
+}
+
+/* ---------- 3. Grilla principal de Bookings ---------- */
+.ao-premium .table-container {
+    border: 1px solid var(--ao-line) !important; border-radius: 18px !important; box-shadow: var(--ao-shadow);
+    /* Sin overflow:hidden: si la tabla necesita scroll horizontal en pantallas
+       angostas no debe perder esa posibilidad — el redondeo se aplica
+       directamente en el thead. */
+}
+.ao-premium .table-minimal th {
+    background-color: var(--ao-soft) !important; border-bottom-color: var(--ao-ink) !important;
+    letter-spacing: .6px !important;
+}
+.ao-premium .table-minimal th:first-child { border-top-left-radius: 17px; }
+.ao-premium .table-minimal th:last-child { border-top-right-radius: 17px; }
+.ao-premium .table-minimal td { border-bottom-color: var(--ao-line) !important; }
+
+.ao-premium .row-master:hover { background-color: var(--ao-tint) !important; }
+.ao-premium .row-master[aria-expanded="true"] { background-color: var(--ao-tint) !important; }
+.ao-premium .icon-chevron { transition: transform .3s ease; }
+
+/* ---------- 4. Laboratorio de negociación (fila desplegable) ---------- */
+.ao-premium .row-detail td { background-color: var(--ao-soft) !important; }
+.ao-premium .lab-workspace {
+    border-left-width: 4px !important;
+    background: #fff;
+}
+.ao-premium .service-title { letter-spacing: .5px !important; }
+
+/* Pestañas Línea Proveedor / Línea Cliente / Tarifa Plana */
+.ao-premium .lab-tabs { border-bottom-color: var(--ao-line) !important; }
+.ao-premium .lab-tabs .nav-link { border-radius: 8px 8px 0 0 !important; }
+.ao-premium .lab-tabs .nav-link:hover { background: var(--ao-tint) !important; }
+.ao-premium .lab-tabs .nav-link.active {
+    color: var(--ao-brand) !important; border-bottom-color: var(--ao-brand) !important;
+}
+
+/* ---------- 5. Tablas de tarifas internas (pricing-grid) ---------- */
+.ao-premium .pricing-grid-wrap {
+    border: 1px solid var(--ao-line) !important; border-radius: 14px !important; box-shadow: var(--ao-shadow);
+}
+.ao-premium .pricing-grid th {
+    background: var(--ao-tint) !important; color: var(--ao-brand) !important; border-bottom-color: var(--ao-line) !important;
+}
+.ao-premium .pricing-grid td { border-bottom-color: var(--ao-line) !important; }
+.ao-premium .pricing-grid tbody tr:hover td { background-color: var(--ao-soft) !important; }
+
+.ao-premium .badge-contador-acu {
+    background: var(--ao-line) !important; color: var(--ao-muted) !important; border-radius: 999px !important;
+}
+
+/* ---------- 6. Inputs de calibración de tarifa ---------- */
+.ao-premium .input-calibrar { border-radius: 0 6px 6px 0; }
+.ao-premium .input-group:focus-within {
+    box-shadow: 0 0 0 4px rgba(139,92,246,.12) !important; border-radius: 6px;
+}
+.ao-premium .input-calibrar.is-modified { border-color: #f59e0b !important; }
+
+/* Checkbox de solo-lectura en la matriz de Tarifa Plana (no tenía estilo
+   propio en esta vista — Bootstrap lo pintaba sin personalizar). */
+.ao-premium .pro-check {
+    width: 15px; height: 15px; border: 1.5px solid var(--ao-faint); border-radius: 4px;
+    appearance: none; cursor: not-allowed; flex-shrink: 0;
+}
+.ao-premium .pro-check:checked { background-color: #16a34a; border-color: #16a34a; }
+
+/* ---------- 7. Botones ---------- */
+.ao-premium .btn { border-radius: 9px !important; transition: all .18s ease !important; }
+.ao-premium .btn-dark {
+    background: linear-gradient(135deg, #2c1b4d, #5b2a8a) !important; border: 0 !important;
+    box-shadow: 0 10px 22px -12px rgba(44,27,77,.85) !important;
+}
+.ao-premium .btn-dark:hover:not(:disabled) { background: linear-gradient(135deg, #3a2363, #6d2d9e) !important; }
+.ao-premium .btn-sm:hover:not(:disabled) { transform: translateY(-1px); }
+
+/* ---------- 8. Responsive ---------- */
+@media (prefers-reduced-motion: reduce) {
+    .ao-premium .icon-chevron, .ao-premium .btn { transition: none !important; }
+}

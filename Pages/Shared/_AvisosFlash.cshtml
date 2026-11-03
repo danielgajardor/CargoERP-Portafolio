@@ -1,0 +1,50 @@
+@*
+    Avisos flotantes del ERP (oct-2026). Muestra el resultado de un guardado después de
+    redirigir: TempData["ToastOk"], ["ToastError"] y ["ToastInfo"]. También expone
+    window.avisoFlash('ok'|'error'|'info', 'texto') para pantallas que guardan por fetch.
+*@
+@{
+    var avisos = new List<(string Tipo, string Texto)>();
+    foreach (var (clave, tipo) in new[] { ("ToastError", "error"), ("ToastOk", "ok"), ("ToastInfo", "info") })
+    {
+        if (TempData.Peek(clave) is string txt && !string.IsNullOrWhiteSpace(txt))
+        {
+            avisos.Add((tipo, txt));
+            TempData.Remove(clave);
+        }
+    }
+}
+<div id="avisosFlash" class="avisos-flash" role="status" aria-live="polite"></div>
+<script>
+    (function () {
+        var cont = document.getElementById('avisosFlash');
+        var titulos = { ok: 'Guardado', error: 'No se guardó', info: 'Sin cambios' };
+        var iconos = { ok: 'bi-check-circle-fill', error: 'bi-exclamation-octagon-fill', info: 'bi-info-circle-fill' };
+        function cerrar(el) {
+            if (!el || el.dataset.cerrando) return;
+            el.dataset.cerrando = '1';
+            el.classList.add('saliendo');
+            setTimeout(function () { el.remove(); }, 220);
+        }
+        window.avisoFlash = function (tipo, texto, titulo) {
+            if (!cont || !texto) return;
+            tipo = iconos[tipo] ? tipo : 'info';
+            var el = document.createElement('div');
+            el.className = 'aviso-flash aviso-' + tipo;
+            el.setAttribute('role', tipo === 'error' ? 'alert' : 'status');
+            var ic = document.createElement('i'); ic.className = 'bi ' + iconos[tipo] + ' aviso-icono';
+            var cuerpo = document.createElement('div'); cuerpo.className = 'aviso-cuerpo';
+            var t = document.createElement('strong'); t.textContent = titulo || titulos[tipo];
+            var p = document.createElement('span'); p.textContent = texto;
+            cuerpo.appendChild(t); cuerpo.appendChild(p);
+            var x = document.createElement('button'); x.type = 'button'; x.className = 'aviso-cerrar'; x.setAttribute('aria-label', 'Cerrar'); x.innerHTML = '&times;';
+            x.addEventListener('click', function () { cerrar(el); });
+            el.appendChild(ic); el.appendChild(cuerpo); el.appendChild(x);
+            cont.appendChild(el);
+            // Los errores quedan hasta que se cierren; el resto se va solo.
+            if (tipo !== 'error') setTimeout(function () { cerrar(el); }, 6000);
+        };
+        var pendientes = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(avisos.Select(a => new { tipo = a.Tipo, texto = a.Texto })));
+        pendientes.forEach(function (a) { window.avisoFlash(a.tipo, a.texto); });
+    })();
+</script>

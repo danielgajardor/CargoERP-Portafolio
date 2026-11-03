@@ -1,0 +1,132 @@
+/* =========================================================================
+   OPERACIONES — MAIN BOARD (Index) — CAPA PREMIUM
+   Esta vista ya tenía un buen nivel (incl. un "NIVEL PREMIUM" previo para
+   los modales). Este ajuste cubre lo que ese pase anterior no tocó: la
+   cabecera, la barra de navegación (workspace-nav), el panel de filtros y
+   el cascarón de la tabla principal — mismo lenguaje visual (gradiente
+   morado/violeta, Plus Jakarta Sans, sombras "glow", radios grandes) que
+   el resto de la familia premium.
+
+   Cero cambios de lógica: NO se tocan @functions, GenerarAlertasProactivas,
+   ColorEstado(), ni ninguna propiedad de color semántico. Se preservan
+   intactos tal cual están:
+     - .row-alert / @keyframes pulse-alert / .row-closed-exito / .vacio-devuelto-*
+     - .estado-badge (colores inline vía ColorEstado())
+     - .status-icon.ok/.pend/.warn/.danger
+     - .badge-ing-pen.ing/.pen
+     - .email-badge.pend/.pend-red/.env/.act
+     - el hover de fila (.row-main:hover / .row-sub:hover) — NO se toca:
+       varias filas con alerta comparten la clase .row-main y su animación
+       de pulso ya gana sobre el cascade normal; forzar el hover con
+       !important rompería ese pulso al pasar el mouse por encima.
+
+   Acotado a .opidx-premium (en vez de un :root global) porque este archivo
+   coexiste con el bloque ":root { --atilson-dark: #0b1220; ... }" ya
+   existente en operaciones-index.css (que alimenta los modales) — así los
+   modales (ya rediseñados en el pase "NIVEL PREMIUM") no se ven afectados
+   y esta capa solo repinta la cabecera + nav + filtros + tabla principal,
+   que es el alcance de este pedido.
+
+   Por el mismo bug de anidación ya documentado en el .cshtml (un </div> de
+   más cierra el .container-fluid antes de tiempo, dejando .workspace-nav,
+   .filter-panel y .table-container como hermanos y no como descendientes),
+   la clase .opidx-premium se aplica por separado a cada uno de esos 4
+   elementos en el markup, no solo al contenedor raíz.
+   ========================================================================= */
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@500;600&display=swap');
+
+/* ---------- 0. Tokens ---------- */
+.opidx-premium {
+    --opidx-brand: #6d2d9e;
+    --opidx-brand-2: #8b5cf6;
+    --opidx-ink: #140c26;
+    --opidx-muted: #6b6880;
+    --opidx-line: #ece8f3;
+    --opidx-soft: #f8f7fc;
+    --opidx-tint: #f4eefb;
+    --opidx-shadow: 0 1px 2px rgba(20,12,38,.04), 0 18px 40px -26px rgba(44,27,77,.28);
+
+    /* Alias local de esta vista (--atilson-dark, --txt-main/-muted,
+       --border-soft, --bg-soft), realineado al resto del sistema premium.
+       --atilson-purple ya era #6d2d9e — coincide exacto, no se toca.
+       Los colores semánticos (badges, alertas, iconos de estado) NUNCA
+       leen estas variables, así que no se ven afectados. */
+    --atilson-dark: #140c26;
+    --txt-main: #140c26;
+    --txt-muted: #6b6880;
+    --border-soft: #ece8f3;
+    --bg-soft: #f8f7fc;
+
+    font-family: 'Plus Jakarta Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+.opidx-premium .cut-off-txt {
+    font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Consolas, monospace !important;
+}
+
+body:has(.opidx-premium) {
+    background:
+        radial-gradient(1100px 460px at 100% -10%, rgba(139,92,246,.06), transparent 60%),
+        #f5f4f9;
+}
+
+/* ---------- 1. Cabecera ---------- */
+/* El h1/subtítulo ya leen var(--txt-main)/.text-muted — se realinean solos.
+   El botón "Nueva Operación" (.btn-dark) traía un inline background-color
+   fijo; se repinta con el gradiente de marca, igual que en el resto de
+   la familia premium. */
+.opidx-premium .btn-dark {
+    background: linear-gradient(135deg, #2c1b4d, #5b2a8a) !important; border: 0 !important;
+    box-shadow: 0 10px 22px -12px rgba(44,27,77,.85) !important;
+}
+.opidx-premium .btn-dark:hover:not(:disabled) { background: linear-gradient(135deg, #3a2363, #6d2d9e) !important; }
+
+/* ---------- 2. Workspace nav ---------- */
+.opidx-premium.workspace-nav {
+    border-radius: 12px !important;
+    border-color: var(--opidx-line) !important;
+    box-shadow: var(--opidx-shadow) !important;
+}
+.opidx-premium .ws-btn { border-radius: 8px !important; }
+.opidx-premium .ws-btn:hover { background: var(--opidx-tint) !important; color: var(--opidx-brand) !important; }
+.opidx-premium .ws-btn.active { box-shadow: 0 10px 22px -12px rgba(44,27,77,.55) !important; }
+
+/* ---------- 3. Panel de filtros ---------- */
+.opidx-premium.filter-panel {
+    border-radius: 14px !important;
+    box-shadow: var(--opidx-shadow) !important;
+}
+.opidx-premium .filter-group { border-radius: 8px !important; }
+.opidx-premium #btnResetFilters { border-radius: 8px !important; }
+
+/* ---------- 4. Tabla principal ---------- */
+.opidx-premium.table-container {
+    border-radius: 16px !important;
+    box-shadow: var(--opidx-shadow) !important;
+}
+.opidx-premium .table-exec thead th:first-child { border-top-left-radius: 14px !important; }
+.opidx-premium .table-exec thead th:last-child { border-top-right-radius: 14px !important; }
+.opidx-premium .table-exec th { letter-spacing: .6px !important; }
+
+/* Chrome puntual de celdas — ningún color de estado/alerta involucrado. */
+.opidx-premium .badge-ing-pen { border-radius: 6px !important; }
+.opidx-premium .btn-action-dot:hover { color: var(--opidx-brand) !important; }
+
+/* ---------- 5. Botones y controles genéricos ---------- */
+.opidx-premium .btn { border-radius: 9px !important; transition: all .18s ease !important; }
+.opidx-premium .btn:hover:not(:disabled) { transform: translateY(-1px); }
+
+/* ---------- 6. Responsive / accesibilidad ---------- */
+@media (prefers-reduced-motion: reduce) {
+    .opidx-premium .btn,
+    .opidx-premium .btn:hover:not(:disabled) { transition: none !important; transform: none !important; }
+}
+
+/* Aviso de operaciones cerradas ocultas (oct-2026) */
+.ops-historial-nota {
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    margin: 0 0 12px; padding: 8px 14px; border-radius: 10px;
+    background: #f8fafc; border: 1px solid #e2e8f0; color: #475569; font-size: 12px;
+}
+.ops-historial-nota i { color: #94a3b8; }
+.ops-historial-nota a { margin-left: auto; font-weight: 800; color: #6d2d9e; text-decoration: none; }
+.ops-historial-nota a:hover { text-decoration: underline; }

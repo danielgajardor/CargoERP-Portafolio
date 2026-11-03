@@ -39,6 +39,13 @@ namespace AtilsonCargoSpa.Models
         public string? Clasificacion { get; set; }
         // ===========================================================
 
+        // ================ MODALIDAD COLLECT / NO PREPAID =================
+        // Rebate que le devolvemos a este cliente (GrupoCobro="Marítimo") cuando
+        // el embarque es Collect. La diferencia con TarifasMaritima.RebateUsd
+        // (lo que nos paga la naviera) es nuestra comisión/profit.
+        public decimal? RebateUsd { get; set; }
+        // ===================================================================
+
         // Le indicamos explícitamente a C# cuáles son las columnas reales de SQL
         [ForeignKey("IdCliente")]
         public virtual Cliente? IdClienteNavigation { get; set; }

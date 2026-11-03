@@ -3,7 +3,7 @@ using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.AspNetCore.Mvc.Rendering;
 using Microsoft.EntityFrameworkCore;
 using AtilsonCargoSpa.Models;
-using AtilsonCargoSpa.Helpers; // Agregamos el Helper
+using AtilsonCargoSpa.Services;
 using ClosedXML.Excel;
 using iTextSharp.text;
 using iTextSharp.text.pdf;
@@ -20,55 +20,89 @@ namespace AtilsonCargoSpa.Pages.App.Clientes
             _context = context;
         }
 
-        // CAMBIO 1: Ahora usamos PaginatedList en lugar de IList
-        public PaginatedList<Cliente> Clientes { get; set; } = default!;
+        public sealed class Fila
+        {
+            public Cliente Cliente { get; init; } = null!;
+            public string? Ciudad { get; init; }
+            public bool Activo => Cliente.Activo == 1;
+        }
 
+        public List<Fila> Filas { get; set; } = new();
+        public int TotalActivos { get; set; }
+        public int TotalInactivos { get; set; }
+        public List<(string Valor, string Texto)> OpcionesCiudad { get; set; } = new();
+
+        /// <summary>activos | inactivos | todos</summary>
+        [BindProperty(SupportsGet = true)]
+        public string Estado { get; set; } = "activos";
+
+        [BindProperty(SupportsGet = true, Name = "q")]
+        public string? Q { get; set; }
+
+        [BindProperty(SupportsGet = true, Name = "f")]
+        public string? F { get; set; }
+
+        [BindProperty(SupportsGet = true)]
+        public int? Resaltar { get; set; }
+
+        // Filtros que usan las exportaciones a Excel/PDF.
         [BindProperty(SupportsGet = true)]
         public string? SearchString { get; set; }
 
         [BindProperty(SupportsGet = true)]
         public int? CiudadId { get; set; }
 
-        public SelectList Ciudades { get; set; } = default!;
-
-        // CAMBIO 2: Recibimos el número de página (por defecto 1)
-        public async Task OnGetAsync(int? pageIndex)
+        public async Task OnGetAsync()
         {
-            Ciudades = new SelectList(await _context.Ciudades.ToListAsync(), "Id", "Nombre");
+            Estado = Estado is "inactivos" or "todos" ? Estado : "activos";
+            var ciudades = await _context.Ciudades.AsNoTracking().ToDictionaryAsync(c => c.Id, c => c.Nombre);
+            var todos = await _context.Clientes.AsNoTracking().Where(c => !c.IsDeleted).ToListAsync();
+            TotalActivos = todos.Count(c => c.Activo == 1);
+            TotalInactivos = todos.Count - TotalActivos;
 
-            var query = _context.Clientes.Where(c => c.Activo == 1);
-
-            if (!string.IsNullOrEmpty(SearchString))
+            Filas = (Estado switch
             {
-                query = query.Where(s => s.RazonSocial.Contains(SearchString)
-                                      || s.Rut.Contains(SearchString)
-                                      || s.NombreCliente.Contains(SearchString));
-            }
+                "inactivos" => todos.Where(c => c.Activo != 1),
+                "todos" => todos,
+                _ => todos.Where(c => c.Activo == 1)
+            })
+            .Select(c => new Fila { Cliente = c, Ciudad = c.IdCiudad.HasValue ? ciudades.GetValueOrDefault(c.IdCiudad.Value) : null })
+            .OrderBy(f => f.Cliente.RazonSocial)
+            .ToList();
 
-            if (CiudadId.HasValue)
-            {
-                query = query.Where(x => x.IdCiudad == CiudadId);
-            }
-
-            // Ordenamos por fecha de creación (los más nuevos primero)
-            query = query.OrderByDescending(c => c.Id);
-
-            // CAMBIO 3: Tamaño de página (ej. 10 registros por página)
-            int pageSize = 10;
-            Clientes = await PaginatedList<Cliente>.CreateAsync(query.AsNoTracking(), pageIndex ?? 1, pageSize);
+            OpcionesCiudad = Filas.Where(f => f.Ciudad != null)
+                .Select(f => (f.Cliente.IdCiudad!.Value.ToString(), f.Ciudad!))
+                .Distinct()
+                .OrderBy(x => x.Item2)
+                .ToList();
         }
 
-        public async Task<IActionResult> OnPostDeleteAsync(int id)
+        public async Task<IActionResult> OnPostCambiarEstadoAsync(int id, bool activar)
         {
             var cliente = await _context.Clientes.FindAsync(id);
-            if (cliente != null)
+            if (cliente == null)
             {
-                cliente.Activo = 0;
-                cliente.FechaModificacion = DateTime.Now;
-                cliente.UsuarioModificador = "Admin Atilson";
+                TempData["ToastError"] = "El cliente ya no existe.";
+                return RedirectToPage("./Index", new { Estado });
+            }
+
+            string usuario = MaestrosAuditoria.Usuario(User);
+            byte nuevo = (byte)(activar ? 1 : 0);
+            if (cliente.Activo != nuevo)
+            {
+                var cambios = new MaestrosAuditoria.Cambios();
+                cambios.Agregar("Estado", cliente.Activo == 1 ? "Activo" : "Inactivo", activar ? "Activo" : "Inactivo");
+                cliente.Activo = nuevo;
+                cliente.FechaModificacion = MaestrosAuditoria.Ahora();
+                cliente.UsuarioModificador = usuario;
+                MaestrosAuditoria.Registrar(_context, MaestrosAuditoria.EntCliente, cliente.Id, cambios, usuario, "Cambio de estado desde la lista");
                 await _context.SaveChangesAsync();
             }
-            return RedirectToPage("./Index");
+
+            TempData["ToastOk"] = activar
+                ? $"Cliente «{cliente.RazonSocial}» reactivado."
+                : $"Cliente «{cliente.RazonSocial}» desactivado. Puedes reactivarlo desde «Inactivos».";
+            return RedirectToPage("./Index", new { Estado, resaltar = cliente.Id });
         }
 
         // ... Mismos métodos de exportación Excel y PDF sin cambios ...

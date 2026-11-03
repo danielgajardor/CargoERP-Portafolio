@@ -1,509 +1,487 @@
 ﻿@page
 @model AtilsonCargoSpa.Pages.Finanzas.IndexModel
+@using AtilsonCargoSpa.Services
 @{
     ViewData["Title"] = "Main Board Financiero";
+
+    // Bandeja de trabajo: abre primero lo más urgente.
+    string tabInicial = Model.TraspasosOperaciones.Any() ? "traspasos"
+        : Model.AjustesPendientes.Any() ? "ajustes"
+        : Model.TotalSolicitudesPendientes > 0 ? "bloqueos" : "traspasos";
+    int bloqueosConceptos = Model.BookingsConBloqueos.Sum(b => b.Conceptos.Count);
+}
+@functions {
+    static string Clp(decimal v) => "$ " + v.ToString("N0");
+    static string Usd(decimal v) => v.ToString("N2");
+
+    // Monto en dos líneas (CLP / USD) alineado a la derecha; color opcional por signo.
+    Microsoft.AspNetCore.Html.IHtmlContent Montos(AtilsonCargoSpa.Pages.Finanzas.IndexModel.Montos m, bool colorear = false)
+    {
+        string Linea(string cur, decimal v, string texto)
+        {
+            string cls = v == 0m ? "cero" : colorear ? (v > 0 ? "fmb-pos" : "fmb-neg") : "";
+            return $"<span class=\"{cls}\"><span class=\"cur\">{cur}</span>{texto}</span>";
+        }
+        var html = "<div class=\"fmb-m\">";
+        if (m.Clp != 0m || m.Usd == 0m) html += Linea("CLP", m.Clp, Clp(m.Clp));
+        if (m.Usd != 0m) html += Linea("USD", m.Usd, Usd(m.Usd));
+        html += "</div>";
+        return new Microsoft.AspNetCore.Html.HtmlString(html);
+    }
+
+    static string Pct(decimal margen, decimal ingresos)
+    {
+        if (ingresos == 0m) return "";
+        var p = Math.Round(margen / ingresos * 100m, 1);
+        return $"<span class=\"fmb-kpi__pct {(p >= 0 ? "pos" : "neg")}\">{p.ToString("0.#")}%</span>";
+    }
+
+    static string ClaseEstado(string estado) => estado switch
+    {
+        "PENDIENTE VALORIZAR" => "e-pendiente",
+        "PROVISIÓN" => "e-provision",
+        "FACTURADO" => "e-facturado",
+        "PAGADO" => "e-pagado",
+        "CONCILIADO" => "e-conciliado",
+        "NO FACTURABLE" => "e-nofact",
+        _ => ""
+    };
+
+    static string TextoEstado(string estado) => estado switch
+    {
+        "PENDIENTE VALORIZAR" => "Pendiente valorizar (sin tarifa)",
+        "PROVISIÓN" => "Provisión (por facturar)",
+        "FACTURADO" => "Facturado (por cobrar/pagar)",
+        "PAGADO" => "Pagado",
+        "CONCILIADO" => "Conciliado",
+        "NO FACTURABLE" => "No facturable",
+        _ => estado
+    };
 }
 
-<style>
-    /* VARIABLES CORPORATIVAS ATILSON */
-    :root {
-        --atilson-slate-900: #0f172a;
-        --atilson-slate-500: #64748b;
-        --atilson-bg-soft: #f8fafc;
-        --atilson-border: #e2e8f0;
-    }
-
-    body {
-        background-color: #f8fafc;
-    }
-
-    /* MENU DE NAVEGACIÓN PRINCIPAL UNIFICADO */
-    .workspace-nav {
-        display: flex;
-        gap: 2px;
-        background: #ffffff;
-        padding: 6px;
-        border-radius: 8px;
-        border: 1px solid var(--atilson-border);
-        box-shadow: 0 1px 2px rgba(0,0,0,0.02);
-    }
-
-    .ws-btn {
-        font-size: 11px;
-        font-weight: 800;
-        text-transform: uppercase;
-        padding: 10px 20px;
-        border-radius: 6px;
-        color: var(--atilson-slate-500);
-        text-decoration: none;
-        transition: all 0.2s;
-        letter-spacing: 0.5px;
-        display: flex;
-        align-items: center;
-        gap: 8px;
-    }
-
-        .ws-btn:hover {
-            background: var(--atilson-bg-soft);
-            color: var(--atilson-slate-900);
-        }
-
-        .ws-btn.active {
-            background: var(--atilson-slate-900);
-            color: #ffffff;
-            box-shadow: 0 2px 5px rgba(15, 23, 42, 0.15);
-        }
-
-    /* MOCKUP PARA LAS TARJETAS KPI VACÍAS */
-    .kpi-mock {
-        background: #ffffff;
-        border: 1px dashed #cbd5e1;
-        border-radius: 12px;
-        padding: 24px;
-        display: flex;
-        flex-direction: column;
-        gap: 12px;
-        height: 110px;
-        justify-content: center;
-    }
-
-    .kpi-mock-title {
-        height: 10px;
-        width: 50%;
-        background: #e2e8f0;
-        border-radius: 4px;
-    }
-
-    .kpi-mock-value {
-        height: 24px;
-        width: 70%;
-        background: #f1f5f9;
-        border-radius: 6px;
-    }
-
-    /* MOCKUP PARA LA GRILLA VACÍA */
-    .fin-table-wrapper {
-        background: #ffffff;
-        border-radius: 8px;
-        border: 1px solid var(--atilson-border);
-        box-shadow: 0 4px 6px rgba(0,0,0,0.02);
-        overflow: hidden;
-    }
-
-    .table-main-grid {
-        margin-bottom: 0;
-        width: 100%;
-        border-collapse: collapse;
-    }
-
-        .table-main-grid > thead > tr > th {
-            font-size: 10px;
-            text-transform: uppercase;
-            color: var(--atilson-slate-500);
-            font-weight: 700;
-            background-color: #f1f5f9;
-            border-bottom: 2px solid #cbd5e1;
-            padding: 12px 20px;
-            letter-spacing: 0.5px;
-        }
-
-    .mock-row {
-        border-bottom: 1px solid var(--atilson-border);
-        height: 50px;
-    }
-
-    .mock-cell {
-        height: 14px;
-        background: #f1f5f9;
-        border-radius: 4px;
-        margin-left: 20px;
-        margin-right: 20px;
-    }
-
-    /* WIDGET "AJUSTES PENDIENTES" — luz roja latente cuando Comercial no ha cerrado tarifa */
-    .kpi-ajustes {
-        background: #ffffff;
-        border: 1px solid var(--atilson-border);
-        border-radius: 12px;
-        padding: 20px 24px;
-        height: 110px;
-        display: flex;
-        flex-direction: column;
-        justify-content: center;
-        gap: 4px;
-        transition: all 0.2s;
-    }
-
-        .kpi-ajustes:hover {
-            box-shadow: 0 4px 10px rgba(0,0,0,0.06);
-        }
-
-    .kpi-ajustes-title {
-        font-size: 10px;
-        font-weight: 800;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-        color: var(--atilson-slate-500);
-    }
-
-    .kpi-ajustes-value {
-        font-size: 26px;
-        font-weight: 900;
-        color: var(--atilson-slate-900);
-        line-height: 1;
-    }
-
-    .kpi-ajustes-sub {
-        font-size: 10px;
-        font-weight: 600;
-        color: var(--atilson-slate-500);
-    }
-
-    .kpi-ajustes-alerta {
-        border-color: #fca5a5;
-        background: #fef2f2;
-        animation: pulseCardAjustes 2.2s infinite;
-    }
-
-        .kpi-ajustes-alerta .kpi-ajustes-value {
-            color: #dc2626;
-        }
-
-        .kpi-ajustes-alerta .kpi-ajustes-sub {
-            color: #dc2626;
-            font-weight: 800;
-        }
-
-    .kpi-ajustes-dot {
-        width: 10px;
-        height: 10px;
-        border-radius: 50%;
-        background: #ef4444;
-        animation: pulseDotAjustes 1.4s infinite;
-        margin-top: 3px;
-    }
-
-    @@keyframes pulseCardAjustes {
-        0% {
-            box-shadow: 0 0 0 0 rgba(239,68,68,0.15);
-        }
-
-        70% {
-            box-shadow: 0 0 0 10px rgba(239,68,68,0);
-        }
-
-        100% {
-            box-shadow: 0 0 0 0 rgba(239,68,68,0);
-        }
-    }
-
-    @@keyframes pulseDotAjustes {
-        0% {
-            box-shadow: 0 0 0 0 rgba(239,68,68,0.6);
-        }
-
-        70% {
-            box-shadow: 0 0 0 6px rgba(239,68,68,0);
-        }
-
-        100% {
-            box-shadow: 0 0 0 0 rgba(239,68,68,0);
-        }
-    }
-
-    .pendiente-row td {
-        border-bottom: 1px solid var(--atilson-border);
-        vertical-align: middle;
-    }
-
-    .pendiente-row:hover td {
-        background-color: #fef2f2;
-    }
-</style>
-
+<link rel="stylesheet" href="~/css/finanzas-mainboard.css" asp-append-version="true" />
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 
-<div class="container-fluid px-4 py-4">
+<div class="container-fluid px-4 py-4 fmb">
     <form id="antiForgeryForm">@Html.AntiForgeryToken()</form>
 
-    <!-- HEADER HOMOLOGADO -->
-    <div class="d-flex justify-content-between align-items-center mb-4">
+    <div class="fmb-head">
         <div>
-            <h1 style="font-size: 24px; font-weight: 900; color: var(--atilson-slate-900); margin: 0; letter-spacing: -0.5px;">MAIN BOARD FINANCIERO</h1>
-            <p class="text-muted small m-0 fw-medium mt-1">Centro de mando gerencial y analítica de rentabilidad.</p>
+            <h1>Main Board Financiero</h1>
+            <p>Lo que Finanzas tiene que atender hoy y cómo va la rentabilidad del período.</p>
+            <partial name="/Pages/Finanzas/_Indicadores.cshtml" />
         </div>
+        <form method="get" class="fmb-periodo">
+            <label for="fmbPeriodo">Período</label>
+            <select id="fmbPeriodo" name="Periodo" class="form-select form-select-sm" onchange="this.form.submit()">
+                @foreach (var o in AtilsonCargoSpa.Pages.Finanzas.IndexModel.OpcionesPeriodo)
+                {
+                    <option value="@o.Clave" selected="@(o.Clave == Model.Periodo)">@o.Texto</option>
+                }
+            </select>
+        </form>
     </div>
 
-    <!-- MENÚ UNIFICADO (Main Board marcado como 'active') -->
-    <div class="d-flex mb-4">
-        <div class="workspace-nav">
-            <a asp-page="/Finanzas/Index" class="ws-btn active"><i class="bi bi-grid-1x2-fill"></i> Main Board</a>
-            <a asp-page="/Finanzas/ControlFinanciero" class="ws-btn"><i class="bi bi-sliders"></i> Control Financiero</a>
-            <a asp-page="/Finanzas/OrdenesCompra" class="ws-btn"><i class="bi bi-receipt"></i> Órdenes de Compra</a>
-            <a asp-page="/Finanzas/Facturacion" class="ws-btn"><i class="bi bi-file-earmark-spreadsheet-fill"></i> Facturación</a>
-            <a asp-page="/Finanzas/ConsolidadoCliente" class="ws-btn"><i class="bi bi-person-lines-fill"></i> Consolidado Cliente</a>
-        </div>
+    <partial name="/Pages/Finanzas/_FinanzasNav.cshtml" model='"MainBoard"' />
+
+    @* ===================== BANDEJA DE TRABAJO ===================== *@
+    <h2 class="fmb-section-label">Bandeja de trabajo</h2>
+    <div class="fmb-inbox" role="tablist" aria-label="Bandeja de trabajo">
+        <button type="button" role="tab" class="fmb-tile fmb-tile--traspaso @(Model.TraspasosOperaciones.Any() ? "has-items" : "") @(tabInicial == "traspasos" ? "is-active" : "")"
+                data-fmb-tab="panel-traspasos" id="tab-traspasos-btn" aria-selected="@(tabInicial == "traspasos" ? "true" : "false")">
+            @if (Model.TraspasosNuevos > 0) { <span class="fmb-tile__dot" title="Hay bookings nuevos"></span> }
+            <span class="fmb-tile__ico"><i class="bi bi-flag-fill"></i></span>
+            <span class="fmb-tile__txt">
+                <span class="fmb-tile__title">Traspasos de Operaciones</span>
+                <span class="fmb-tile__sub">@(Model.TraspasosOperaciones.Any() ? $"{Model.TraspasosNuevos} nuevo{(Model.TraspasosNuevos == 1 ? "" : "s")} · {Model.TraspasosReabiertos} reabierto{(Model.TraspasosReabiertos == 1 ? "" : "s")}" : "Sin bookings nuevos")</span>
+            </span>
+            <span class="fmb-tile__num">@Model.TraspasosOperaciones.Count</span>
+        </button>
+        <button type="button" role="tab" class="fmb-tile fmb-tile--ajustes @(Model.AjustesPendientes.Any() ? "has-items" : "") @(tabInicial == "ajustes" ? "is-active" : "")"
+                data-fmb-tab="panel-ajustes" id="tab-ajustes-btn" aria-selected="@(tabInicial == "ajustes" ? "true" : "false")">
+            <span class="fmb-tile__ico"><i class="bi bi-exclamation-triangle-fill"></i></span>
+            <span class="fmb-tile__txt">
+                <span class="fmb-tile__title">Ajustes pendientes</span>
+                <span class="fmb-tile__sub">@(Model.AjustesPendientes.Any() ? "Bookings con conceptos en $0 sin tarifa" : "Todo valorizado")</span>
+            </span>
+            <span class="fmb-tile__num">@Model.AjustesPendientes.Count</span>
+        </button>
+        <button type="button" role="tab" class="fmb-tile fmb-tile--bloqueos @(Model.TotalSolicitudesPendientes > 0 ? "has-items" : "") @(tabInicial == "bloqueos" ? "is-active" : "")"
+                data-fmb-tab="panel-bloqueos" id="tab-bloqueos-btn" aria-selected="@(tabInicial == "bloqueos" ? "true" : "false")">
+            <span class="fmb-tile__ico"><i class="bi bi-unlock-fill"></i></span>
+            <span class="fmb-tile__txt">
+                <span class="fmb-tile__title">Solicitudes de desbloqueo</span>
+                <span class="fmb-tile__sub">@(Model.TotalSolicitudesPendientes > 0 ? "Operaciones espera tu respuesta" : $"Sin solicitudes · {bloqueosConceptos} concepto{(bloqueosConceptos == 1 ? "" : "s")} bloqueado{(bloqueosConceptos == 1 ? "" : "s")}")</span>
+            </span>
+            <span class="fmb-tile__num">@Model.TotalSolicitudesPendientes</span>
+        </button>
     </div>
 
-    <!-- SECCIÓN: TARJETAS KPI (BOCETO + WIDGET REAL "AJUSTES PENDIENTES") -->
-        <div class="row g-4 mb-4">
-        <div class="col-md-3">
-            <div class="kpi-ajustes @(Model.AjustesPendientes.Any() ? "kpi-ajustes-alerta" : "")" style="cursor:pointer;" onclick="mostrarTabFinanzas('ajustes')" role="button">
-                <div class="d-flex justify-content-between align-items-start">
-                    <span class="kpi-ajustes-title">Ajustes Pendientes</span>
-                    @if (Model.AjustesPendientes.Any())
-                    {
-                        <span class="kpi-ajustes-dot"></span>
-                    }
-                </div>
-                <div class="kpi-ajustes-value">@Model.AjustesPendientes.Count</div>
-                <span class="kpi-ajustes-sub">
-                    @if (Model.AjustesPendientes.Any())
-                    {
-                        <text><i class="bi bi-exclamation-triangle-fill me-1"></i>Tarifas sin cierre por Comercial</text>
-                    }
-                    else
-                    {
-                        <text><i class="bi bi-check-circle-fill me-1"></i>Sin acuerdos pendientes</text>
-                    }
-                </span>
-            </div>
-        </div>
-        <div class="col-md-3">
-            <div class="kpi-ajustes @(Model.TotalSolicitudesPendientes > 0 ? "kpi-ajustes-alerta" : "")" style="cursor:pointer;" onclick="mostrarTabFinanzas('bloqueos')" role="button">
-                <div class="d-flex justify-content-between align-items-start">
-                    <span class="kpi-ajustes-title">Solicitudes de Desbloqueo</span>
-                    @if (Model.TotalSolicitudesPendientes > 0)
-                    {
-                        <span class="kpi-ajustes-dot"></span>
-                    }
-                </div>
-                <div class="kpi-ajustes-value">@Model.TotalSolicitudesPendientes</div>
-                <span class="kpi-ajustes-sub">
-                    @if (Model.TotalSolicitudesPendientes > 0)
-                    {
-                        <text><i class="bi bi-unlock-fill me-1"></i>Esperando resolución de Finanzas</text>
-                    }
-                    else
-                    {
-                        <text><i class="bi bi-lock-fill me-1"></i>Sin solicitudes pendientes</text>
-                    }
-                </span>
-            </div>
-        </div>
-        <div class="col-md-3">
-            <div class="kpi-mock">
-                <div class="kpi-mock-title"></div>
-                <div class="kpi-mock-value"></div>
-            </div>
-        </div>
-    </div>
-
-        @if (Model.AjustesPendientes.Any() || Model.BookingsConBloqueos.Any())
-    {
-        <div class="collapse" id="seccionAlertasFinancieras">
-            <div class="fin-table-wrapper mb-4">
-                <div class="px-4 py-3 border-bottom bg-white">
-                    <ul class="nav nav-pills gap-2" id="alertasFinanzasTabs">
-                        <li class="nav-item">
-                            <button class="nav-link active" id="tab-ajustes-btn" data-bs-toggle="pill" data-bs-target="#panel-ajustes" type="button" style="font-size:11px; font-weight:800; padding:8px 16px; border-radius:6px;">
-                                <i class="bi bi-exclamation-triangle-fill me-1 text-danger"></i>Ajustes Pendientes (@Model.AjustesPendientes.Count)
-                            </button>
-                        </li>
-                        <li class="nav-item">
-                            <button class="nav-link" id="tab-bloqueos-btn" data-bs-toggle="pill" data-bs-target="#panel-bloqueos" type="button" style="font-size:11px; font-weight:800; padding:8px 16px; border-radius:6px;">
-                                <i class="bi bi-lock-fill me-1 text-primary"></i>Solicitudes de Desbloqueo (@Model.TotalSolicitudesPendientes)
-                            </button>
-                        </li>
-                    </ul>
-                </div>
-                <div class="tab-content" style="max-height: 420px; overflow-y: auto;">
-                    <div class="tab-pane fade show active" id="panel-ajustes">
-                        @if (Model.AjustesPendientes.Any())
-                        {
-                            <div class="table-responsive">
-                                <table class="table-main-grid">
-                                    <thead>
-                                        <tr>
-                                            <th class="ps-4" style="width: 22%;">Booking</th>
-                                            <th style="width: 28%;">Cliente</th>
-                                            <th class="ps-2">Conceptos sin Tarifa</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        @foreach (var item in Model.AjustesPendientes)
+    <div class="fmb-card fmb-inbox-panel">
+        <div class="tab-content">
+            @* --- Traspasos de Operaciones --- *@
+            <div class="tab-pane fade @(tabInicial == "traspasos" ? "show active" : "")" id="panel-traspasos" role="tabpanel" aria-labelledby="tab-traspasos-btn">
+                @if (Model.TraspasosOperaciones.Any())
+                {
+                    <table class="fmb-table">
+                        <thead>
+                            <tr>
+                                <th>Booking</th>
+                                <th>Cliente</th>
+                                <th>Estado</th>
+                                <th>Detalle</th>
+                                <th class="num">Acción</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var trp in Model.TraspasosOperaciones)
+                            {
+                                bool esNuevo = TraspasoFinanzas.EsNuevaParaFinanzas(trp);
+                                <tr>
+                                    <td><a class="fmb-booking" href="/Finanzas/ControlFinanciero?abrir=@trp.Id">@trp.NumeroBooking</a></td>
+                                    <td class="fmb-cliente">@(trp.IdClienteNavigation?.RazonSocial ?? "-")</td>
+                                    <td>
+                                        @if (esNuevo)
                                         {
-                                            <tr class="pendiente-row">
-                                                <td class="ps-4 py-3">
-                                                    <a href="/Finanzas/ControlFinanciero" class="fw-black text-danger text-decoration-none" style="font-size: 13px;">
-                                                        <i class="bi bi-record-fill me-1" style="font-size:8px;"></i>@item.NumeroBooking
-                                                    </a>
-                                                </td>
-                                                <td class="py-3" style="font-size:12px; color:#475569; font-weight:600;">@item.Cliente</td>
-                                                <td class="py-3 ps-2">
-                                                    @foreach (var c in item.ConceptosPendientes)
-                                                    {
-                                                        <span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25 me-1 mb-1" style="font-size:9px; font-weight:700;">@c</span>
-                                                    }
-                                                </td>
-                                            </tr>
+                                            <span class="tarea-chip tarea-chip--nuevo"><i class="bi bi-stars"></i> @(trp.VecesFinalizadaTarea > 1 ? "Nuevo · actualizada" : "Nuevo")</span>
                                         }
-                                    </tbody>
-                                </table>
-                            </div>
-                            <div class="px-4 py-2 text-end border-top bg-white">
-                                <a href="/Finanzas/ControlFinanciero" class="btn btn-outline-danger btn-sm fw-bold" style="font-size: 10px;">Ir a Control Financiero</a>
-                            </div>
-                        }
-                        else
-                        {
-                            <div class="text-center text-muted py-5" style="font-size:12px;"><i class="bi bi-check-circle-fill d-block mb-2" style="font-size:22px; opacity:0.4;"></i>Sin ajustes pendientes.</div>
-                        }
-                    </div>
+                                        else
+                                        {
+                                            <span class="tarea-chip tarea-chip--reab"><i class="bi bi-arrow-counterclockwise"></i> Reabierta</span>
+                                        }
+                                    </td>
+                                    <td style="font-size:12px;">
+                                        @if (esNuevo)
+                                        {
+                                            <text>Finalizada por <b>@trp.UsuarioFinalizacionTarea</b> el @trp.FechaFinalizacionTarea?.ToString("dd/MM/yyyy HH:mm")</text>
+                                        }
+                                        else
+                                        {
+                                            <text>@trp.MotivoReaperturaTarea — <b>@trp.UsuarioReaperturaTarea</b>, @trp.FechaReaperturaTarea?.ToString("dd/MM/yyyy HH:mm")</text>
+                                            @if (Model.RespaldosReapertura.TryGetValue(trp.Id, out var respTrp))
+                                            {
+                                                <div class="mt-1"><a class="tf-respaldo-link" href="@respTrp.Ruta" target="_blank" rel="noopener"><i class="bi bi-paperclip"></i> @respTrp.Nombre</a></div>
+                                            }
+                                        }
+                                    </td>
+                                    <td class="num"><a class="fmb-btn" href="/Finanzas/ControlFinanciero?abrir=@trp.Id"><i class="bi bi-box-arrow-up-right"></i> Abrir booking</a></td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                }
+                else
+                {
+                    <div class="fmb-empty"><i class="bi bi-flag"></i>Operaciones no tiene bookings nuevos ni reabiertos para Finanzas.</div>
+                }
+            </div>
 
-                        <div class="tab-pane fade" id="panel-bloqueos">
-                        @if (Model.BookingsConBloqueos.Any())
-                        {
+            @* --- Ajustes pendientes --- *@
+            <div class="tab-pane fade @(tabInicial == "ajustes" ? "show active" : "")" id="panel-ajustes" role="tabpanel" aria-labelledby="tab-ajustes-btn">
+                @if (Model.AjustesPendientes.Any())
+                {
+                    <table class="fmb-table">
+                        <thead>
+                            <tr>
+                                <th>Booking</th>
+                                <th>Cliente</th>
+                                <th>Conceptos sin tarifa</th>
+                                <th class="num">Acción</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var item in Model.AjustesPendientes)
+                            {
+                                <tr>
+                                    <td><a class="fmb-booking" href="/Finanzas/ControlFinanciero?abrir=@item.IdOperacion">@item.NumeroBooking</a></td>
+                                    <td class="fmb-cliente">@item.Cliente</td>
+                                    <td>
+                                        @foreach (var c in item.ConceptosPendientes.Take(6))
+                                        {
+                                            <span class="fmb-badge fmb-badge--bad">@c</span>
+                                        }
+                                        @if (item.ConceptosPendientes.Count > 6)
+                                        {
+                                            <span class="fmb-badge fmb-badge--muted" title="@string.Join(", ", item.ConceptosPendientes.Skip(6))">+@(item.ConceptosPendientes.Count - 6) más</span>
+                                        }
+                                    </td>
+                                    <td class="num"><a class="fmb-btn fmb-btn--ghost" href="/Finanzas/ControlFinanciero?abrir=@item.IdOperacion"><i class="bi bi-box-arrow-up-right"></i> Revisar</a></td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                }
+                else
+                {
+                    <div class="fmb-empty"><i class="bi bi-check-circle"></i>No hay conceptos en $0 esperando tarifa de Comercial.</div>
+                }
+            </div>
+
+            @* --- Solicitudes de desbloqueo --- *@
+            <div class="tab-pane fade @(tabInicial == "bloqueos" ? "show active" : "")" id="panel-bloqueos" role="tabpanel" aria-labelledby="tab-bloqueos-btn">
+                @if (Model.BookingsConBloqueos.Any())
+                {
+                    <table class="fmb-table">
+                        <thead>
+                            <tr>
+                                <th>Booking</th>
+                                <th>Contenedor</th>
+                                <th>Concepto</th>
+                                <th>Solicitud de Operaciones</th>
+                                <th>Estado</th>
+                                <th class="num">Acción</th>
+                            </tr>
+                        </thead>
+                        <tbody>
                             @foreach (var booking in Model.BookingsConBloqueos)
                             {
-                                <div class="px-4 py-3 border-bottom">
-                                    <div class="d-flex align-items-center gap-2 mb-2">
-                                        <span class="fw-black" style="font-size:13px; color:var(--atilson-slate-900);">@booking.NumeroBooking</span>
-                                        <span class="text-muted" style="font-size:11px;">@booking.Cliente</span>
-                                    </div>
-                                    <table class="table table-sm mb-0" style="font-size:11px;">
-                                        <thead>
-                                            <tr style="color:#94a3b8; text-transform:uppercase; font-size:9px;">
-                                                <th style="width:14%;">Servicio</th>
-                                                <th style="width:16%;">Contenedor</th>
-                                                <th style="width:24%;">Concepto</th>
-                                                <th style="width:26%;">Solicitud</th>
-                                                <th class="text-center" style="width:10%;">Estado</th>
-                                                <th class="text-center" style="width:10%;">Acción</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            @foreach (var c in booking.Conceptos)
+                                foreach (var c in booking.Conceptos)
+                                {
+                                    <tr>
+                                        <td>
+                                            <a class="fmb-booking" href="/Operaciones/Detalle/@booking.IdOperacion">@booking.NumeroBooking</a>
+                                            <div class="fmb-fecha" style="font-size:11px;">@booking.Cliente</div>
+                                        </td>
+                                        <td style="font-weight:700;">@c.EtiquetaContenedor</td>
+                                        <td style="font-weight:700; color:var(--fmb-ink);">@c.NombreConcepto</td>
+                                        <td>
+                                            @if (c.SolicitudPendiente)
                                             {
-                                                <tr class="@(c.SolicitudPendiente ? "pendiente-row" : "")">
-                                                    <td class="text-muted">Documental</td>
-                                                    <td class="fw-bold">@c.EtiquetaContenedor</td>
-                                                    <td class="fw-bold text-dark">@c.NombreConcepto</td>
-                                                    <td>
-                                                        @if (c.SolicitudPendiente)
-                                                        {
-                                                            <span class="text-warning fw-bold" title="@c.UsuarioSolicitante — @(c.FechaSolicitud?.ToString("dd/MM/yyyy HH:mm"))">
-                                                                <i class="bi bi-hourglass-split me-1"></i>@c.ComentarioSolicitud
-                                                            </span>
-                                                        }
-                                                        else
-                                                        {
-                                                            <span class="text-muted">-</span>
-                                                        }
-                                                    </td>
-                                                    <td class="text-center">
-                                                        @if (c.Bloqueado)
-                                                        {
-                                                            <i class="bi bi-lock-fill text-danger"></i>
-                                                        }
-                                                        else
-                                                        {
-                                                            <i class="bi bi-unlock-fill text-success"></i>
-                                                        }
-                                                    </td>
-                                                    <td class="text-center">
-                                                        @if (c.Bloqueado || c.SolicitudPendiente)
-                                                        {
-                                                            <button type="button" class="btn btn-sm btn-outline-dark py-0 px-2" style="font-size:10px;" onclick="desbloquearConceptoMainBoard(@booking.IdOperacion, @(c.IdUnidadTecnica.HasValue ? c.IdUnidadTecnica.Value.ToString() : "null"), '@c.CertKey', this)">
-                                                                Desbloquear
-                                                            </button>
-                                                        }
-                                                    </td>
-                                                </tr>
+                                                <span class="fmb-badge fmb-badge--warn" title="@c.UsuarioSolicitante — @(c.FechaSolicitud?.ToString("dd/MM/yyyy HH:mm"))"><i class="bi bi-hourglass-split"></i> @c.ComentarioSolicitud</span>
                                             }
-                                        </tbody>
-                                    </table>
-                                </div>
+                                            else
+                                            {
+                                                <span style="color:var(--fmb-faint);">—</span>
+                                            }
+                                        </td>
+                                        <td>
+                                            @if (c.Bloqueado)
+                                            {
+                                                <span class="fmb-badge fmb-badge--bad"><i class="bi bi-lock-fill"></i> Bloqueado</span>
+                                            }
+                                            else
+                                            {
+                                                <span class="fmb-badge fmb-badge--muted"><i class="bi bi-unlock-fill"></i> Abierto</span>
+                                            }
+                                        </td>
+                                        <td class="num">
+                                            @if (c.Bloqueado || c.SolicitudPendiente)
+                                            {
+                                                <button type="button" class="fmb-btn fmb-btn--ghost" onclick="desbloquearConceptoMainBoard(@booking.IdOperacion, @(c.IdUnidadTecnica.HasValue ? c.IdUnidadTecnica.Value.ToString() : "null"), '@c.CertKey', this)"><i class="bi bi-unlock"></i> Desbloquear</button>
+                                            }
+                                        </td>
+                                    </tr>
+                                }
                             }
-                        }
-                        else
-                        {
-                            <div class="text-center text-muted py-5" style="font-size:12px;"><i class="bi bi-unlock-fill d-block mb-2" style="font-size:22px; opacity:0.4;"></i>Sin solicitudes de desbloqueo.</div>
-                        }
-                    </div>
-                </div>
-            </div>
-        </div>
-    }
-
-    <!-- SECCIÓN: GRILLA PRINCIPAL (BOCETO) -->
-
-    <!-- SECCIÓN: GRILLA PRINCIPAL (BOCETO) -->
-    <div class="fin-table-wrapper">
-        <div class="px-4 py-3 border-bottom d-flex justify-content-between align-items-center bg-white">
-            <h6 class="m-0 fw-bold text-dark" style="font-size: 13px;">
-                <i class="bi bi-bar-chart-line-fill me-2 text-primary"></i>(ESPACIO RESERVADO)
-            </h6>
-        </div>
-
-        <div class="table-responsive">
-            <table class="table-main-grid">
-                <thead>
-                    <tr>
-                        <th style="width: 25%;" class="ps-4">Operación / Booking</th>
-                        <th style="width: 25%;">Cliente</th>
-                        <th style="width: 15%;" class="text-end">Ingresos</th>
-                        <th style="width: 15%;" class="text-end">Egresos</th>
-                        <th style="width: 20%;" class="text-end pe-4">Rentabilidad</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <!-- Filas fantasma para visualizar el volumen -->
-                    <tr class="mock-row">
-                        <td><div class="mock-cell w-50"></div></td>
-                        <td><div class="mock-cell w-75"></div></td>
-                        <td><div class="mock-cell w-50 ms-auto"></div></td>
-                        <td><div class="mock-cell w-50 ms-auto"></div></td>
-                        <td><div class="mock-cell w-50 ms-auto me-4"></div></td>
-                    </tr>
-                    <tr class="mock-row">
-                        <td><div class="mock-cell w-50"></div></td>
-                        <td><div class="mock-cell w-75"></div></td>
-                        <td><div class="mock-cell w-50 ms-auto"></div></td>
-                        <td><div class="mock-cell w-50 ms-auto"></div></td>
-                        <td><div class="mock-cell w-50 ms-auto me-4"></div></td>
-                    </tr>
-                    <tr class="mock-row">
-                        <td><div class="mock-cell w-50"></div></td>
-                        <td><div class="mock-cell w-75"></div></td>
-                        <td><div class="mock-cell w-50 ms-auto"></div></td>
-                        <td><div class="mock-cell w-50 ms-auto"></div></td>
-                        <td><div class="mock-cell w-50 ms-auto me-4"></div></td>
-                    </tr>
-                </tbody>
-            </table>
-
-            <!-- Mensaje de construcción -->
-            <div class="px-4 py-4 bg-light text-center text-muted" style="font-size: 11px; font-style: italic;">
-                Página en construcción. Los datos y funcionalidades se implementarán próximamente.
+                        </tbody>
+                    </table>
+                }
+                else
+                {
+                    <div class="fmb-empty"><i class="bi bi-unlock"></i>No hay conceptos bloqueados ni solicitudes de desbloqueo.</div>
+                }
             </div>
         </div>
     </div>
 
+    @* ===================== PANORAMA DEL PERÍODO ===================== *@
+    <h2 class="fmb-section-label">Panorama · @Model.PeriodoTexto · @Model.OperacionesEnPeriodo @(Model.OperacionesEnPeriodo == 1 ? "operación" : "operaciones")</h2>
+    <div class="fmb-kpis">
+        <div class="fmb-card fmb-kpi">
+            <div class="fmb-kpi__label"><i class="bi bi-arrow-down-left-circle" style="color:#16a34a;"></i> Ingresos (venta)</div>
+            <div class="fmb-kpi__row"><span class="fmb-kpi__cur">CLP</span><span class="fmb-kpi__val">@Clp(Model.Ingresos.Clp)</span></div>
+            <div class="fmb-kpi__row"><span class="fmb-kpi__cur">USD</span><span class="fmb-kpi__val">@Usd(Model.Ingresos.Usd)</span></div>
+            <div class="fmb-kpi__foot">Valores netos, sin IVA.</div>
+        </div>
+        <div class="fmb-card fmb-kpi">
+            <div class="fmb-kpi__label"><i class="bi bi-arrow-up-right-circle" style="color:#dc2626;"></i> Egresos (costo)</div>
+            <div class="fmb-kpi__row"><span class="fmb-kpi__cur">CLP</span><span class="fmb-kpi__val">@Clp(Model.Egresos.Clp)</span></div>
+            <div class="fmb-kpi__row"><span class="fmb-kpi__cur">USD</span><span class="fmb-kpi__val">@Usd(Model.Egresos.Usd)</span></div>
+            <div class="fmb-kpi__foot">Incluye rebates a clientes.</div>
+        </div>
+        <div class="fmb-card fmb-kpi">
+            <div class="fmb-kpi__label"><i class="bi bi-graph-up-arrow" style="color:#6d2d9e;"></i> Margen bruto</div>
+            <div class="fmb-kpi__row"><span class="fmb-kpi__cur">CLP</span><span class="fmb-kpi__val @(Model.Margen.Clp < 0 ? "fmb-neg" : "")">@Clp(Model.Margen.Clp)@Html.Raw(Pct(Model.Margen.Clp, Model.Ingresos.Clp))</span></div>
+            <div class="fmb-kpi__row"><span class="fmb-kpi__cur">USD</span><span class="fmb-kpi__val @(Model.Margen.Usd < 0 ? "fmb-neg" : "")">@Usd(Model.Margen.Usd)@Html.Raw(Pct(Model.Margen.Usd, Model.Ingresos.Usd))</span></div>
+            <div class="fmb-kpi__foot">Ingresos − egresos, por moneda.</div>
+        </div>
+        <div class="fmb-card fmb-kpi">
+            <div class="fmb-kpi__label"><i class="bi bi-hourglass-split" style="color:#b45309;"></i> Por cobrar / por pagar</div>
+            <div class="fmb-kpi__stack">
+                <div><span class="lbl">Por facturar al cliente</span><b>@Clp(Model.PorCobrarSinFacturar.Clp)@if (Model.PorCobrarSinFacturar.Usd != 0) {<span class="usd">USD @Usd(Model.PorCobrarSinFacturar.Usd)</span>}</b></div>
+                <div><span class="lbl">Facturado, por cobrar</span><b>@Clp(Model.PorCobrarFacturado.Clp)@if (Model.PorCobrarFacturado.Usd != 0) {<span class="usd">USD @Usd(Model.PorCobrarFacturado.Usd)</span>}</b></div>
+                <div><span class="lbl">Por pagar a proveedores</span><b>@Clp(Model.PorPagar.Clp)@if (Model.PorPagar.Usd != 0) {<span class="usd">USD @Usd(Model.PorPagar.Usd)</span>}</b></div>
+            </div>
+            <div class="fmb-kpi__foot">Excluye lo pagado, conciliado y no facturable.</div>
+        </div>
+    </div>
+
+    <div class="fmb-grid">
+        <div class="fmb-card">
+            <div class="fmb-card__head">
+                <div>
+                    <h3 class="fmb-card__title"><i class="bi bi-table"></i> Rentabilidad por operación</h3>
+                    <span class="fmb-card__sub">Primero lo nuevo de Operaciones; luego por fecha de zarpe.</span>
+                </div>
+                <div class="fmb-search">
+                    <i class="bi bi-search"></i>
+                    <input type="search" id="fmbBuscar" placeholder="Buscar booking o cliente" aria-label="Buscar booking o cliente" />
+                </div>
+            </div>
+            @if (Model.FilasOperaciones.Any())
+            {
+                <div class="fmb-scroll">
+                    <table class="fmb-table" id="fmbTablaOps">
+                        <thead>
+                            <tr>
+                                <th>Booking</th>
+                                <th>Cliente</th>
+                                <th>ETD</th>
+                                <th>Estado</th>
+                                <th class="num">Ingresos</th>
+                                <th class="num">Egresos</th>
+                                <th class="num">Margen</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var f in Model.FilasOperaciones)
+                            {
+                                <tr data-buscar="@((f.Booking + " " + f.Cliente).ToLowerInvariant())">
+                                    <td><a class="fmb-booking" href="/Finanzas/ControlFinanciero?abrir=@f.Id">@f.Booking</a></td>
+                                    <td class="fmb-cliente">@f.Cliente</td>
+                                    <td class="fmb-fecha">@(f.Fecha?.ToString("dd/MM/yyyy") ?? "—")</td>
+                                    <td>
+                                        @if (TraspasoFinanzas.EsNuevaParaFinanzas(f.Op))
+                                        {
+                                            <span class="tarea-chip tarea-chip--nuevo">Nuevo</span>
+                                        }
+                                        else if (TraspasoFinanzas.EstaReabierta(f.Op))
+                                        {
+                                            <span class="tarea-chip tarea-chip--reab">Reabierta</span>
+                                        }
+                                        else if (TraspasoFinanzas.EstaFinalizada(f.Op))
+                                        {
+                                            <span class="tarea-chip tarea-chip--fin">Finalizada</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="fmb-badge fmb-badge--muted">En curso</span>
+                                        }
+                                        @if (f.SinValorizar > 0)
+                                        {
+                                            <span class="fmb-badge fmb-badge--bad" title="Filas en Pendiente valorizar">@f.SinValorizar sin tarifa</span>
+                                        }
+                                    </td>
+                                    <td class="num">@Montos(f.Ingresos)</td>
+                                    <td class="num">@Montos(f.Egresos)</td>
+                                    <td class="num">@Montos(f.Margen, colorear: true)</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                    <div class="fmb-empty d-none" id="fmbSinResultados"><i class="bi bi-search"></i>Ningún booking coincide con la búsqueda.</div>
+                </div>
+            }
+            else
+            {
+                <div class="fmb-empty"><i class="bi bi-inbox"></i>No hay operaciones con movimientos en este período. Prueba con otro período.</div>
+            }
+        </div>
+
+        <aside class="fmb-side">
+            <div class="fmb-card">
+                <div class="fmb-card__head">
+                    <h3 class="fmb-card__title"><i class="bi bi-trophy"></i> Clientes con más margen</h3>
+                </div>
+                @if (Model.TopClientes.Any())
+                {
+                    <ol class="fmb-list">
+                        @{ int rank = 1; }
+                        @foreach (var c in Model.TopClientes)
+                        {
+                            <li>
+                                <span class="fmb-rank">@(rank++)</span>
+                                <span style="min-width:0;">
+                                    <span class="fmb-list__name d-block" title="@c.Cliente">@c.Cliente</span>
+                                    <span class="fmb-list__meta">@c.Operaciones @(c.Operaciones == 1 ? "operación" : "operaciones")</span>
+                                </span>
+                                @Montos(c.Margen, colorear: true)
+                            </li>
+                        }
+                    </ol>
+                }
+                else
+                {
+                    <div class="fmb-empty">Sin datos en el período.</div>
+                }
+            </div>
+
+            <div class="fmb-card">
+                <div class="fmb-card__head">
+                    <h3 class="fmb-card__title"><i class="bi bi-list-check"></i> Estado de las filas financieras</h3>
+                </div>
+                @if (Model.EstadosFilas.Any())
+                {
+                    int totalFilas = Model.EstadosFilas.Sum(e => e.Filas);
+                    <div class="fmb-bars">
+                        @foreach (var e in Model.EstadosFilas)
+                        {
+                            int pct = totalFilas == 0 ? 0 : (int)Math.Round(e.Filas * 100.0 / totalFilas);
+                            <div>
+                                <div class="fmb-bar__top"><span>@TextoEstado(e.Estado)</span><b>@e.Filas</b></div>
+                                <div class="fmb-bar__track" role="img" aria-label="@TextoEstado(e.Estado): @e.Filas de @totalFilas filas"><div class="fmb-bar__fill @ClaseEstado(e.Estado)" style="width:@(Math.Max(pct, 2))%;"></div></div>
+                            </div>
+                        }
+                    </div>
+                }
+                else
+                {
+                    <div class="fmb-empty">Sin datos en el período.</div>
+                }
+            </div>
+        </aside>
+    </div>
 </div>
 
 <script>
-    function mostrarTabFinanzas(tab) {
-        const collapseEl = document.getElementById('seccionAlertasFinancieras');
-        if (!collapseEl) return;
-        const btnId = tab === 'ajustes' ? 'tab-ajustes-btn' : 'tab-bloqueos-btn';
-        const btn = document.getElementById(btnId);
-        if (btn && typeof bootstrap !== 'undefined') {
-            bootstrap.Tab.getOrCreateInstance(btn).show();
-        }
-        const bsCollapse = bootstrap.Collapse.getOrCreateInstance(collapseEl, { toggle: false });
-        bsCollapse.show();
+    // Pestañas de la bandeja (sin depender de Bootstrap Tab, que exige .nav).
+    function mostrarPanelBandeja(idPanel) {
+        document.querySelectorAll('.fmb-tile[data-fmb-tab]').forEach(function (b) {
+            var on = b.getAttribute('data-fmb-tab') === idPanel;
+            b.classList.toggle('is-active', on);
+            b.setAttribute('aria-selected', on ? 'true' : 'false');
+        });
+        document.querySelectorAll('.fmb-inbox-panel .tab-pane').forEach(function (p) {
+            var on = p.id === idPanel;
+            p.classList.toggle('show', on);
+            p.classList.toggle('active', on);
+        });
     }
+    document.querySelectorAll('.fmb-tile[data-fmb-tab]').forEach(function (btn) {
+        btn.addEventListener('click', function () { mostrarPanelBandeja(btn.getAttribute('data-fmb-tab')); });
+    });
+
+    // Compatibilidad: mostrarTabFinanzas('ajustes' | 'bloqueos' | 'traspasos').
+    function mostrarTabFinanzas(tab) { mostrarPanelBandeja('panel-' + tab); }
+
+    // Buscador de la tabla de rentabilidad.
+    (function () {
+        var input = document.getElementById('fmbBuscar');
+        var tabla = document.getElementById('fmbTablaOps');
+        if (!input || !tabla) return;
+        var vacio = document.getElementById('fmbSinResultados');
+        input.addEventListener('input', function () {
+            var q = input.value.trim().toLowerCase();
+            var visibles = 0;
+            tabla.querySelectorAll('tbody tr').forEach(function (tr) {
+                var ok = !q || (tr.getAttribute('data-buscar') || '').indexOf(q) >= 0;
+                tr.style.display = ok ? '' : 'none';
+                if (ok) visibles++;
+            });
+            if (vacio) vacio.classList.toggle('d-none', visibles > 0);
+            tabla.classList.toggle('d-none', visibles === 0);
+        });
+    })();
 
     function desbloquearConceptoMainBoard(idOp, idUnidad, certKey, btn) {
         Swal.fire({

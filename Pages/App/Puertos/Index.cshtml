@@ -1,0 +1,109 @@
+﻿@page
+@model AtilsonCargoSpa.Pages.App.Puertos.IndexModel
+@using AtilsonCargoSpa.Services
+@{
+    ViewData["Title"] = "Maestro de Puertos";
+}
+<link rel="stylesheet" href="~/css/maestros.css" asp-append-version="true" />
+
+<div class="container-fluid py-4 mx">
+    <header class="mx-cabecera">
+        <div>
+            <div class="mx-miga">Maestros</div>
+            <h1 class="mx-titulo">Puertos</h1>
+            <p class="mx-subtitulo">Puertos de origen y destino, con su terminal y país.</p>
+        </div>
+        <div class="mx-acciones">
+            <a asp-page="./Edit" class="mx-btn mx-btn-primario"><i class="bi bi-plus-lg"></i> Nuevo puerto</a>
+        </div>
+    </header>
+
+    <div class="mx-barra">
+        <div class="mx-buscar">
+            <i class="bi bi-search" aria-hidden="true"></i>
+            <input type="search" data-mx-filtro value="@Model.Q" placeholder="Buscar por puerto, terminal, país o ciudad…" aria-label="Buscar puerto" autocomplete="off" />
+        </div>
+        <div class="mx-filtro-extra">
+            <select data-mx-filtro-extra data-buscador="si" aria-label="Filtrar por país">
+                <option value="">Todos los países</option>
+                @foreach (var p in Model.Paises)
+                {
+                    <option value="@MaestrosAuditoria.Normalizar(p)" selected="@(Model.F == MaestrosAuditoria.Normalizar(p))">@p</option>
+                }
+            </select>
+        </div>
+        <nav class="mx-segmentos" aria-label="Estado">
+            <a asp-route-estado="activos" class="@(Model.Estado == "activos" ? "activo" : "")">Activos<span class="mx-cuenta">@Model.TotalActivos</span></a>
+            <a asp-route-estado="inactivos" class="@(Model.Estado == "inactivos" ? "activo" : "")">Inactivos<span class="mx-cuenta">@Model.TotalInactivos</span></a>
+            <a asp-route-estado="todos" class="@(Model.Estado == "todos" ? "activo" : "")">Todos</a>
+        </nav>
+        <span class="mx-total" data-mx-total>@Model.Filas.Count registros</span>
+    </div>
+
+    <div class="mx-tabla-wrap">
+        <table class="mx-tabla" data-mx-tabla>
+            <thead>
+                <tr>
+                    <th>Puerto</th>
+                    <th>País</th>
+                    <th>Ciudad</th>
+                    <th>Última modificación</th>
+                    <th>Estado</th>
+                    <th class="mx-col-acciones"><span class="visually-hidden">Acciones</span></th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var f in Model.Filas)
+                {
+                    var p = f.Puerto;
+                    <tr data-mx-texto="@p.NombrePuerto @p.TerminalPortuario @p.Pais @f.Ciudad" data-mx-extra="@MaestrosAuditoria.Normalizar(p.Pais)"
+                        class="@(f.Activo ? "" : "mx-inactivo") @(Model.Resaltar == p.Id ? "mx-resaltado" : "")">
+                        <td>
+                            <a asp-page="./Edit" asp-route-id="@p.Id" class="mx-nombre text-decoration-none">@p.NombrePuerto</a>
+                            <span class="mx-sec">@(string.IsNullOrWhiteSpace(p.TerminalPortuario) ? "Sin terminal" : p.TerminalPortuario)</span>
+                        </td>
+                        <td>@(string.IsNullOrWhiteSpace(p.Pais) ? "—" : p.Pais)</td>
+                        <td>@(f.Ciudad ?? "—")</td>
+                        <td class="mx-mod">
+                            @(string.IsNullOrWhiteSpace(p.UsuarioModificador) ? "—" : p.UsuarioModificador)
+                            <small>@MaestrosAuditoria.FormatoFecha(p.FechaModificacion)</small>
+                        </td>
+                        <td>
+                            @if (f.Activo)
+                            {
+                                <span class="mx-pill mx-pill-ok">Activo</span>
+                            }
+                            else
+                            {
+                                <span class="mx-pill mx-pill-off">Inactivo</span>
+                            }
+                        </td>
+                        <td class="mx-col-acciones">
+                            <a asp-page="./Edit" asp-route-id="@p.Id" class="mx-btn mx-btn-secundario mx-btn-sm"><i class="bi bi-pencil"></i> Editar</a>
+                            <form method="post" asp-page-handler="CambiarEstado" asp-route-id="@p.Id" asp-route-activar="@(!f.Activo)" asp-route-estado="@Model.Estado"
+                                  data-mx-confirmar="@(f.Activo ? $"¿Desactivar el puerto «{p.NombrePuerto}»? Dejará de aparecer al crear operaciones y cotizaciones." : $"¿Reactivar el puerto «{p.NombrePuerto}»?")">
+                                @if (f.Activo)
+                                {
+                                    <button type="submit" class="mx-btn mx-btn-peligro mx-btn-sm" title="Desactivar" aria-label="Desactivar"><i class="bi bi-slash-circle"></i></button>
+                                }
+                                else
+                                {
+                                    <button type="submit" class="mx-btn mx-btn-ok mx-btn-sm"><i class="bi bi-arrow-counterclockwise"></i> Reactivar</button>
+                                }
+                            </form>
+                        </td>
+                    </tr>
+                }
+                <tr data-mx-sin-coincidencias hidden><td colspan="6" class="mx-vacio"><i class="bi bi-search"></i>Ningún puerto coincide con la búsqueda.</td></tr>
+                @if (!Model.Filas.Any())
+                {
+                    <tr><td colspan="6" class="mx-vacio"><i class="bi bi-anchor"></i>No hay puertos @(Model.Estado == "inactivos" ? "inactivos" : "registrados").</td></tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+@section Scripts {
+    <script src="~/js/maestros.js" asp-append-version="true"></script>
+}

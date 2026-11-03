@@ -1,0 +1,183 @@
+@model string
+@* Vitrina interactiva del portal de clientes (nov-2026). Se usa en la landing (model "landing")
+   y en /servicios/portal-de-clientes (model "servicio").
+   Un notebook y un celular hechos con HTML muestran cada función del portal; al pasar el mouse
+   o tocar una función, la pantalla cambia y se anima. Avanza sola cada pocos segundos (se
+   detiene al interactuar o fuera de pantalla). Los datos son ilustrativos, no reales.
+   Estilos: wwwroot/css/vitrina-portal.css · Comportamiento: wwwroot/js/vitrina-portal.js *@
+@{
+    bool enLanding = Model == "landing";
+    var izquierda = new[]
+    {
+        ("seguimiento", "bi-geo", "Seguimiento en tiempo real", "Cada hito de tu contenedor, desde el retiro hasta el arribo."),
+        ("itinerarios", "bi-calendar2-week", "Itinerarios y reservas", "Elige una salida publicada y reserva tu espacio."),
+        ("cotizaciones", "bi-calculator", "Cotizaciones en línea", "Pide una tarifa y recibe la respuesta en el mismo lugar."),
+        ("ubicaciones", "bi-pin-map", "Tus plantas y depósitos", "Regístralos una vez y programamos el transporte."),
+    };
+    var derecha = new[]
+    {
+        ("documentos", "bi-folder2-open", "Documentos al día", "BL, certificados y facturas de cada embarque, listos para descargar."),
+        ("bl", "bi-file-earmark-check", "Aprobación del BL", "Revisa el borrador y apruébalo con un clic."),
+        ("facturas", "bi-receipt", "Costos y facturas", "El detalle de cada operación y su estado de pago."),
+        ("soporte", "bi-headset", "Soporte en línea", "Conversa con el equipo sin salir del portal."),
+    };
+}
+<section class="vp @(enLanding ? "vp--landing" : "vp--servicio")" id="plataforma" aria-labelledby="vpTitulo">
+    <div class="vp-fondo" aria-hidden="true"></div>
+    <div class="contenedor">
+        <header class="vp-cab">
+            <p class="vp-lema"><i class="bi bi-display" aria-hidden="true"></i> Plataforma propia</p>
+            <h2 class="titular" id="vpTitulo">@(enLanding ? "Tu logística en un solo lugar." : "Así se ve tu portal.")</h2>
+            <p class="vp-bajada">Lo desarrollamos para nuestros clientes: ves lo mismo que nuestro equipo, apenas se registra. Pasa el mouse por cada función para recorrerlo.</p>
+        </header>
+
+        <div class="vp-grid">
+            <ul class="vp-funciones vp-izq" role="tablist" aria-label="Funciones del portal">
+                @foreach (var (id, icono, titulo, texto) in izquierda)
+                {
+                    <li><button type="button" class="vp-fn" role="tab" data-vista="@id" aria-controls="vpPantalla" aria-selected="false"><i class="bi @icono" aria-hidden="true"></i><span><b>@titulo</b>@texto</span><span class="vp-fn-barra" aria-hidden="true"></span></button></li>
+                }
+            </ul>
+
+            <div class="vp-escena" aria-hidden="true">
+                <div class="vp-dispositivos">
+                    <!-- Notebook -->
+                    <div class="vp-notebook">
+                        <div class="vp-pantalla">
+                            <div class="vp-app">
+                                <div class="vp-app-lateral">
+                                    <img src="~/img/marca/atilson-isotipo-blanco.svg" alt="" />
+                                    <i class="bi bi-house"></i><i class="bi bi-geo" data-ico="seguimiento"></i><i class="bi bi-calendar2-week" data-ico="itinerarios"></i><i class="bi bi-calculator" data-ico="cotizaciones"></i><i class="bi bi-folder2-open" data-ico="documentos"></i><i class="bi bi-receipt" data-ico="facturas"></i><i class="bi bi-headset" data-ico="soporte"></i>
+                                </div>
+                                <div class="vp-app-cuerpo">
+                                    <div class="vp-app-barra"><b id="vpTituloVista">Seguimiento</b><span class="vp-busca"><i class="bi bi-search"></i> Booking o contenedor</span><span class="vp-avatar">AC</span></div>
+
+                                    <!-- Seguimiento -->
+                                    <div class="vp-vista" data-vista="seguimiento">
+                                        <div class="vp-tarjeta vp-ruta">
+                                            <div><small>Zarpe</small><b>San Antonio</b></div>
+                                            <div class="vp-ruta-linea"><span class="vp-barco"><i class="bi bi-water"></i></span></div>
+                                            <div class="fin"><small>Arribo</small><b>Rotterdam</b></div>
+                                        </div>
+                                        <ol class="vp-hitos">
+                                            <li><i class="bi bi-check2"></i>Reserva confirmada</li>
+                                            <li><i class="bi bi-check2"></i>Retiro en depósito</li>
+                                            <li><i class="bi bi-check2"></i>Ingreso a puerto</li>
+                                            <li><i class="bi bi-check2"></i>Zarpe</li>
+                                            <li class="act"><i class="bi bi-circle-fill"></i>En tránsito</li>
+                                            <li><i class="bi bi-circle"></i>Arribo</li>
+                                        </ol>
+                                    </div>
+
+                                    <!-- Itinerarios -->
+                                    <div class="vp-vista" data-vista="itinerarios">
+                                        <div class="vp-salidas">
+                                            @foreach (var (sig, fecha, dias, sel) in new[] { ("NV1", "Mié 4", "28 días", false), ("NV2", "Dom 8", "29 días", true), ("NV3", "Jue 12", "30 días", false) })
+                                            {
+                                                <div class="vp-tarjeta vp-salida @(sel ? "sel" : "")"><span class="vp-sig">@sig</span><div><b>@fecha nov</b><small>San Antonio → Rotterdam · @dias</small></div><span class="vp-btn">Reservar</span></div>
+                                            }
+                                        </div>
+                                    </div>
+
+                                    <!-- Cotizaciones -->
+                                    <div class="vp-vista" data-vista="cotizaciones">
+                                        <div class="vp-form">
+                                            <label>Origen<span class="vp-campo" data-escribe="San Antonio"></span></label>
+                                            <label>Destino<span class="vp-campo" data-escribe="Shanghai"></span></label>
+                                            <label>Contenedor<span class="vp-campo" data-escribe="40' reefer"></span></label>
+                                            <label>Carga<span class="vp-campo" data-escribe="Cerezas · 4 contenedores"></span></label>
+                                            <span class="vp-btn vp-btn-grande">Solicitar cotización</span>
+                                        </div>
+                                    </div>
+
+                                    <!-- Ubicaciones -->
+                                    <div class="vp-vista" data-vista="ubicaciones">
+                                        <div class="vp-tarjeta vp-mapa">
+                                            <svg viewBox="0 0 300 140" preserveAspectRatio="none"><path class="vp-mapa-ruta" d="M30 110 C 90 40, 150 120, 200 60 S 270 30, 280 40" /></svg>
+                                            <span class="vp-pin" style="left:8%;top:72%"><i class="bi bi-box-seam"></i>Depósito</span>
+                                            <span class="vp-pin" style="left:62%;top:36%"><i class="bi bi-buildings"></i>Planta</span>
+                                            <span class="vp-pin" style="left:86%;top:16%"><i class="bi bi-water"></i>Puerto</span>
+                                        </div>
+                                    </div>
+
+                                    <!-- Documentos -->
+                                    <div class="vp-vista" data-vista="documentos">
+                                        <ul class="vp-lista">
+                                            @foreach (var (ico, doc) in new[] { ("bi-file-earmark-richtext", "BL"), ("bi-patch-check", "Certificado fitosanitario"), ("bi-award", "Certificado de origen"), ("bi-receipt", "Factura") })
+                                            {
+                                                <li class="vp-tarjeta"><i class="bi @ico"></i><span>@doc</span><i class="bi bi-download vp-baja"></i></li>
+                                            }
+                                        </ul>
+                                    </div>
+
+                                    <!-- BL -->
+                                    <div class="vp-vista" data-vista="bl">
+                                        <div class="vp-tarjeta vp-bl">
+                                            <b>Borrador de BL</b>
+                                            <i class="vp-linea" style="width:90%"></i><i class="vp-linea" style="width:70%"></i><i class="vp-linea" style="width:82%"></i><i class="vp-linea" style="width:55%"></i>
+                                            <span class="vp-sello"><i class="bi bi-check2-circle"></i> Aprobado</span>
+                                        </div>
+                                    </div>
+
+                                    <!-- Facturas -->
+                                    <div class="vp-vista" data-vista="facturas">
+                                        <div class="vp-facturas">
+                                            <div class="vp-tarjeta vp-barras"><i style="--h:45%"></i><i style="--h:70%"></i><i style="--h:55%"></i><i style="--h:90%"></i><i style="--h:65%"></i></div>
+                                            <ul class="vp-lista vp-lista-fac">
+                                                <li class="vp-tarjeta"><span>Flete marítimo</span><b>USD</b><em class="ok">Pagada</em></li>
+                                                <li class="vp-tarjeta"><span>Transporte</span><b>CLP</b><em class="ok">Pagada</em></li>
+                                                <li class="vp-tarjeta"><span>Documental</span><b>CLP</b><em>Pendiente</em></li>
+                                            </ul>
+                                        </div>
+                                    </div>
+
+                                    <!-- Soporte -->
+                                    <div class="vp-vista" data-vista="soporte">
+                                        <div class="vp-chat">
+                                            <span class="yo">¿Cuándo zarpa mi booking?</span>
+                                            <span class="otro">Zarpa el domingo 8. Te dejamos el BL en borrador para aprobar.</span>
+                                            <span class="yo">¡Perfecto, gracias!</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="vp-base"></div>
+                    </div>
+
+                    <!-- Celular -->
+                    <div class="vp-celular">
+                        <div class="vp-cel-pantalla">
+                            <div class="vp-cel-hora">9:41</div>
+                            <div class="vp-cel-noti"><img src="~/img/marca/atilson-isotipo.svg" alt="" /><span><b>Atilson</b><em id="vpNoti">Tu contenedor ingresó a puerto</em></span></div>
+                            <div class="vp-cel-tarjeta"><small>En tránsito</small><b>SAI → RTM</b><i class="vp-cel-prog"><i></i></i></div>
+                            <div class="vp-cel-tarjeta"><small>Próximo hito</small><b>Arribo</b></div>
+                        </div>
+                    </div>
+                </div>
+                <span class="vp-halo"></span>
+            </div>
+
+            <ul class="vp-funciones vp-der" role="tablist" aria-label="Más funciones del portal">
+                @foreach (var (id, icono, titulo, texto) in derecha)
+                {
+                    <li><button type="button" class="vp-fn" role="tab" data-vista="@id" aria-controls="vpPantalla" aria-selected="false"><i class="bi @icono" aria-hidden="true"></i><span><b>@titulo</b>@texto</span><span class="vp-fn-barra" aria-hidden="true"></span></button></li>
+                }
+            </ul>
+        </div>
+        <p class="visually-hidden" id="vpPantalla" aria-live="polite"></p>
+
+        <div class="vp-acciones">
+            @if (enLanding)
+            {
+                <a href="/servicios/portal-de-clientes" class="btn-hero btn-hero-principal"><i class="bi bi-display"></i> Conoce el portal</a>
+                <a href="/Login" class="btn-hero btn-hero-secundario"><i class="bi bi-shield-lock"></i> Ingreso portal</a>
+            }
+            else
+            {
+                <a href="/Registro" class="btn-hero btn-hero-principal"><i class="bi bi-building-add"></i> Registrar mi empresa</a>
+                <a href="/Login" class="btn-hero btn-hero-secundario"><i class="bi bi-shield-lock"></i> Ingreso portal</a>
+            }
+        </div>
+    </div>
+</section>
