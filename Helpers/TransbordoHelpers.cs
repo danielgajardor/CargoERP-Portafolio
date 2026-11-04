@@ -4,10 +4,26 @@ namespace AtilsonCargoSpa.Helpers
 {
     public static class TransbordoHelpers
     {
+        // Días libres "reales": una vez confirmada la nueva nave, el puerto ya
+        // definió las fechas de conexión exactas (Fecha In = arribo nave 1,
+        // Fecha Out = zarpe nave 2) — en transbordo no existen días libres como
+        // concepto propio, son simplemente la diferencia entre esas dos fechas.
+        // Mientras la nueva nave no esté confirmada, se usa el valor que la
+        // ejecutiva ingresó como estimación (lo que le informó el puerto/naviera
+        // verbalmente), solo para poder mostrar una alerta temprana.
+        public static int? DiasLibresCalculados(GestionTransbordo? t)
+        {
+            if (t?.FechaArriboTransbordo.HasValue == true && t.NuevoEtdTransbordo.HasValue)
+                return (int)Math.Round((t.NuevoEtdTransbordo.Value - t.FechaArriboTransbordo.Value).TotalDays);
+            return t?.DiasLibres;
+        }
+
         public static DateTime? FechaLimite(GestionTransbordo? t)
-            => (t?.FechaArriboTransbordo.HasValue == true && t.DiasLibres.HasValue)
-                ? t.FechaArriboTransbordo.Value.AddDays(t.DiasLibres.Value)
-                : null;
+        {
+            if (t?.FechaArriboTransbordo.HasValue != true) return null;
+            var dias = DiasLibresCalculados(t);
+            return dias.HasValue ? t.FechaArriboTransbordo.Value.AddDays(dias.Value) : null;
+        }
 
         public static bool EstaResuelto(GestionTransbordo? t) => t?.NuevoEtdTransbordo.HasValue == true;
 

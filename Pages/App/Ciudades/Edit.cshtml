@@ -1,0 +1,71 @@
+@page "{id:int?}"
+@model AtilsonCargoSpa.Pages.App.Ciudades.EditModel
+@{
+    ViewData["Title"] = Model.EsNuevo ? "Nueva ciudad" : $"Ciudad: {Model.NombreOriginal}";
+}
+<link rel="stylesheet" href="~/css/maestros.css" asp-append-version="true" />
+
+<div class="container-fluid py-4 mx mx-ficha-wrap">
+    <header class="mx-cabecera">
+        <div>
+            <div class="mx-miga"><a asp-page="./Index">Maestros › Ciudades</a></div>
+            <h1 class="mx-titulo">@(Model.EsNuevo ? "Nueva ciudad" : Model.NombreOriginal)</h1>
+            <p class="mx-subtitulo">@(Model.EsNuevo ? "Agrega una ciudad para usarla en depósitos, plantas, clientes y tarifas." : "Edita la ciudad. Cada cambio queda registrado con tu usuario, fecha y hora.")</p>
+        </div>
+        <div class="mx-acciones">
+            <a asp-page="./Index" class="mx-btn mx-btn-secundario"><i class="bi bi-arrow-left"></i> Volver a la lista</a>
+        </div>
+    </header>
+
+    <form method="post" data-mx-ficha novalidate>
+        <input type="hidden" asp-for="Form.Id" />
+        <input type="hidden" asp-for="Form.Version" />
+
+        <div asp-validation-summary="All" class="mx-errores" role="alert"><strong>Revisa lo siguiente antes de guardar:</strong></div>
+
+        <div class="mx-ficha">
+            <div>
+                <section class="mx-tarjeta">
+                    <div class="mx-tarjeta-cab"><i class="bi bi-geo-alt"></i><h2>Datos de la ciudad</h2></div>
+                    <div class="mx-tarjeta-cuerpo">
+                        <div class="mx-campos">
+                            <div class="mx-campo">
+                                <label asp-for="Form.Nombre">Nombre<span class="req">*</span></label>
+                                <input asp-for="Form.Nombre" class="mx-input" maxlength="100" required autocomplete="off" />
+                                <span asp-validation-for="Form.Nombre" class="mx-error-campo"></span>
+                            </div>
+                            <div class="mx-campo">
+                                <label asp-for="Form.IdPais">País<span class="req">*</span></label>
+                                <select asp-for="Form.IdPais" asp-items="Model.Paises" data-buscador="si" required>
+                                    <option value="">— Elige el país —</option>
+                                </select>
+                                <span asp-validation-for="Form.IdPais" class="mx-error-campo"></span>
+                            </div>
+                        </div>
+                        @if (!Model.EsNuevo && (Model.UsoDepositos + Model.UsoPlantas + Model.UsoTarifas) > 0)
+                        {
+                            <div class="mx-ayuda mt-3">
+                                <i class="bi bi-info-circle"></i> En uso por @Model.UsoDepositos depósito(s), @Model.UsoPlantas planta(s) y @Model.UsoTarifas tarifa(s) de transporte. Si cambias el nombre, todos ellos verán el nombre nuevo.
+                            </div>
+                        }
+                    </div>
+                </section>
+
+                <div class="mx-pie">
+                    <span class="mx-pie-nota"><i class="bi bi-shield-check"></i> Se guardará a nombre de <strong>@AtilsonCargoSpa.Services.MaestrosAuditoria.Usuario(User)</strong>.</span>
+                    <a asp-page="./Index" class="mx-btn mx-btn-secundario">Cancelar</a>
+                    <button type="submit" class="mx-btn mx-btn-primario" data-mx-guardar><i class="bi bi-check2"></i> <span>@(Model.EsNuevo ? "Crear ciudad" : "Guardar cambios")</span></button>
+                </div>
+            </div>
+
+            @if (!Model.EsNuevo)
+            {
+                <partial name="_MaestroRegistro" model="Model.Registro" />
+            }
+        </div>
+    </form>
+</div>
+
+@section Scripts {
+    <script src="~/js/maestros.js" asp-append-version="true"></script>
+}

@@ -166,28 +166,23 @@
             border-color: #2563eb;
         }
 </style>
+<link rel="stylesheet" href="~/css/ordenes-compra-premium.css" asp-append-version="true" />
 
-<div class="container-fluid px-4 py-4">
+<div class="container-fluid px-4 py-4 oc-premium">
 
     <!-- HEADER DE LA PÁGINA -->
     <div class="d-flex justify-content-between align-items-center mb-4">
-        <div>
-            <h1 style="font-size: 24px; font-weight: 900; color: var(--atilson-slate-900); margin: 0; letter-spacing: -0.5px;">EMISIÓN DE ÓRDENES DE COMPRA (OC)</h1>
-            <p class="text-muted small m-0 fw-medium mt-1">Generación de respaldos para pago de proveedores terrestres y extracostos.</p>
+        <div class="d-flex align-items-center gap-3">
+            <div class="oc-header-icon"><i class="bi bi-receipt"></i></div>
+            <div>
+                <h1 style="font-size: 24px; font-weight: 900; color: var(--atilson-slate-900); margin: 0; letter-spacing: -0.5px;">EMISIÓN DE ÓRDENES DE COMPRA (OC)</h1>
+                <p class="text-muted small m-0 fw-medium mt-1">Generación de respaldos para pago de proveedores terrestres y extracostos.</p>
+            </div>
         </div>
     </div>
 
     <!-- MENÚ UNIFICADO -->
-    <div class="d-flex mb-4">
-        <div class="workspace-nav">
-            <a asp-page="/Finanzas/MainBoard" class="ws-btn"><i class="bi bi-grid-1x2-fill"></i> Main Board</a>
-            <a asp-page="/Finanzas/ControlFinanciero" class="ws-btn"><i class="bi bi-sliders"></i> Control Financiero</a>
-            <a asp-page="/Finanzas/OrdenesCompra" class="ws-btn active"><i class="bi bi-receipt"></i> Órdenes de Compra</a>
-                        <a asp-page="/Finanzas/Facturacion" class="ws-btn"><i class="bi bi-file-earmark-spreadsheet-fill"></i> Facturación</a>
-            <a asp-page="/Finanzas/ConsolidadoCliente" class="ws-btn"><i class="bi bi-person-lines-fill"></i> Consolidado Cliente</a>
-
-        </div>
-    </div>
+    <partial name="/Pages/Finanzas/_FinanzasNav.cshtml" model='"OrdenesCompra"' />
 
     <!-- GRILLA PRINCIPAL -->
     <div class="fin-table-wrapper">

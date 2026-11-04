@@ -1,0 +1,147 @@
+@model AtilsonCargoSpa.Models.TarifasCollectPanelVm
+@using AtilsonCargoSpa.Models
+@using AtilsonCargoSpa.Helpers
+@{
+        bool esCliente = Model.Tipo == TarifaCollect.TipoCliente;
+    var puertosPol = (ViewData["PuertosPolCollect"] as IEnumerable<SelectListItem>) ?? Model.Puertos;
+    string idForm = esCliente ? "form-cli-collect" : "form-prov-collect";
+    var cl = System.Globalization.CultureInfo.GetCultureInfo("es-CL");
+    string Usd(decimal v) => "USD " + v.ToString("N0", cl);
+    var tarifas = Model.Tarifas
+        .OrderBy(t => esCliente ? (t.IdClienteNavigation?.RazonSocial ?? "") : (Model.NombresNavieras.TryGetValue(t.IdNaviera, out var n) ? n : ""))
+        .ThenBy(t => Model.NombresNavieras.TryGetValue(t.IdNaviera, out var n2) ? n2 : "")
+        .ThenBy(t => t.Pod)
+        .ToList();
+}
+<div class="section-hint mb-2">
+    <i class="bi bi-info-circle-fill"></i>
+    <div>
+        <strong>Collect / No Prepaid:</strong> el consignatario paga la <strong>Tarifa Pública</strong> a la naviera.
+        @if (esCliente)
+        {
+            <text>Al cliente se le ofrece la misma tarifa pública con su propia tarifa neta: el <strong>rebate del cliente</strong> (Pública − Neta) es lo que Atilson le devuelve. La diferencia con el rebate de la naviera es el profit de Atilson.</text>
+        }
+        else
+        {
+            <text>La naviera nos paga el <strong>rebate</strong> (Pública − Neta). Las condiciones sin costo (Late Arrival, Extra Late, Corrección de BL) se cruzan por naviera, destino y commodity.</text>
+        }
+    </div>
+</div>
+<div class="d-flex justify-content-end mb-2">
+    <button type="button" class="btn btn-sm btn-dark fw-bold px-3 shadow-sm" onclick="toggleNuevaTarifaForm('@idForm')">
+        <i class="bi bi-plus-lg me-1"></i> @(esCliente ? "NUEVA VENTA COLLECT" : "NUEVA TARIFA COLLECT")
+    </button>
+</div>
+<div id="@idForm" class="d-none faf-card mb-3">
+    <form method="post" asp-page-handler="CrearTarifaCollect" onsubmit="return validarTarifaCollect(this)" data-collect-form="1">
+        <input type="hidden" name="TipoTarifa" value="@Model.Tipo" />
+        <div class="faf-grid">
+            @if (esCliente)
+            {
+                <div class="faf-g"><label>Cliente</label><select name="IdCliente" asp-items="Model.Clientes" class="form-select-xs" required><option value="">- Cliente -</option></select></div>
+            }
+            <div class="faf-g"><label>Naviera</label><select name="IdNaviera" asp-items="Model.Navieras" class="form-select-xs" required><option value="">- Naviera -</option></select></div>
+                        <div class="faf-g"><label>POL <span class="text-muted fw-normal">(opcional)</span></label><select name="Pol" asp-items="puertosPol" class="form-select-xs"><option value="">- Todos -</option></select></div>
+            <div class="faf-g"><label>Destino (POD)</label><select name="Pod" asp-items="Model.Puertos" class="form-select-xs" required><option value="">- POD -</option></select></div>
+            <div class="faf-g"><label>Tarifa Pública (USD)</label><input name="TarifaPublicaUsd" type="number" step="0.01" min="0" class="form-control-xs fw-bold" required data-collect-publica="1" placeholder="0"></div>
+            <div class="faf-g"><label>Tarifa Neta (USD)</label><input name="TarifaNetaUsd" type="number" step="0.01" min="0" class="form-control-xs fw-bold" required data-collect-neta="1" placeholder="0"></div>
+            <div class="faf-g"><label>Rebate (USD)</label><div class="faf-total-iva" data-collect-rebate="1">—</div></div>
+            <div class="faf-g"><label>Corrección BL sin costo</label>
+                <select name="CorreccionBlSinCosto" class="form-select-xs no-select2">
+                    <option value="">Con costo</option>
+                    <option value="@TarifaCollect.CorreccionAntesZarpe">Antes del zarpe</option>
+                    <option value="@TarifaCollect.Correccion24h">Hasta 24 h post zarpe</option>
+                    <option value="@TarifaCollect.Correccion48h">Hasta 48 h post zarpe</option>
+                </select>
+            </div>
+            <div class="faf-g"><label>Late Arrival</label><label class="faf-check m-0" style="text-transform:none; font-weight:700;"><input type="checkbox" name="LateArrivalSinCosto" value="true" class="form-check-input m-0"> <span style="font-size:11px;">Sin costo</span></label></div>
+            <div class="faf-g"><label>Extra Late Arrival</label><label class="faf-check m-0" style="text-transform:none; font-weight:700;"><input type="checkbox" name="ExtraLateSinCosto" value="true" class="form-check-input m-0"> <span style="font-size:11px;">Sin costo</span></label></div>
+            <div class="faf-g"><label>Días libres origen</label><input name="DiasLibresOrigen" class="form-control-xs text-uppercase" maxlength="50" placeholder="Ej: 20"></div>
+            <div class="faf-g"><label>Días libres destino</label><input name="DiasLibresDestino" class="form-control-xs text-uppercase" maxlength="50" placeholder="Ej: 15 combinados"></div>
+            <div class="faf-g"><label>Plug</label><input name="Plug" class="form-control-xs text-uppercase" maxlength="50" placeholder="Ej: 5"></div>
+            <div class="faf-g"><label>Vigente desde</label><input name="FechaInicioVigencia" type="date" class="form-control-xs" value="@DateTime.Today.ToString("yyyy-MM-dd")" required></div>
+            <div class="faf-g"><label>Vigente hasta</label><input name="FechaFinVigencia" type="date" class="form-control-xs"></div>
+            <div class="faf-g" style="grid-column: 1 / -1;">
+                <label>Commodity <span class="text-muted fw-normal">(marca uno o varios; ninguno = todos)</span></label>
+                <div class="collect-commodities">
+                    @foreach (var c in CommodityHelper.Lista)
+                    {
+                        <label class="collect-commodity"><input type="checkbox" name="Commodity" value="@c" class="form-check-input m-0"> <span>@c</span></label>
+                    }
+                </div>
+            </div>
+            <div class="faf-g" style="grid-column: 1 / -1;"><label>Otros recargos / comentarios</label><input name="Comentarios" class="form-control-xs" maxlength="500" placeholder="Ej: BL FEE 38 USD + recargos en destino"></div>
+            <div class="faf-actions">
+                <button type="submit" class="btn btn-sm btn-primary fw-bold"><i class="bi bi-check2 me-1"></i> AGREGAR</button>
+            </div>
+        </div>
+    </form>
+</div>
+<div class="table-container">
+    <table class="table table-erp searchable-table">
+        <thead>
+            <tr>
+                @if (esCliente) { <th class="ps-4">Cliente</th> }
+                <th class="@(esCliente ? "" : "ps-4")">Naviera</th>
+                <th>Ruta</th>
+                <th>Commodity</th>
+                <th class="text-end">Pública</th>
+                <th class="text-end">Neta</th>
+                <th class="text-end">Rebate</th>
+                @if (esCliente) { <th class="text-end" title="Rebate naviera − rebate cliente">Profit Atilson</th> }
+                <th>Condiciones sin costo</th>
+                <th class="text-center">Días libres / Plug</th>
+                <th class="text-center">Vigencia</th>
+                <th class="text-end pe-4"></th>
+            </tr>
+        </thead>
+        <tbody>
+            @if (!tarifas.Any())
+            {
+                <tr><td colspan="12" class="text-center text-muted py-4">No hay tarifas Collect cargadas todavía.</td></tr>
+            }
+            @foreach (var t in tarifas)
+            {
+                string nav = Model.NombresNavieras.TryGetValue(t.IdNaviera, out var nn) ? nn : $"Naviera {t.IdNaviera}";
+                var coms = CommodityHelper.Separar(t.Commodity);
+                TarifaCollect? refNav = null;
+                if (esCliente)
+                {
+                    refNav = AcuerdoCollectHelper.Elegir(Model.TarifasNaviera, TarifaCollect.TipoNaviera, null, t.IdNaviera, t.Pol, t.Pod, coms.FirstOrDefault(), DateTime.Today);
+                }
+                <tr>
+                    @if (esCliente) { <td class="ps-4 fw-bold" style="color:#0284c7;">@(t.IdClienteNavigation?.RazonSocial ?? "N/A")</td> }
+                    <td class="fw-bold text-uppercase @(esCliente ? "" : "ps-4")">@nav</td>
+                    <td class="text-uppercase"><span class="text-muted">@(string.IsNullOrWhiteSpace(t.Pol) ? "Todos" : t.Pol)</span> <i class="bi bi-arrow-right text-muted mx-1"></i> @t.Pod</td>
+                    <td style="font-size:10.5px;">@(coms.Any() ? string.Join(", ", coms) : "Todos")</td>
+                    <td class="text-end font-monospace">@Usd(t.TarifaPublicaUsd)</td>
+                    <td class="text-end font-monospace">@Usd(t.TarifaNetaUsd)</td>
+                    <td class="text-end font-monospace fw-bold text-success">@Usd(t.RebateUsd)</td>
+                    @if (esCliente)
+                    {
+                        <td class="text-end font-monospace fw-bold" title="@(refNav != null ? $"Rebate naviera {Usd(refNav.RebateUsd)}" : "Sin tarifa Collect de la naviera para esta ruta")">
+                            @(refNav != null ? Usd(refNav.RebateUsd - t.RebateUsd) : "—")
+                        </td>
+                    }
+                    <td>
+                        <div class="d-flex flex-wrap gap-1">
+                            @if (t.LateArrivalSinCosto) { <span class="badge-status badge-status--success">LAR sin costo</span> }
+                            @if (t.ExtraLateSinCosto) { <span class="badge-status badge-status--success">ELAR sin costo</span> }
+                            @if (!string.IsNullOrWhiteSpace(t.CorreccionBlSinCosto)) { <span class="badge-status badge-status--success">Corr. BL @AcuerdoCollectHelper.TextoCorreccion(t.CorreccionBlSinCosto)</span> }
+                            @if (!t.LateArrivalSinCosto && !t.ExtraLateSinCosto && string.IsNullOrWhiteSpace(t.CorreccionBlSinCosto)) { <span class="text-muted" style="font-size:10px;">Todo con costo</span> }
+                        </div>
+                        @if (!string.IsNullOrWhiteSpace(t.Comentarios)) { <div class="text-muted mt-1" style="font-size:9.5px;">@t.Comentarios</div> }
+                    </td>
+                    <td class="text-center" style="font-size:10.5px;">@(t.DiasLibresOrigen ?? "-") / @(t.DiasLibresDestino ?? "-") · Plug @(t.Plug ?? "-")</td>
+                    <td class="text-center font-monospace text-muted" style="font-size:10.5px;">@t.FechaInicioVigencia.ToString("dd/MM/yyyy")<br />@(t.FechaFinVigencia?.ToString("dd/MM/yyyy") ?? "sin término")</td>
+                    <td class="text-end pe-4">
+                        <form method="post" asp-page-handler="ArchivarTarifaCollect" onsubmit="return confirm('¿Archivar esta tarifa Collect?');" class="m-0">
+                            <input type="hidden" name="idTarifa" value="@t.Id" />
+                            <button type="submit" class="btn btn-delete" title="Archivar"><i class="bi bi-trash"></i></button>
+                        </form>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</div>

@@ -13,10 +13,12 @@ namespace AtilsonCargoSpa.Pages.Operaciones
     public class TransporteModel : PageModel
     {
         private readonly AtilsonContext _context;
+        private readonly EmailService _emailService;
 
-        public TransporteModel(AtilsonContext context)
+        public TransporteModel(AtilsonContext context, EmailService emailService)
         {
             _context = context;
+            _emailService = emailService;
         }
 
         public IList<Operacione> Operaciones { get; set; } = default!;
@@ -107,11 +109,10 @@ namespace AtilsonCargoSpa.Pages.Operaciones
         {
             try
             {
-                var emailService = new EmailService();
                 string htmlCuerpo = $"<div style='font-family: Arial, sans-serif; font-size: 14px; color: #1e293b;'><p>{cuerpo.Replace("\n", "<br>")}</p></div>";
 
                 // Descomentar para enviar el correo real cuando el SMTP esté configurado:
-                // await emailService.EnviarCorreoAsync(destinatario, asunto, htmlCuerpo, cc);
+                // await _emailService.EnviarCorreoAsync(destinatario, asunto, htmlCuerpo, cc);
 
                 var opDb = await _context.Operaciones
                     .Include(o => o.OperacionesTerrestres)
@@ -154,6 +155,8 @@ namespace AtilsonCargoSpa.Pages.Operaciones
         public async Task<IActionResult> OnPostDeleteAsync(int? id)
         {
             if (id == null) return NotFound();
+            // Bookings cancelados: nunca se eliminan (minuta Roleos/Cancelaciones oct-2026).
+            if (await AtilsonCargoSpa.Helpers.BookingCanceladoHelper.EstaCanceladoAsync(_context, id.Value)) return RedirectToPage("./Transporte");
             var operacion = await _context.Operaciones.FindAsync(id);
             if (operacion != null) { operacion.IsDeleted = true; await _context.SaveChangesAsync(); }
             return RedirectToPage("./Transporte");

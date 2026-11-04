@@ -1,0 +1,549 @@
+﻿@page
+@model AtilsonCargoSpa.Pages.PortalCliente.OperacionesModel
+@using AtilsonCargoSpa.Models
+@using System.Globalization
+@functions {
+    // Normaliza fechas (soporta DateTime? y DateOnly? según cómo esté scaffoldeado el modelo)
+    private static DateTime? AFecha(DateTime? d) => d;
+    private static DateTime? AFecha(DateOnly? d) => d?.ToDateTime(TimeOnly.MinValue);
+
+    // % de avance del viaje marítimo entre ETD y ETA
+    private static int ProgresoViaje(DateTime? etd, DateTime? eta, DateTime ahora)
+    {
+        if (!etd.HasValue || !eta.HasValue) return 0;
+        if (ahora <= etd.Value) return 0;
+        if (ahora >= eta.Value) return 100;
+        var total = (eta.Value - etd.Value).TotalHours;
+        if (total <= 0) return 100;
+        return (int)Math.Round((ahora - etd.Value).TotalHours / total * 100);
+    }
+
+    private static bool BlPorAprobar(Operacione op) =>
+        op.OperacionesDocumentales != null && op.OperacionesDocumentales.Any(d => d.EstadoDocumental == "BORRADOR ENVIADO");
+
+    // Mismo criterio que AccionesRequeridas del PageModel
+    private static bool RequiereAccion(Operacione op) =>
+        op.OperacionesDocumentales != null && op.OperacionesDocumentales.Any(d =>
+            d.EstadoDocumental == "BORRADOR ENVIADO" ||
+            (d.LogSanitario != null && d.LogSanitario.Contains("ENVÍO A CLIENTE") && !d.LogSanitario.Contains("RESPUESTA")));
+
+    // Tokens para el filtro client-side: curso | finalizada | cancelada (+ accion)
+    private string Tokens(Operacione op)
+    {
+        var t = new List<string>();
+        bool fin = Model.OperacionCerradaPorRetiro(op) || op.EstadoWorkflow == "Cerrado" || op.EstadoWorkflow == "Finalizado";
+        if (fin) t.Add("finalizada");
+        else if (op.EstadoWorkflow == "Cancelado") t.Add("cancelada");
+        else t.Add("curso");
+        if (RequiereAccion(op)) t.Add("accion");
+        return string.Join(" ", t);
+    }
+}
+@{
+    ViewData["Title"] = "Mis operaciones";
+    Layout = "_LayoutCliente";
+
+    var ahora = DateTime.Now;
+    var es = new CultureInfo("es-CL");
+    var ops = Model.OperacionesCliente ?? new List<Operacione>();
+
+    string nombreCliente = User.Identity?.Name ?? "Cliente";
+    if (nombreCliente.Contains("@")) { nombreCliente = nombreCliente.Split('@')[0]; }
+
+    string saludo = ahora.Hour < 12 ? "Buenos días" : (ahora.Hour < 20 ? "Buenas tardes" : "Buenas noches");
+    string fechaHoy = ahora.ToString("dddd d 'de' MMMM", es);
+    fechaHoy = char.ToUpper(fechaHoy[0]) + fechaHoy.Substring(1);
+
+    var tokens = ops.ToDictionary(o => o.Id, o => Tokens(o));
+    int nTodas = ops.Count;
+    int nCurso = tokens.Values.Count(v => v.Contains("curso"));
+    int nAccion = tokens.Values.Count(v => v.Contains("accion"));
+    int nFin = tokens.Values.Count(v => v.Contains("finalizada"));
+
+    var proximo = ops
+        .Where(o => tokens[o.Id].Contains("curso"))
+        .Select(o => new { Op = o, Etd = AFecha(o.EtdPol), Eta = AFecha(o.EtaPod) })
+        .Where(x => x.Eta.HasValue && x.Eta.Value >= ahora.Date)
+        .OrderBy(x => x.Eta)
+        .FirstOrDefault();
+
+    string resumen = nTodas == 0
+        ? "Comienza tu primera operación solicitando una cotización. Nosotros nos encargamos del resto."
+        : $"Tienes {nCurso} {(nCurso == 1 ? "embarque en curso" : "embarques en curso")}"
+          + (nAccion > 0 ? $" y {nAccion} {(nAccion == 1 ? "acción que requiere" : "acciones que requieren")} tu revisión." : ". Todo está al día.");
+
+    int pctActivos = nTodas == 0 ? 0 : (int)Math.Round(nCurso * 100.0 / nTodas);
+    int pctFin = nTodas == 0 ? 0 : (int)Math.Round(nFin * 100.0 / nTodas);
+
+    string shipSvg = "<svg viewBox=\"0 0 24 24\" width=\"1em\" height=\"1em\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M3 14h18l-2.2 4.4a2 2 0 0 1-1.8 1.1H7a2 2 0 0 1-1.8-1.1z\"/><path d=\"M6 14V9h4v5\"/><path d=\"M10 14v-3h4v3\"/><path d=\"M14 14V7h4v7\"/></svg>";
+}
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
+
+<link rel="stylesheet" href="~/css/portal-cliente.css" asp-append-version="true" />
+
+<form id="antiForgeryFormCliente">@Html.AntiForgeryToken()</form>
+
+<div class="pc pc-pagina-ops">
+    <header class="pc-page-head pc-reveal">
+        <div>
+            <span class="pc-eyebrow">Mis operaciones</span>
+            <h1 class="pc-page-title">Seguimiento de tus embarques</h1>
+            <p class="pc-page-sub">Todas tus operaciones: en curso, por revisar y finalizadas. Toca una para ver su detalle.</p>
+        </div>
+        <div class="pc-page-ctas">
+            <a href="/PortalCliente/SolicitarReserva" class="pc-btn pc-btn-grad" style="width:auto;"><i class="bi bi-calendar-check"></i> Solicitar servicio</a>
+        </div>
+    </header>
+
+    <!-- =====================================================
+         4. MIS OPERACIONES
+         ===================================================== -->
+    <section class="pc-reveal" id="pcOperaciones">
+        <div class="pc-section-head">
+            <div>
+                <span class="pc-eyebrow">Seguimiento en tiempo real</span>
+                <h2 class="pc-section-title">Mis operaciones <span class="count">@nTodas</span></h2>
+            </div>
+        </div>
+
+        <div class="pc-toolbar">
+            <form method="get" class="pc-search" role="search">
+                <i class="bi bi-search"></i>
+                <input type="text" asp-for="SearchString" placeholder="Busca por booking o contenedor..." autocomplete="off">
+                @if (!string.IsNullOrEmpty(Model.SearchString))
+                {
+                    <a href="/PortalCliente/Operaciones" class="pc-search-clear" title="Limpiar búsqueda"><i class="bi bi-x-circle-fill"></i></a>
+                }
+                <button type="submit">Buscar</button>
+            </form>
+
+            <div class="pc-seg" role="tablist" aria-label="Filtrar operaciones">
+                <button type="button" class="active" data-filter="todas">Todas <span class="n">@nTodas</span></button>
+                <button type="button" data-filter="curso">En curso <span class="n">@nCurso</span></button>
+                @if (nAccion > 0)
+                {
+                    <button type="button" data-filter="accion">Por revisar <span class="n">@nAccion</span></button>
+                }
+                <button type="button" data-filter="finalizada">Finalizadas <span class="n">@nFin</span></button>
+            </div>
+        </div>
+
+        @if (ops.Any())
+        {
+            <div class="pc-ships">
+                @{
+                    int idx = 0;
+                }
+                @foreach (var op in ops)
+                {
+                    var t = op.OperacionesTerrestres?.FirstOrDefault();
+                    var d = op.OperacionesDocumentales?.FirstOrDefault();
+                    bool cerradaPorRetiro = Model.OperacionCerradaPorRetiro(op);
+                    bool pendienteRetiro = Model.PendienteGestionRetiro(op);
+                    string tk = tokens[op.Id];
+                    bool esFin = tk.Contains("finalizada");
+                    bool esCancel = tk.Contains("cancelada");
+                    bool esAccion = tk.Contains("accion");
+                    bool tieneRoleoPendiente = op.RoleosCancelaciones != null && op.RoleosCancelaciones.Any(r => r.SolicitadoPorCliente && !r.Atendido);
+
+                    var etd = AFecha(op.EtdPol);
+                    var eta = AFecha(op.EtaPod);
+                    int pct = cerradaPorRetiro ? 100 : ProgresoViaje(etd, eta, ahora);
+
+                    string estadoTxt = cerradaPorRetiro ? "Finalizado" : (op.EstadoWorkflow ?? "En Proceso");
+                    string pillCls = esFin ? "done" : (esCancel ? "cancel" : "active");
+                    string pol = op.IdPuertoOrigenNavigation?.NombrePuerto ?? "Por definir";
+                    string pod = op.IdPuertoDestinoNavigation?.NombrePuerto ?? "Por definir";
+
+                    string estadoTransbordoCliente = !string.IsNullOrWhiteSpace(op.Transbordo)
+                        ? AtilsonCargoSpa.Helpers.TransbordoHelpers.EstadoTransbordo(op.GestionTransbordo)
+                        : "";
+
+                    // Hitos de trazabilidad (monótonos: si un hito posterior ocurrió, los anteriores también)
+                    bool h1 = !string.IsNullOrWhiteSpace(op.NumeroBooking);
+                    bool h2 = t?.FechaCarga <= ahora;
+                    bool h3 = etd <= ahora;
+                    bool h4 = eta <= ahora || op.EstadoWorkflow == "Arribado" || pendienteRetiro;
+                    bool h5 = cerradaPorRetiro;
+                    if (h5) h4 = true;
+                    if (h4) h3 = true;
+                    if (h3) h2 = true;
+                    if (h2) h1 = true;
+                    var hitos = new[]
+                    {
+                        (Done: h1, Lbl: "Reserva", Sub: h1 ? "Confirmada" : "En gestión", Ico: "bi-journal-check"),
+                        (Done: h2, Lbl: "Carga en planta", Sub: t?.FechaCarga?.ToString("dd MMM, HH:mm", es) ?? "Por programar", Ico: "bi-truck"),
+                        (Done: h3, Lbl: "Zarpe", Sub: etd?.ToString("dd MMM yyyy", es) ?? "Por confirmar", Ico: "bi-water"),
+                        (Done: h4, Lbl: "Arribo", Sub: eta?.ToString("dd MMM yyyy", es) ?? "Por confirmar", Ico: "bi-geo-alt"),
+                        (Done: h5, Lbl: "Vacío devuelto", Sub: AFecha(op.FechaRetiroDestino)?.ToString("dd MMM yyyy", es) ?? "Pendiente", Ico: "bi-box-seam")
+                    };
+                    int hitoActual = Array.FindIndex(hitos, x => !x.Done);
+
+                    var facturas = op.TransaccionesFinancieras?.Where(tx => tx.TipoMovimiento == "INGRESO" && tx.EstadoFila == "FACTURADO" && tx.IdCliente == op.IdCliente).ToList();
+
+                    <article class="pc-ship @(cerradaPorRetiro ? "is-closed" : "") @(esCancel ? "is-cancel" : "")" id="ship-@op.Id" data-cat="@tk" style="--i:@(idx++);">
+                        <div class="pc-ship-head"
+                             role="@(cerradaPorRetiro ? null : "button")"
+                             tabindex="@(cerradaPorRetiro ? null : "0")"
+                             data-bs-toggle="@(cerradaPorRetiro ? null : "collapse")"
+                             data-bs-target="@(cerradaPorRetiro ? null : $"#detail-{op.Id}")"
+                             aria-expanded="false">
+
+                            <!-- Booking + estado -->
+                            <div class="pc-c-id">
+                                <span class="pc-lbl">Booking</span>
+                                <span class="pc-bkg mono">@Html.Raw(shipSvg) @(op.NumeroBooking ?? "S/N")</span>
+                                <div class="pc-tags">
+                                    <span class="pc-pill @pillCls">@estadoTxt</span>
+                                    @if (esAccion)
+                                    {
+                                        <span class="pc-tag warn"><i class="bi bi-exclamation-circle"></i> Requiere tu revisión</span>
+                                    }
+                                    @if (pendienteRetiro)
+                                    {
+                                        <span class="pc-tag ok"><i class="bi bi-box-seam"></i> Retiro pendiente</span>
+                                    }
+                                </div>
+                            </div>
+
+                            <!-- Ruta + progreso -->
+                            <div class="pc-c-route">
+                                <div class="pc-route">
+                                    <div class="pc-port">
+                                        <span class="pc-port-name" title="@pol">@pol</span>
+                                        <span class="pc-port-date mono"><b>ETD</b>@(etd?.ToString("dd MMM yy", es) ?? "Pte")</span>
+                                    </div>
+                                    <div class="pc-track" aria-label="Avance del viaje @pct%">
+                                        <span class="pc-track-start"></span>
+                                        <div class="pc-track-fill" data-w="@pct"></div>
+                                        <span class="pc-track-ship" data-left="@pct">@Html.Raw(shipSvg)</span>
+                                        @if (pct > 0 && pct < 100)
+                                        {
+                                            <span class="pc-track-pct">@pct% en ruta</span>
+                                        }
+                                    </div>
+                                    <div class="pc-port end">
+                                        <span class="pc-port-name" title="@pod">@pod</span>
+                                        <span class="pc-port-date mono"><b>ETA</b>@(eta?.ToString("dd MMM yy", es) ?? "Pte")</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Equipo + nave -->
+                            <div class="pc-c-equip">
+                                <div>
+                                    <span class="pc-lbl">Contenedor</span>
+                                    <span class="pc-cont mono">@(op.NumeroContenedor ?? "Por asignar")</span>
+                                    <span class="pc-seal mono">Sello: @(op.NumeroSello ?? "Pte")</span>
+                                </div>
+                                <div class="pc-vessel">
+                                    <b>@(op.Nave ?? "TBA")</b>
+                                    <span class="pc-carrier">@(op.IdNavieraNavigation?.NombreNaviera ?? "TBA")</span>
+                                </div>
+                                @if (!string.IsNullOrWhiteSpace(op.Transbordo))
+                                {
+                                    string clsTrans = estadoTransbordoCliente switch { "RESUELTO" => "ok", "VENCIDO" => "bad", "CRITICO" => "warn", _ => "info" };
+                                    string txtTrans = estadoTransbordoCliente == "RESUELTO"
+                                        ? $"Nueva nave: {op.GestionTransbordo?.NuevaNaveConfirmada ?? "-"}"
+                                        : $"Transbordo vía {op.Transbordo}";
+                                    <span class="pc-tag @clsTrans mt-2"><i class="bi bi-arrow-left-right"></i> @txtTrans</span>
+                                }
+                            </div>
+
+                            <!-- Acciones -->
+                            <div class="pc-c-act">
+                                @if (tieneRoleoPendiente)
+                                {
+                                    <span class="pc-review" title="Tu solicitud está siendo revisada por nuestro equipo"><i class="bi bi-hourglass-split"></i> En revisión</span>
+                                }
+                                else if (!cerradaPorRetiro && !esFin && !esCancel)
+                                {
+                                    <button type="button" class="pc-icon-btn" title="Solicitar roleo o cancelación"
+                                            onclick="event.stopPropagation(); solicitarRoleoCliente(@op.Id, '@(op.NumeroBooking ?? "S/N")')">
+                                        <i class="bi bi-arrow-repeat"></i>
+                                    </button>
+                                }
+
+                                @if (cerradaPorRetiro)
+                                {
+                                    <span class="pc-seal-done"><i class="bi bi-check-circle-fill"></i> Vacío devuelto</span>
+                                }
+                                else
+                                {
+                                    <span class="pc-chev"><i class="bi bi-chevron-down"></i></span>
+                                }
+                            </div>
+                        </div>
+
+                        @if (!cerradaPorRetiro)
+                        {
+                            <div class="collapse pc-collapse" id="detail-@op.Id">
+                                <div class="pc-detail">
+
+                                    @if (esCancel)
+                                    {
+                                        <div class="pc-cancel-note"><i class="bi bi-slash-circle fs-5"></i> Esta operación fue cancelada. Si necesitas reactivarla, contáctanos desde Soporte Operativo.</div>
+                                    }
+                                    else
+                                    {
+                                        <div class="pc-steps">
+                                            @for (int i = 0; i < hitos.Length; i++)
+                                            {
+                                                var h = hitos[i];
+                                                string cls = h.Done ? "done" : (i == hitoActual ? "current" : "");
+                                                <div class="pc-step @cls">
+                                                    <div class="pc-step-dot"><i class="bi @(h.Done ? "bi-check-lg" : h.Ico)"></i></div>
+                                                    <span class="pc-step-lbl">@h.Lbl</span>
+                                                    <span class="pc-step-sub mono">@h.Sub</span>
+                                                </div>
+                                            }
+                                        </div>
+                                    }
+
+                                    <div class="pc-dgrid">
+                                        <!-- Logística terrestre -->
+                                        <div class="pc-dcard">
+                                            <h6 class="pc-dcard-title"><i class="bi bi-truck" style="background:#ecfdf5; color:#059669;"></i> Logística terrestre</h6>
+                                            <div class="pc-irow">
+                                                <div class="pc-irow-ico"><i class="bi bi-building"></i></div>
+                                                <div>
+                                                    <span class="pc-lbl">Planta de carga</span>
+                                                    <span class="pc-irow-val">@(t?.PlantaCarga ?? "Sin registro")</span>
+                                                </div>
+                                            </div>
+                                            <div class="pc-irow">
+                                                <div class="pc-irow-ico"><i class="bi bi-calendar-check"></i></div>
+                                                <div>
+                                                    <span class="pc-lbl">Presentación</span>
+                                                    <span class="pc-irow-val mono">@(t?.FechaCarga?.ToString("dd/MM/yyyy HH:mm") ?? "Pendiente")</span>
+                                                </div>
+                                            </div>
+                                            <div class="pc-irow">
+                                                <div class="pc-irow-ico"><i class="bi bi-person-vcard"></i></div>
+                                                <div>
+                                                    <span class="pc-lbl">Conductor / Patente</span>
+                                                    <span class="pc-irow-val">@(t?.NombreConductor ?? "Por asignar")</span>
+                                                    <span class="pc-irow-sub mono">@(t?.Patente ?? "—")</span>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <!-- Bóveda documental -->
+                                        <div class="pc-dcard">
+                                            <h6 class="pc-dcard-title"><i class="bi bi-folder2-open" style="background:#eff6ff; color:#2563eb;"></i> Bóveda documental <a href="/PortalCliente/Documentos#docs-@op.Id" class="ms-auto" style="font-size:11px; color:var(--pc-brand);">Ver todo <i class="bi bi-arrow-right"></i></a></h6>
+                                            <div class="pc-doc">
+                                                <div class="pc-doc-ico" style="background:#fef2f2; color:#dc2626;"><i class="bi bi-file-earmark-pdf-fill"></i></div>
+                                                <div class="pc-doc-body">
+                                                    <span class="pc-doc-name">Bill of Lading (MBL)</span>
+                                                    @if (d?.EstadoDocumental == "BORRADOR ENVIADO")
+                                                    {
+                                                        <span class="pc-tag warn mt-1">Requiere revisión</span>
+                                                    }
+                                                    else if (d?.EstadoDocumental == "B/L APROBADO")
+                                                    {
+                                                        <span class="pc-tag ok mt-1">Aprobado</span>
+                                                    }
+                                                    else
+                                                    {
+                                                        <span class="pc-tag muted mt-1">En trámite</span>
+                                                    }
+                                                </div>
+                                                @if (d?.EstadoDocumental == "BORRADOR ENVIADO")
+                                                {
+                                                    <a href="/PortalCliente/AprobarBL/@op.Id" class="pc-mini-btn primary">Revisar <i class="bi bi-arrow-right"></i></a>
+                                                }
+                                            </div>
+                                            @if (!string.IsNullOrEmpty(d?.RutaFullSet))
+                                            {
+                                                <div class="pc-doc" style="background:#fff;">
+                                                    <div class="pc-doc-ico" style="background:#ecfdf5; color:#059669;"><i class="bi bi-file-earmark-zip-fill"></i></div>
+                                                    <div class="pc-doc-body">
+                                                        <span class="pc-doc-name">Full Set documental</span>
+                                                        <span class="pc-irow-sub">Listo para descarga</span>
+                                                    </div>
+                                                    <a href="@d.RutaFullSet" target="_blank" rel="noopener" class="pc-mini-btn ghost"><i class="bi bi-download"></i></a>
+                                                </div>
+                                            }
+                                        </div>
+
+                                        <!-- Estado de cuenta -->
+                                        <div class="pc-dcard">
+                                            <h6 class="pc-dcard-title"><i class="bi bi-receipt" style="background:#fff7ed; color:#ea580c;"></i> Estado de cuenta</h6>
+                                            @if (facturas != null && facturas.Any())
+                                            {
+                                                <div class="pc-fin">
+                                                    <span class="pc-lbl">Total facturado</span>
+                                                    <div class="pc-fin-amount">$@facturas.Where(tx => tx.Moneda == "USD").Sum(tx => tx.MontoNeto).ToString("N2", es) <small>USD</small></div>
+                                                    <div class="pc-fin-sub">@facturas.Count @(facturas.Count == 1 ? "factura emitida" : "facturas emitidas")</div>
+                                                    <a href="/PortalCliente/Facturas#fact-@op.Id" class="pc-btn pc-btn-dark"><i class="bi bi-credit-card-2-front"></i> Ir al módulo de pagos</a>
+                                                </div>
+                                            }
+                                            else
+                                            {
+                                                <div class="pc-fin">
+                                                    <div class="pc-fin-lock"><i class="bi bi-shield-lock"></i></div>
+                                                    <span class="pc-doc-name">Cobros protegidos</span>
+                                                    <div class="pc-fin-sub px-2">La liquidación y facturas se emitirán automáticamente al cierre de la operación.</div>
+                                                </div>
+                                            }
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        }
+                    </article>
+                }
+            </div>
+
+            <div id="pcFilterEmpty" class="pc-empty mt-2" hidden>
+                <div class="pc-empty-ico"><i class="bi bi-funnel"></i></div>
+                <h5>Nada por aquí</h5>
+                <p>No hay operaciones que coincidan con este filtro.</p>
+            </div>
+        }
+        else
+        {
+            <div class="pc-empty">
+                <div class="pc-empty-ico"><i class="bi bi-inboxes"></i></div>
+                @if (!string.IsNullOrEmpty(Model.SearchString))
+                {
+                    <h5>Sin resultados para "@Model.SearchString"</h5>
+                    <p>Revisa el número de booking o contenedor e inténtalo nuevamente.</p>
+                    <a href="/PortalCliente/Operaciones" class="pc-btn pc-btn-dark" style="width:auto; display:inline-flex;"><i class="bi bi-arrow-counterclockwise"></i> Ver todas</a>
+                }
+                else
+                {
+                    <h5>Aún no tienes operaciones</h5>
+                    <p>Solicita tu primera cotización y empieza a importar o exportar con nosotros.</p>
+                    <a asp-page="./SolicitarCotizacion" class="pc-btn pc-btn-grad" style="width:auto; display:inline-flex;"><i class="bi bi-plus-lg"></i> Solicitar cotización</a>
+                }
+            </div>
+        }
+    </section>
+</div>
+
+@section Scripts {
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+    <script>
+        // ===== Roleo / Cancelación =====
+        function solicitarRoleoCliente(idOp, booking) {
+            Swal.fire({
+                title: 'Solicitar roleo / cancelación',
+                html: `
+                    <div style="text-align:left; font-size:13px;">
+                        <p style="font-size:12px; color:#6b6880; margin-bottom:14px;">Booking: <strong style="font-family:'JetBrains Mono',monospace; color:#6d2d9e;">${booking}</strong></p>
+                        <label style="font-size:10px; font-weight:800; color:#a19eb3; text-transform:uppercase; display:block; margin-bottom:6px; letter-spacing:1px;">Tipo de solicitud</label>
+                        <select id="swal-cli-tipo" class="swal2-select" style="margin:0 0 14px; width:100%; font-weight:700; border-radius:10px;">
+                            <option value="ROLEO">Roleo (postergar embarque)</option>
+                            <option value="CANCELACION_NOSHOW">Cancelación / No Show</option>
+                        </select>
+                        <label style="font-size:10px; font-weight:800; color:#a19eb3; text-transform:uppercase; display:block; margin-bottom:6px; letter-spacing:1px;">Motivo</label>
+                        <textarea id="swal-cli-comentario" class="swal2-textarea" style="margin:0; width:100%; font-size:13px; height:90px; border-radius:10px;" placeholder="Cuéntanos el motivo..."></textarea>
+                    </div>`,
+                showCancelButton: true,
+                confirmButtonText: 'Enviar solicitud',
+                confirmButtonColor: '#2c1b4d',
+                cancelButtonText: 'Cancelar',
+                customClass: { popup: 'rounded-4' },
+                preConfirm: () => {
+                    const comentario = document.getElementById('swal-cli-comentario').value.trim();
+                    if (!comentario) { Swal.showValidationMessage('Por favor indica el motivo.'); return false; }
+                    return { tipo: document.getElementById('swal-cli-tipo').value, comentario };
+                }
+            }).then((result) => {
+                if (!result.isConfirmed) return;
+                const token = document.querySelector('#antiForgeryFormCliente input[name="__RequestVerificationToken"]').value;
+                const formData = new FormData();
+                formData.append('idOperacion', idOp);
+                formData.append('tipo', result.value.tipo);
+                formData.append('comentario', result.value.comentario);
+
+                fetch('?handler=SolicitarRoleo', { method: 'POST', headers: { 'RequestVerificationToken': token }, body: formData })
+                    .then(res => res.json()).then(data => {
+                        if (data.success) {
+                            Swal.fire({ icon: 'success', title: 'Solicitud enviada', text: 'Nuestro equipo de Operaciones fue notificado y te contactará a la brevedad.', confirmButtonColor: '#2c1b4d' })
+                                .then(() => location.reload());
+                        } else {
+                            Swal.fire({ icon: 'error', title: 'No se pudo enviar', text: data.message || 'Inténtalo nuevamente.', confirmButtonColor: '#2c1b4d' });
+                        }
+                    }).catch(() => Swal.fire({ icon: 'error', title: 'Fallo de conexión', confirmButtonColor: '#2c1b4d' }));
+            });
+        }
+
+        document.addEventListener('DOMContentLoaded', function () {
+            const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+            // ===== Reveal on scroll =====
+            const reveals = document.querySelectorAll('.pc-reveal');
+            if ('IntersectionObserver' in window && !reduce) {
+                const io = new IntersectionObserver((entries) => {
+                    entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); } });
+                }, { threshold: 0.08, rootMargin: '0px 0px -40px 0px' });
+                reveals.forEach(el => io.observe(el));
+            } else {
+                reveals.forEach(el => el.classList.add('in'));
+            }
+
+            // ===== Barras y barcos (animación de entrada) =====
+            requestAnimationFrame(() => setTimeout(() => {
+                document.querySelectorAll('[data-w]').forEach(el => el.style.width = el.dataset.w + '%');
+                document.querySelectorAll('[data-left]').forEach(el => el.style.left = el.dataset.left + '%');
+            }, 150));
+
+            // ===== Estado abierto de tarjetas =====
+            document.querySelectorAll('.pc-collapse').forEach(c => {
+                const card = c.closest('.pc-ship');
+                const head = card.querySelector('.pc-ship-head');
+                c.addEventListener('show.bs.collapse', () => { card.classList.add('is-open'); head.setAttribute('aria-expanded', 'true'); });
+                c.addEventListener('hide.bs.collapse', () => { card.classList.remove('is-open'); head.setAttribute('aria-expanded', 'false'); });
+            });
+            document.querySelectorAll('.pc-ship-head[role="button"]').forEach(h => {
+                h.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); h.click(); } });
+            });
+
+            // ===== Filtros =====
+            const chips = document.querySelectorAll('.pc-seg [data-filter]');
+            const aplicarFiltro = (f) => {
+                chips.forEach(x => x.classList.toggle('active', x.dataset.filter === f));
+                let visibles = 0;
+                document.querySelectorAll('.pc-ship').forEach(s => {
+                    const ok = f === 'todas' || (s.dataset.cat || '').split(' ').includes(f);
+                    s.style.display = ok ? '' : 'none';
+                    if (ok) visibles++;
+                });
+                const empty = document.getElementById('pcFilterEmpty');
+                if (empty) empty.hidden = visibles > 0;
+            };
+            chips.forEach(c => c.addEventListener('click', () => aplicarFiltro(c.dataset.filter)));
+
+            // Enlaces desde Inicio: ?vista=curso|accion|finalizada filtra la lista y
+            // ?abrir=<id> abre el detalle de esa operación.
+            const params = new URLSearchParams(window.location.search);
+            const vistaUrl = params.get('vista');
+            if (vistaUrl && Array.from(chips).some(c => c.dataset.filter === vistaUrl)) aplicarFiltro(vistaUrl);
+            const abrir = params.get('abrir');
+            if (abrir) {
+                const el = document.getElementById('detail-' + abrir);
+                if (el) {
+                    el.closest('.pc-ship')?.scrollIntoView({ block: 'center' });
+                    if (window.bootstrap) bootstrap.Collapse.getOrCreateInstance(el, { toggle: false }).show();
+                }
+            }
+
+            // ===== Abrir detalle desde la alerta =====
+            document.querySelectorAll('[data-open]').forEach(a => a.addEventListener('click', e => {
+                e.preventDefault();
+                const el = document.getElementById(a.dataset.open);
+                if (!el) return;
+                el.closest('.pc-ship')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                if (window.bootstrap) bootstrap.Collapse.getOrCreateInstance(el, { toggle: false }).show();
+            }));
+
+        });
+    </script>
+
+}

@@ -19,9 +19,11 @@ namespace AtilsonCargoSpa.Pages
 
         // Por seguridad, si alguien entra tipeando /Logout en la URL (GET), 
         // también lo deslogueamos.
-        public async Task<IActionResult> OnGetAsync()
+        // ?vuelta=/RegistroEquipo: tras cerrar sesión vuelve a esa página (solo rutas locales).
+        public async Task<IActionResult> OnGetAsync(string? vuelta)
         {
             await HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+            if (!string.IsNullOrEmpty(vuelta) && Url.IsLocalUrl(vuelta)) return LocalRedirect(vuelta);
             return RedirectToPage("/Login");
         }
     }

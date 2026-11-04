@@ -8,13 +8,12 @@
     var depositosDb = ViewData["DepositosList"] as IEnumerable<AtilsonCargoSpa.Models.Deposito>;
     var plantasDb = ViewData["PlantasList"] as IEnumerable<AtilsonCargoSpa.Models.Planta>;
 
-    // 👇 NUEVA VARIABLE PARA LAS AGENCIAS 👇
+        // 👇 NUEVA VARIABLE PARA LAS AGENCIAS 👇
         var agenciasDb = ViewData["AgenciasList"] as IEnumerable<AtilsonCargoSpa.Models.AgenciasAduana>;
-    var proveedoresTransporteDb = ViewData["ProveedoresTransporteList"] as IEnumerable<AtilsonCargoSpa.Models.Proveedore>;
 }
-
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+<link rel="stylesheet" href="~/css/emision-bl.css" asp-append-version="true" />
 
 <style>
     /* VARIABLES CORPORATIVAS B2B ATILSON */
@@ -424,6 +423,51 @@
     background: #f3e8ff;
     border-color: #d8b4fe;
     }
+
+    /* Tarjeta de referencia: qué pidió el cliente en su cotización (oct-2026).
+       Queda fija arriba del formulario mientras el operador completa el
+       resto — antes esta info solo se veía una vez, en el modal de la
+       precarga, y se perdía de vista al cerrarlo. */
+    .cot-ref-card {
+    background: linear-gradient(135deg, #faf5ff, #f5f3ff);
+    border: 1.5px solid var(--atilson-purple);
+    border-radius: 12px;
+    padding: 14px 20px;
+    }
+
+    .cot-ref-badge {
+    background: var(--atilson-purple);
+    color: #fff;
+    font-size: 10px;
+    font-weight: 800;
+    padding: 4px 11px;
+    border-radius: 20px;
+    text-transform: uppercase;
+    letter-spacing: .5px;
+    white-space: nowrap;
+    }
+
+    .cot-chip {
+    display: inline-flex;
+    align-items: center;
+    background: #fff;
+    border: 1px solid rgba(109, 45, 158, 0.2);
+    border-radius: 8px;
+    padding: 4px 10px;
+    font-size: 11.5px;
+    font-weight: 600;
+    color: var(--txt-main);
+    }
+
+    .cot-ref-close {
+    background: none;
+    border: none;
+    color: var(--txt-muted);
+    font-size: 18px;
+    line-height: 1;
+    padding: 0 4px;
+    cursor: pointer;
+    }
 </style>
 
 <div class="container-fluid py-4" style="max-width: 1300px;">
@@ -453,7 +497,23 @@
         </div>
     </div>
 
+    <div class="cot-ref-card mb-4 shadow-sm d-none" id="cardPrecargaCot">
+        <div class="d-flex align-items-start justify-content-between gap-2">
+            <div class="d-flex align-items-center flex-wrap gap-2">
+                <span class="cot-ref-badge"><i class="bi bi-rocket-takeoff-fill me-1"></i> Cotización <span id="cotPrecargaId"></span></span>
+                <div id="cotChipsRow" class="d-flex flex-wrap gap-2"></div>
+            </div>
+            <button type="button" class="cot-ref-close" onclick="document.getElementById('cardPrecargaCot').classList.add('d-none')" aria-label="Cerrar" title="Cerrar">&times;</button>
+        </div>
+        <div id="cotObsWrap" style="display:none; margin-top:8px; font-size:12px; color: var(--txt-muted); border-top: 1px dashed rgba(109,45,158,.25); padding-top: 8px;">
+            <i class="bi bi-chat-left-text me-1"></i> <span id="cotObsTexto"></span>
+        </div>
+    </div>
+
     <form method="post" id="frmOperacion" novalidate enctype="multipart/form-data">
+        @* El guardado va por fetch(window.location.pathname), sin el ?cotId de la URL:
+           se manda en el formulario para marcar la solicitud del portal como convertida. *@
+        <input type="hidden" name="CotId" value="@Model.CotId" />
         <div class="wizard-container">
             <div class="wizard-header">
                 <ul class="nav-wizard" id="wizardTabs" role="tablist">
@@ -481,11 +541,6 @@
             </div>
 
             <div class="tab-content">
-                <div class="col-md-4 mb-4 d-none" id="bookingFieldWrapper">
-                    <label class="erp-label text-primary">Booking / Ref N° <span class="text-danger">*</span></label>
-                    <input asp-for="Operacione.NumeroBooking" class="form-control erp-input text-uppercase fw-bold border-primary req-general" id="inpBooking" placeholder="Ej: SCL123456" style="background-color: #f0f9ff;" />
-                </div>
-
                 <div class="tab-pane active" id="step-general">
                     <div class="section-title">
                         <div><i class="bi bi-info-circle-fill"></i> Datos Estructurales</div>
@@ -534,9 +589,55 @@
                                 <option value="">-- Opcional --</option>
                             </select>
                         </div>
+                        <div class="col-md-3" id="colCondicionPago">
+                            <label class="erp-label">Condición de Pago</label>
+                            <select asp-for="Operacione.CondicionPago" class="form-select erp-input" id="inpCondicionPago">
+                                <option value="">-- Opcional --</option>
+                                <option value="1">Prepaid</option>
+                                <option value="2">Full Prepaid</option>
+                                <option value="3">Collect</option>
+                                <option value="4">Full Collect</option>
+                                <option value="5">Elsewhere</option>
+                            </select>
+                        </div>
                     </div>
 
                     <div id="restOfGeneralFields" style="display: none; animation: fadeInStep 0.4s ease forwards;">
+                        @* Datos del embarque (minuta Portal Web de Clientes / oct-2026): Booking,
+                           Naviera, Nave y Propietario de Contrato van aquí para TODOS los
+                           servicios (Marítimo, Terrestre, Documental e Integral). Sin tramo
+                           marítimo, la ejecutiva igual debe saber a qué reserva responde. *@
+                        <div class="section-title mt-2">
+                            <div><i class="bi bi-life-preserver"></i> Datos del Embarque</div>
+                        </div>
+                        <div class="row g-4 mb-4" id="embarqueRow">
+                            <div class="col-md-3" id="bookingFieldWrapper">
+                                <label class="erp-label text-primary">Booking / Ref N° <span class="text-danger">*</span></label>
+                                <input asp-for="Operacione.NumeroBooking" class="form-control erp-input text-uppercase fw-bold border-primary req-general" id="inpBooking" placeholder="Ej: SCL123456" style="background-color: #f0f9ff;" />
+                            </div>
+                            <div class="col-md-3" id="colNaviera">
+                                <label class="erp-label">Naviera <span class="text-danger">*</span></label>
+                                <select asp-for="Operacione.IdNaviera" class="form-select erp-input select2-enable" id="inpNaviera" asp-items="ViewBag.IdNaviera">
+                                    <option value="">-- Seleccionar --</option>
+                                </select>
+                            </div>
+                            <div class="col-md-3" id="colNave">
+                                <label class="erp-label">Nave / Viaje <span class="text-danger" id="astNave" style="display:none;">*</span></label>
+                                <input asp-for="Operacione.Nave" class="form-control erp-input text-uppercase" id="inpNave" maxlength="150" placeholder="Nombre de la Nave" />
+                            </div>
+                            <div class="col-md-3" id="colPropietario">
+                                <label class="erp-label">Propietario de Contrato <span class="text-danger">*</span></label>
+                                <select asp-for="Operacione.PropietarioContrato" class="form-select erp-input" id="inpPropietario" onchange="togglePropietarioOtro()">
+                                    <option value="">-- Seleccionar --</option>
+                                    @foreach (var opc in AtilsonCargoSpa.Models.Operacione.OpcionesPropietarioContrato)
+                                    {
+                                        <option value="@opc.Valor">@opc.Texto</option>
+                                    }
+                                </select>
+                                <input asp-for="Operacione.PropietarioContratoOtro" class="form-control erp-input text-uppercase mt-2" id="inpPropietarioOtro" maxlength="100" placeholder="Cliente / recibidor (opcional)" style="display:none;" />
+                            </div>
+                        </div>
+
                         <div class="section-title mt-5">
                             <div><i class="bi bi-boxes"></i> Declaración de Carga</div>
                         </div>
@@ -567,7 +668,13 @@
                                     </div>
                                     <div class="col-md-3">
                                         <label class="erp-label">Mercancía <span class="text-danger">*</span></label>
-                                        <input asp-for="Operacione.Commodity" class="form-control erp-input text-uppercase req-general" id="inpCommodity" placeholder="Ej: Vino, Fruta..." />
+                                        <select asp-for="Operacione.Commodity" class="form-select erp-input text-uppercase req-general" id="inpCommodity">
+                                            <option value="">-- Seleccionar --</option>
+                                            @foreach (var com in AtilsonCargoSpa.Helpers.CommodityHelper.Lista)
+                                            {
+                                                <option value="@com">@com</option>
+                                            }
+                                        </select>
                                     </div>
                                 </div>
 
@@ -629,17 +736,10 @@
                         <div><i class="bi bi-compass-fill"></i> Routing y Asignación Naviera</div>
                     </div>
                     <div class="row g-4 mb-5" id="maritimoRow">
-                        <div class="col-md-4">
-                            <label class="erp-label">Naviera Asignada <span class="text-danger req-maritimo-asterisk" style="display:none;">*</span></label>
-                            <select asp-for="Operacione.IdNaviera" class="form-select erp-input req-naviera select2-enable" id="inpNaviera" asp-items="ViewBag.IdNaviera">
-                                <option value="">-- Seleccionar --</option>
-                            </select>
+                        <div class="col-12">
+                            <div class="text-muted" style="font-size:11.5px;"><i class="bi bi-info-circle me-1"></i>Naviera, Nave y Propietario de Contrato se ingresan en <strong>Datos del Embarque</strong> (pestaña Base y Carga).</div>
                         </div>
-                        <div class="col-md-4">
-                            <label class="erp-label">Nave / Viaje</label>
-                            <input asp-for="Operacione.Nave" class="form-control erp-input text-uppercase" id="inpNave" placeholder="Nombre de la Nave" />
-                        </div>
-                        <div class="col-md-4">
+                        <div class="col-md-6">
                             <label class="erp-label">Modalidad de Tránsito</label>
                             <div class="d-flex gap-2">
                                 <select class="form-select erp-input" id="selectTransbordo" style="width: 50%;">
@@ -649,6 +749,29 @@
                                 <input asp-for="Operacione.Transbordo" class="form-control erp-input text-uppercase" id="divPuertoTransbordo" placeholder="Puerto..." style="display: none; width: 50%;" />
                             </div>
                         </div>
+                        <div class="col-md-6">
+                            <label class="erp-label" for="inpTipoTarifa">Condición de Tarifa</label>
+                            <select asp-for="Operacione.TipoTarifaMaritima" class="form-select erp-input" id="inpTipoTarifa">
+                                <option value="">-- Seleccionar --</option>
+                                <option value="SPOT">Spot</option>
+                                <option value="CONTRATO">Contrato</option>
+                            </select>
+                            <div class="text-muted mt-1" style="font-size:11px;">Spot: roleo/cancelación/no show con 7 días o menos al zarpe genera penalidad. Contrato: sin costo.</div>
+                        </div>
+                        <div class="col-md-6" id="wrapDepositoGateMar" style="display:none;">
+                            <label class="erp-label" for="inpDepositoGateMar">Depósito de Retiro Vacío</label>
+                            <select class="form-select erp-input text-uppercase select2-enable" id="inpDepositoGateMar" name="DepositoRetiroGateMar">
+                                <option value="">Seleccionar...</option>
+                                @if (depositosDb != null)
+                                {
+                                    foreach (var dep in depositosDb)
+                                    {
+                                        <option value="@dep.NombreDeposito">@dep.NombreDeposito</option>
+                                    }
+                                }
+                            </select>
+                            <div class="text-muted mt-1" style="font-size:11px;">Para la tarifa del Gate del depósito (sin servicio terrestre).</div>
+                        </div>
                     </div>
 
                                         <div class="section-title mt-4">
@@ -656,25 +779,16 @@
                     </div>
                     <div class="row g-4 mb-5">
                         <div class="col-12">
-                            <div class="d-flex flex-wrap gap-4 align-items-center p-3 rounded" style="background: var(--bg-soft); border: 1px solid var(--border-soft);">
-                                <div class="form-check">
-                                    <input class="form-check-input" type="checkbox" name="TipoEmisionBl" value="ORIGINALES_DESTINO" id="chkBlOrig">
-                                    <label class="form-check-label fw-bold" for="chkBlOrig" style="font-size:13px; color: var(--txt-main);">Originales - EN DESTINO</label>
-                                </div>
-                                <div class="form-check">
-                                    <input class="form-check-input" type="checkbox" name="TipoEmisionBl" value="SEA_WAYBILL" id="chkBlSea">
-                                    <label class="form-check-label fw-bold" for="chkBlSea" style="font-size:13px; color: var(--txt-main);">Sea Waybill</label>
-                                </div>
-                                <div class="form-check">
-                                    <input class="form-check-input" type="checkbox" name="TipoEmisionBl" value="TELEX_RELEASE" id="chkBlTelex">
-                                    <label class="form-check-label fw-bold" for="chkBlTelex" style="font-size:13px; color: var(--txt-main);">Telex Release</label>
-                                </div>
-                                <div class="form-check d-flex align-items-center gap-2">
-                                    <input class="form-check-input" type="checkbox" name="TipoEmisionBl" value="OTRO" id="chkBlOtro" onchange="document.getElementById('txtBlOtro').style.display = this.checked ? 'inline-block' : 'none';">
-                                    <label class="form-check-label fw-bold" for="chkBlOtro" style="font-size:13px; color: var(--txt-main);">Otro:</label>
-                                    <input type="text" name="TipoEmisionBlOtro" id="txtBlOtro" class="form-control erp-input text-uppercase" placeholder="Especificar..." style="display:none; width:220px;">
-                                </div>
-                            </div>
+                            @{
+                                var vmEmisionCreate = new AtilsonCargoSpa.Models.EmisionBlCamposVm
+                                {
+                                    IdPrefijo = "embl-create",
+                                    TituloTipo = "Tipo de emisión",
+                                    Estilo = "create"
+                                };
+                            }
+                            <partial name="_EmisionBlCampos" model="vmEmisionCreate" />
+                            <div class="text-muted mt-2" style="font-size:11px;">Se elige uno. El valor por naviera lo define Comercial (Tarifas de Emisión B/L) y pasa solo a Finanzas. Queda guardado y se ve en Detalle (Gestión de Matriz), donde es obligatorio.</div>
                         </div>
                     </div>
 
@@ -729,6 +843,7 @@
                                             }
                                         }
                                     </select>
+                                    <small class="d-none" id="hintDestinoCot" style="display:block; margin-top:5px; font-size:11px; font-weight:600; color: var(--atilson-purple);"></small>
                                 </div>
                                 <div class="col-md-12 mt-2 d-none" id="divTerminalImpo">
                                     <label class="erp-label">Terminal Llegada</label>
@@ -784,30 +899,12 @@
                         </div>
                     </div>
 
-                    <div class="row g-4 mb-4" id="terrestreBookingContainer"></div>
-
                                         <div class="contenedor-item position-relative" id="transporte-principal-card">
                         <div class="d-flex justify-content-between align-items-center mb-3 transporte-toggle-header" data-bs-toggle="collapse" data-bs-target="#transporte-principal-body" aria-expanded="true">
                             <h6 class="erp-label m-0" style="color: var(--atilson-dark); font-size: 12px;"><i class="bi bi-1-circle-fill me-1"></i> Transporte — Contenedor Principal</h6>
                             <i class="bi bi-chevron-up toggle-chevron" style="color:#94a3b8; font-size: 14px;"></i>
                         </div>
-                        <div class="collapse show" id="transporte-principal-body">
-                            <div class="row g-4 mb-3">
-                                <div class="col-md-6">
-                                    <label class="erp-label">Empresa Transporte</label>
-                                    <select class="form-select erp-input text-uppercase select2-enable" id="inpEmpresaTransportePrincipal" name="EmpresaTransporte">
-                                        <option value="">-- Buscar Empresa --</option>
-                                        @if (proveedoresTransporteDb != null)
-                                        {
-                                            foreach (var prov in proveedoresTransporteDb)
-                                            {
-                                                <option value="@prov.NombreProveedor">@prov.NombreProveedor</option>
-                                            }
-                                        }
-                                    </select>
-                                </div>
-                            </div>
-
+                                                <div class="collapse show" id="transporte-principal-body">
                             <div class="row g-4">
                                 <div class="col-md-6 border-end">
                                     <div class="row g-3">
@@ -891,7 +988,22 @@
                     <div class="section-title">
                         <div><i class="bi bi-building"></i> Aduana y Despachos Documentales</div>
                     </div>
-                    <div class="row g-4 mb-4" id="documentalBookingContainer"></div>
+                    <div class="row g-4 mb-3" id="wrapDepositoGateDoc" style="display:none;">
+                        <div class="col-md-6">
+                            <label class="erp-label" for="inpDepositoGateDoc">Depósito de Retiro Vacío</label>
+                            <select class="form-select erp-input text-uppercase select2-enable" id="inpDepositoGateDoc" name="DepositoRetiroGateDoc">
+                                <option value="">Seleccionar...</option>
+                                @if (depositosDb != null)
+                                {
+                                    foreach (var dep in depositosDb)
+                                    {
+                                        <option value="@dep.NombreDeposito">@dep.NombreDeposito</option>
+                                    }
+                                }
+                            </select>
+                            <div class="text-muted mt-1" style="font-size:11px;">Para la tarifa del Gate y saber a qué depósito pagar.</div>
+                        </div>
+                    </div>
                     <div class="row g-4 mb-5">
                         <div class="col-md-6">
                             <label class="erp-label">Agencia de Aduana Designada</label>
@@ -909,6 +1021,17 @@
                         <div class="col-md-6">
                             <label class="erp-label">N° Correlativo DUS / DIN</label>
                             <input type="text" class="form-control erp-input text-uppercase" name="DocDus" id="inpDus" placeholder="Ej: 12345678" />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="erp-label">N° Instructivo de Embarque</label>
+                            <input asp-for="Operacione.NumeroInstructivo" class="form-control erp-input text-uppercase" id="inpNumeroInstructivo" maxlength="60" placeholder="Ej: INS-2026-0412" />
+                        </div>
+                        @* Espejo del Corte Documental (Operacione.CutOffMatriz vive en la pestaña
+                           Marítimo): en operaciones sin marítimo esa pestaña no se ve, así que se
+                           muestra aquí y se sincroniza por JS con #inpCorteDoc. *@
+                        <div class="col-md-6" id="colCorteDocDocumental" style="display:none;">
+                            <label class="erp-label">Corte Documental</label>
+                            <input type="datetime-local" class="form-control erp-input" id="inpCorteDocDocumental" />
                         </div>
 
                         <div class="col-12 mt-4 pt-4 border-top">
@@ -962,6 +1085,7 @@
                                 <div class="col-6"><span class="res-label text-muted">Cliente</span><p class="res-val" id="resCliente"></p></div>
                                 <div class="col-12"><span class="res-label text-muted">Servicio Contratado</span><p class="res-val text-muted" id="resServicio"></p></div>
                                 <div class="col-12"><span class="res-label text-muted">Movimiento</span><p class="res-val text-muted" id="resMov"></p></div>
+                                <div class="col-12"><span class="res-label text-muted">Naviera / Nave / Propietario de Contrato</span><p class="res-val" id="resEmbarque"></p></div>
                             </div>
                         </div>
 
@@ -1057,6 +1181,7 @@
 
 @section Scripts {
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="~/js/emision-bl.js" asp-append-version="true"></script>
     <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
     <script>
         // =========================================================================
@@ -1113,7 +1238,7 @@
 
         if (result.data.commodity) {
         const inp = document.getElementById('inpCommodity');
-        if (inp) { inp.value = result.data.commodity; inp.dispatchEvent(new Event('change')); }
+        if (inp) { window.fijarCommodity(inp, result.data.commodity); inp.dispatchEvent(new Event('change')); }
         }
 
         if (result.data.etd) {
@@ -1244,6 +1369,24 @@
         let originalDepositoOptions = []; // <--- AÑADIDO
         let modoActual = 'EXP';
 
+        // Mercancía / Commodity como lista (oct-2026): cerezas, ciruelas, kiwis... Se usa para
+        // el acuerdo Collect (ej. Late Arrival sin costo en cerezas y ciruelas). Un texto que
+        // no está en la lista (PDF, cotización) se elige por parecido o se agrega tal cual.
+        window.COMMODITIES = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(AtilsonCargoSpa.Helpers.CommodityHelper.Lista));
+        window.opcionesCommodityHtml = function () {
+            return '<option value="">-- Seleccionar --</option>' + window.COMMODITIES.map(c => `<option value="${c}">${c}</option>`).join('');
+        };
+        window.fijarCommodity = function (sel, texto) {
+            if (!sel || !texto) return;
+            const norm = (v) => (v || '').toString().normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().trim();
+            const t = norm(texto);
+            const raiz = (v) => v.replace(/(ES|S)$/, '');
+            let opt = Array.from(sel.options).find(o => o.value && norm(o.value) === t)
+                || Array.from(sel.options).find(o => o.value && t.split(/[\s,\/\-()]+/).some(p => p.length > 2 && raiz(norm(o.value)).startsWith(raiz(p))));
+            if (!opt) { opt = new Option(texto.toString().toUpperCase().trim(), texto.toString().toUpperCase().trim()); sel.add(opt); }
+            sel.value = opt.value;
+        };
+
         function removeAccents(str) {
         if (!str) return "";
         return str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase();
@@ -1340,8 +1483,9 @@
         }
         });
 
+                        const depActual = selDeposito.value;
             selDeposito.innerHTML = optionsHTML;
-            selDeposito.value = "";
+            selDeposito.value = Array.from(selDeposito.options).some(o => o.value === depActual) ? depActual : "";
             if (window.jQuery) $(selDeposito).trigger('change');
         };
 
@@ -1525,10 +1669,9 @@
             });
         };
 
-                window.agregarBloqueTransporteExtra = function(idx) {
+                        window.agregarBloqueTransporteExtra = function(idx) {
             const cont = document.getElementById('terrestre-extra-container');
             if (!cont) return;
-            const empresaOptions = document.getElementById('inpEmpresaTransportePrincipal')?.innerHTML || '<option value="">-- Empresa --</option>';
             const puertoOptions = document.getElementById('inpPuertoTerrestre')?.innerHTML || '<option value="">-- Puerto --</option>';
             const depositoOptions = document.getElementById('inpDepositoRetiro')?.innerHTML || '<option value="">-- Depósito --</option>';
             const plantaOptions = document.getElementById('inpPlanta')?.innerHTML || '<option value="">-- Planta --</option>';
@@ -1544,13 +1687,7 @@
                         <i class="bi bi-chevron-up toggle-chevron" style="color:#94a3b8; font-size: 14px;"></i>
                     </div>
                 </div>
-                <div class="collapse show" id="transporte-extra-body-${idx}">
-                    <div class="row g-4 mb-3">
-                        <div class="col-md-6">
-                            <label class="erp-label">Empresa Transporte</label>
-                            <select class="form-select erp-input text-uppercase" name="ContenedoresExtra[${idx}].EmpresaTransporte">${empresaOptions}</select>
-                        </div>
-                    </div>
+                                <div class="collapse show" id="transporte-extra-body-${idx}">
                     <div class="row g-4">
                         <div class="col-md-6 border-end">
                             <div class="row g-3">
@@ -1589,29 +1726,25 @@
             </div>`;
             cont.insertAdjacentHTML('beforeend', html);
 
-            const nuevoBloque = cont.lastElementChild;
-            window.initSelect2Element(nuevoBloque.querySelector(`[name="ContenedoresExtra[${idx}].EmpresaTransporte"]`));
+                        const nuevoBloque = cont.lastElementChild;
             window.initSelect2Element(nuevoBloque.querySelector(`[name="ContenedoresExtra[${idx}].DepositoRetiro"]`));
             window.initSelect2Element(nuevoBloque.querySelector(`[name="ContenedoresExtra[${idx}].PlantaCarga"]`));
         };
 
-        window.copiarDatosTransportePrincipal = function(idx) {
+                window.copiarDatosTransportePrincipal = function(idx) {
             const bloque = document.querySelector(`#terrestre-extra-container [data-idx="${idx}"]`);
             if (!bloque) return;
 
-            const empresaVal = document.getElementById('inpEmpresaTransportePrincipal')?.value || '';
             const depositoVal = document.getElementById('inpDepositoRetiro')?.value || '';
             const puertoVal = document.getElementById('inpPuertoTerrestre')?.value || '';
             const terminalVal = document.getElementById('inpTerminalTerrestre')?.value || '';
             const plantaVal = document.getElementById('inpPlanta')?.value || '';
 
-            const $selEmpresa = $(bloque.querySelector(`[name="ContenedoresExtra[${idx}].EmpresaTransporte"]`));
             const $selDeposito = $(bloque.querySelector(`[name="ContenedoresExtra[${idx}].DepositoRetiro"]`));
             const $selPlanta = $(bloque.querySelector(`[name="ContenedoresExtra[${idx}].PlantaCarga"]`));
             const selPuerto = bloque.querySelector(`[name="ContenedoresExtra[${idx}].PuertoEntrega"]`);
             const inpTerminal = bloque.querySelector(`[name="ContenedoresExtra[${idx}].TerminalTerrestreStr"]`);
 
-            if ($selEmpresa.length) $selEmpresa.val(empresaVal).trigger('change');
             if ($selDeposito.length) $selDeposito.val(depositoVal).trigger('change');
             if ($selPlanta.length) $selPlanta.val(plantaVal).trigger('change');
             if (selPuerto) selPuerto.value = puertoVal;
@@ -1747,8 +1880,6 @@
 
         const bookingField = document.getElementById('bookingFieldWrapper');
         const maritimoRow = document.getElementById('maritimoRow');
-        const terrestreContainer = document.getElementById('terrestreBookingContainer');
-        const documentalContainer = document.getElementById('documentalBookingContainer');
         const baseInfoRow = document.getElementById('baseInfoRow');
         const colCliente = document.getElementById('colCliente');
 
@@ -1776,20 +1907,19 @@
         liTer.style.display = esTerrestre ? 'block' : 'none';
         liDoc.style.display = esDocumental ? 'block' : 'none';
 
+        // Depósito de retiro vacío (oct-2026): sin servicio terrestre se pide en
+        // Marítimo; si es solo documental, en Documental (tarifa del Gate).
+        const wrapDepMar = document.getElementById('wrapDepositoGateMar');
+        const wrapDepDoc = document.getElementById('wrapDepositoGateDoc');
+        if (wrapDepMar) wrapDepMar.style.display = (esMaritimo && !esTerrestre) ? '' : 'none';
+        if (wrapDepDoc) wrapDepDoc.style.display = (esDocumental && !esMaritimo && !esTerrestre) ? '' : 'none';
+
         if (esMaritimo) activeTabs.push('tab-maritimo');
         if (esTerrestre) activeTabs.push('tab-terrestre');
         if (esDocumental) activeTabs.push('tab-documental');
 
+        // Booking, Naviera, Nave y Propietario viven fijos en "Datos del Embarque".
         bookingField.classList.remove('d-none');
-        if (esMaritimo && maritimoRow) {
-        maritimoRow.prepend(bookingField);
-        } else if (esTerrestre && terrestreContainer) {
-        terrestreContainer.appendChild(bookingField);
-        } else if (esDocumental && documentalContainer) {
-        documentalContainer.appendChild(bookingField);
-        } else if (baseInfoRow) {
-        baseInfoRow.insertBefore(bookingField, colCliente);
-        }
 
         const astMaritimo = document.querySelector('.req-maritimo-asterisk');
         document.querySelectorAll('.req-naviera, .req-carga').forEach(el => {
@@ -1948,7 +2078,7 @@
         </div>
         <div class="col-md-3">
         <label class="erp-label">Commodity <span class="text-danger">*</span></label>
-        <input name="ContenedoresExtra[${contadorContenedores}].Commodity" class="form-control erp-input text-uppercase req-general" placeholder="Ej: Vino..." />
+        <select name="ContenedoresExtra[${contadorContenedores}].Commodity" class="form-select erp-input text-uppercase req-general">${window.opcionesCommodityHtml()}</select>
         </div>
         </div>
         <div class="panel-reefer" style="display: none;">
@@ -1984,6 +2114,17 @@
         btnResumen.addEventListener('click', function() {
         let errores = [];
         document.querySelectorAll('.is-invalid').forEach(el => el.classList.remove('is-invalid'));
+
+        // Emisión B/L: opcional al crear, pero si se marca Originales el Lugar de
+        // emisión es obligatorio (y "Otro" exige el texto).
+        const tabMarBl = document.getElementById('tab-maritimo');
+        if (tabMarBl && tabMarBl.parentElement.style.display !== 'none' && window.emisionBlValidar) {
+        const errBl = window.emisionBlValidar(document.getElementById('embl-create'));
+        if (errBl) {
+        Swal.fire({ title: 'Tipo de Emisión B/L', text: errBl, icon: 'warning', confirmButtonColor: 'var(--atilson-dark)' });
+        return;
+        }
+        }
 
         document.querySelectorAll('.req-general, .req-activa').forEach(el => {
         if(!el.value) {
@@ -2039,13 +2180,21 @@
 
         let cbMov = document.getElementById('inpMovimiento');
         let cbPais = document.getElementById('inpPaisOrigen');
+        const selNavRes = document.getElementById('inpNaviera');
+        const selPropRes = document.getElementById('inpPropietario');
+        const propTxt = selPropRes && selPropRes.value
+            ? (selPropRes.value === 'OTROS' ? 'Otros: ' + (document.getElementById('inpPropietarioOtro')?.value.toUpperCase() || '-') : selPropRes.options[selPropRes.selectedIndex].text)
+            : '-';
+        document.getElementById('resEmbarque').innerText =
+            (selNavRes && selNavRes.value ? selNavRes.options[selNavRes.selectedIndex].text : '-') + ' / ' +
+            (document.getElementById('inpNave')?.value.toUpperCase() || '-') + ' / ' + propTxt;
         document.getElementById('resMov').innerText = (cbMov.value ? cbMov.options[cbMov.selectedIndex].text : "N/A") + " | País Origen: " + (cbPais.value ? cbPais.options[cbPais.selectedIndex].text : "N/A");
 
         let unidadesHTML = "";
         document.querySelectorAll('.contenedor-item').forEach((item, index) => {
         let tCarga = item.querySelector('.select-tipo-carga');
         let tUni = item.querySelector('.select-unidad');
-        let comm = item.querySelector('#inpCommodity') || item.querySelector('input[name*="Commodity"]');
+        let comm = item.querySelector('#inpCommodity') || item.querySelector('[name*="Commodity"]');
         if (tCarga && tUni && comm) {
         unidadesHTML += `> UNIDAD ${index+1}: [${tCarga.options[tCarga.selectedIndex]?.text}] ${tUni.value} | ${comm.value.toUpperCase()}<br/>`;
         }
@@ -2071,12 +2220,10 @@
         document.getElementById('resStackIn').innerText = document.getElementById('inpStackingIn')?.value.replace("T", " ") || "-";
         document.getElementById('resStackOut').innerText = document.getElementById('inpStackingOut')?.value.replace("T", " ") || "-";
         document.getElementById('resCorteDoc').innerText = document.getElementById('inpCorteDoc')?.value.replace("T", " ") || "-";
-                let tiposBlTxt = [];
-        document.querySelectorAll('input[name="TipoEmisionBl"]:checked').forEach(chk => {
-        let lbl = document.querySelector(`label[for="${chk.id}"]`)?.innerText || chk.value;
-        tiposBlTxt.push(lbl);
-        });
-        document.getElementById('resTipoEmisionBl').innerText = tiposBlTxt.length ? tiposBlTxt.join(", ") : "No especificado";
+        const resumenBl = window.emisionBlResumen ? window.emisionBlResumen(document.getElementById('embl-create')) : '';
+        const tipoTarifaSel = document.getElementById('inpTipoTarifa');
+        const tipoTarifaTxt = tipoTarifaSel && tipoTarifaSel.value ? ` · Tarifa ${tipoTarifaSel.options[tipoTarifaSel.selectedIndex].text}` : '';
+        document.getElementById('resTipoEmisionBl').innerText = (resumenBl || "No especificado") + tipoTarifaTxt;
         } else { document.getElementById('resBloqueMaritimo').style.display = 'none'; }
 
         if(document.getElementById('nav-item-terrestre').style.display !== 'none') {
@@ -2090,7 +2237,14 @@
         document.getElementById('resPuertoTer').innerText = (pTer && pTer.value ? pTer.options[pTer.selectedIndex].text : "-") + (termTer ? ` (${termTer.toUpperCase()})` : "");
 
         let depTer = document.getElementById('inpDepositoRetiro');
-        document.getElementById('resTermTer').innerText = depTer && depTer.value ? depTer.options[depTer.selectedIndex].text : "-";
+                const resTermTer = document.getElementById('resTermTer');
+        if (depTer && depTer.value) {
+            resTermTer.innerText = depTer.options[depTer.selectedIndex].text;
+            resTermTer.classList.remove('text-danger');
+        } else {
+            resTermTer.innerText = "⚠ SIN DEPÓSITO (no se calculará la tarifa de transporte)";
+            resTermTer.classList.add('text-danger');
+        }
 
         let pPlanta = document.getElementById('inpPlanta');
         document.getElementById('resPlanta').innerText = (pPlanta && pPlanta.value ? pPlanta.options[pPlanta.selectedIndex]?.text : "-").toUpperCase();
@@ -2208,6 +2362,7 @@
         iframe.src = data.pdfUrl;
 
         window._operacionGuardadaId = data.id;
+        window._correoClienteGuardado = data.correoCliente || '';
 
         const indicador = document.getElementById('indicadorEnvio');
         indicador.style.display = 'inline-flex';
@@ -2232,11 +2387,29 @@
         btn.disabled = true;
 
         try {
-        const response = await fetch(`/Operaciones/EnviarBookingCliente?id=${window._operacionGuardadaId}`, {
+        // Envía la confirmación de reserva (V1) con el mismo handler del tablero.
+        let correoDestino = window._correoClienteGuardado || '';
+        if (!correoDestino) {
+        const r = await Swal.fire({ title: 'Correo del cliente', input: 'email', inputPlaceholder: 'correo@cliente.cl', text: 'El cliente no tiene correo registrado. ¿A qué correo envío el booking?', showCancelButton: true, confirmButtonText: 'Enviar', cancelButtonText: 'Cancelar' });
+        if (!r.isConfirmed || !r.value) {
+        btn.innerHTML = '<i class="bi bi-send-check me-2"></i> Enviar al Cliente';
+        btn.disabled = false;
+        return;
+        }
+        correoDestino = r.value;
+        }
+        const tokenEnvio = document.querySelector('input[name="__RequestVerificationToken"]')?.value || '';
+        const fdEnvio = new FormData();
+        fdEnvio.append('id', window._operacionGuardadaId);
+        fdEnvio.append('correoDestino', correoDestino);
+        fdEnvio.append('nuevaVersion', '1');
+        fdEnvio.append('__RequestVerificationToken', tokenEnvio);
+        const response = await fetch('/Operaciones/Index?handler=EnviarCorreoReserva', {
         method: 'POST',
+        body: fdEnvio,
         headers: {
         'X-Requested-With': 'XMLHttpRequest',
-        'RequestVerificationToken': document.querySelector('input[name="__RequestVerificationToken"]')?.value || ''
+        'RequestVerificationToken': tokenEnvio
         }
         });
 
@@ -2412,5 +2585,355 @@
                 $(this).val($(this).val().toUpperCase());
             });
         });
+
+        // =========================================================================
+        // PRECARGA DESDE COTIZACIÓN DEL PORTAL (oct-2026)
+        // Cuando el ejecutivo aprueba una cotización desde el Centro de
+        // Notificaciones de Operaciones/Index ("APROBAR E INICIAR OPERACIÓN"),
+        // llega aquí con ?cotId=N. Antes ese parámetro no se leía en ningún
+        // lado y el operador tenía que volver a tipear todo lo que el cliente
+        // ya había mandado. Esto reutiliza el mismo patrón ya probado en
+        // producción para la lectura de PDF (fetch a un handler propio, y
+        // "setear value + dispatchEvent" sobre los mismos campos del
+        // formulario), así que no se tocó ninguna función existente.
+        // =========================================================================
+        const COT_ID = @(Model.CotId.HasValue ? Model.CotId.Value.ToString() : "null");
+
+        // Tarjeta fija arriba del formulario con lo que el cliente ya mandó en
+        // su cotización — antes esa info solo se veía una vez en el modal de
+        // confirmación y se perdía al cerrarlo; ahora queda de referencia
+        // mientras el operador completa naviera/puertos/fechas/tarifas.
+        function mostrarResumenPrecarga(d, cantidad) {
+            const card = document.getElementById('cardPrecargaCot');
+            if (!card) return;
+
+            document.getElementById('cotPrecargaId').textContent = '#' + d.idCotizacion;
+
+            const chips = [];
+            if (d.cliente) chips.push(['bi-building', d.cliente]);
+            if (d.polNombre || d.podNombre) chips.push(['bi-signpost-split', (d.polNombre || '-') + ' ➔ ' + (d.podNombre || '-')]);
+            else if (d.origen || d.destino) chips.push(['bi-signpost-split', (d.origen || '-') + ' ➔ ' + (d.destino || '-')]);
+            if (d.nave) chips.push(['bi-water', d.nave + (d.etd ? ' · ETD ' + d.etd.split('-').reverse().join('/') : '') + (d.desdeItinerario ? ' (itinerario)' : '')]);
+            else if (d.etd) chips.push(['bi-calendar-event', 'Embarque tentativo ' + d.etd.split('-').reverse().join('/')]);
+            if (d.booking) chips.push(['bi-ticket-perforated', 'BKG ' + d.booking]);
+            if (d.zonaEntrega) chips.push(['bi-geo', 'Retiro/entrega: ' + d.zonaEntrega]);
+            if (d.instructivo) chips.push(['bi-file-earmark-text', 'Instructivo ' + d.instructivo]);
+            (d.tarifaCotizada || []).forEach(t => chips.push(['bi-receipt', 'Cotizado: ' + t]));
+            if (d.tipoServicioTexto) chips.push(['bi-diagram-3', d.tipoServicioTexto]);
+            if (d.mercancia) chips.push(['bi-box-seam', d.mercancia]);
+            if (d.tipoContenedor) {
+                let txt = cantidad + ' x ' + d.tipoContenedor;
+                if (d.esReefer && d.condicionReefer) {
+                    txt += ' · ' + d.condicionReefer + (d.temperatura != null ? ' ' + d.temperatura + '°C' : '');
+                }
+                chips.push(['bi-boxes', txt]);
+            }
+            if (d.plantaCarga) chips.push(['bi-building-gear', d.plantaCarga]);
+            if (d.depositoRetiro) chips.push(['bi-inboxes', d.depositoRetiro]);
+
+            // Los textos vienen del cliente (portal): se escapan antes de armar el HTML.
+            const escHtml = v => String(v ?? '').replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+            document.getElementById('cotChipsRow').innerHTML = chips
+                .map(c => '<span class="cot-chip"><i class="bi ' + c[0] + ' me-1"></i>' + escHtml(c[1]) + '</span>')
+                .join('');
+
+            const obsWrap = document.getElementById('cotObsWrap');
+            if (d.comentarios) {
+                document.getElementById('cotObsTexto').textContent = d.comentarios;
+                obsWrap.style.display = 'block';
+            } else {
+                obsWrap.style.display = 'none';
+            }
+
+            card.classList.remove('d-none');
+        }
+
+        // Puerto de Destino (POD) reemplaza a "País de Destino" cuando el
+        // movimiento es Exportación (ver divPaisDestinoContainer más arriba),
+        // así que el país que el cliente puso en su cotización no tiene dónde
+        // precargarse — se deja como nota junto al selector para que el
+        // operador sepa qué puerto buscar, sin elegirlo por él (un mismo país
+        // puede tener varios puertos válidos).
+        function mostrarHintPaisDestino(d) {
+            const hint = document.getElementById('hintDestinoCot');
+            if (!hint) return;
+            if (modoActual === 'EXP' && d.destino) {
+                hint.innerHTML = '<i class="bi bi-info-circle me-1"></i>Cliente indicó destino: <strong>' + d.destino.toUpperCase() + '</strong> — elige el puerto correspondiente.';
+                hint.classList.remove('d-none');
+            } else {
+                hint.classList.add('d-none');
+            }
+        }
+
+        // Elige en un <select> la opción cuyo texto coincide (sin acentos) y
+        // dispara "change" para que corran las cascadas del formulario.
+        function elegirOpcionPorTexto(sel, texto) {
+            if (!sel || !texto) return false;
+            const t = removeAccents(texto);
+            const ops = Array.from(sel.options).filter(o => o.value);
+            const op = ops.find(o => removeAccents(o.text) === t) || ops.find(o => removeAccents(o.text).includes(t));
+            if (!op) return false;
+            sel.value = op.value;
+            sel.dispatchEvent(new Event('change'));
+            return true;
+        }
+
+        // Si el país de la solicitud no está en la lista corta de Create, se
+        // prueba con "Otros" para que el puerto igual aparezca.
+        function elegirPuertoConPais(selPuerto, selPais, nombrePuerto) {
+            if (!nombrePuerto || elegirOpcionPorTexto(selPuerto, nombrePuerto)) return;
+            const otros = selPais && Array.from(selPais.options).find(o => removeAccents(o.value) === 'OTROS');
+            if (otros && selPais.value !== otros.value) {
+                selPais.value = otros.value;
+                selPais.dispatchEvent(new Event('change'));
+                elegirOpcionPorTexto(selPuerto, nombrePuerto);
+            }
+        }
+
+        function precargarReservaCompleta(d) {
+            const servicio = removeAccents(d.tipoServicioTexto || '');
+            const esMar = servicio.includes('MAR') || servicio.includes('INTEGRAL');
+            const setVal = (id, v) => { const el = document.getElementById(id); if (el && v) { el.value = v; el.dispatchEvent(new Event('change')); } };
+
+            if (esMar) {
+                elegirPuertoConPais(document.getElementById('inpPol'), document.getElementById('inpPaisOrigen'), d.polNombre);
+                elegirPuertoConPais(document.getElementById('inpPod'), document.getElementById('inpPaisDestino'), d.podNombre);
+                setVal('inpEtd', d.etd);
+                setVal('inpEta', d.eta);
+            } else {
+                // Sin marítimo, el puerto del tramo terrestre lo informa el cliente.
+                elegirOpcionPorTexto(document.getElementById('inpPuertoTerrestre'), d.puertoTerrestre);
+            }
+            // Naviera y Nave están en "Datos del Embarque" para todos los servicios.
+            if (d.idNaviera) { setVal('inpNaviera', String(d.idNaviera)); if (window.jQuery) jQuery('#inpNaviera').trigger('change.select2'); }
+            setVal('inpNave', d.nave);
+            setVal('inpBooking', d.booking);
+            setVal('inpNumeroInstructivo', d.instructivo);
+            setVal('inpCorteDoc', d.corteDoc);
+            setVal('inpFechaCarga', d.fechaCarga);
+        }
+
+        // Datos del Embarque: Booking, Naviera y Propietario de Contrato son
+        // obligatorios en todos los servicios; la Nave además lo es cuando no hay
+        // tramo marítimo (Terrestre y/o Documental). "Otros" exige especificar.
+        function actualizarEmbarqueCliente() {
+            const ddl = document.getElementById('ddlServicio');
+            if (!ddl) return;
+            const txt = removeAccents(ddl.options[ddl.selectedIndex]?.text || '');
+            const conServicio = !!ddl.value;
+            const sinMar = conServicio && !(txt.includes('MAR') || txt.includes('INTEGRAL'));
+
+            const nav = document.getElementById('inpNaviera');
+            const prop = document.getElementById('inpPropietario');
+            const nave = document.getElementById('inpNave');
+            if (nav) nav.classList.toggle('req-activa', conServicio);
+            if (prop) prop.classList.toggle('req-activa', conServicio);
+            if (nave) nave.classList.toggle('req-activa', sinMar);
+            const astNave = document.getElementById('astNave');
+            if (astNave) astNave.style.display = sinMar ? 'inline' : 'none';
+            togglePropietarioOtro();
+
+            const colCorte = document.getElementById('colCorteDocDocumental');
+            if (colCorte) colCorte.style.display = sinMar ? '' : 'none';
+        }
+
+        function togglePropietarioOtro() {
+            const prop = document.getElementById('inpPropietario');
+            const otro = document.getElementById('inpPropietarioOtro');
+            if (!prop || !otro) return;
+            const esOtros = prop.value === 'OTROS';
+            otro.style.display = esOtros ? '' : 'none';
+            if (!esOtros) { otro.value = ''; otro.classList.remove('is-invalid'); }
+        }
+        window.togglePropietarioOtro = togglePropietarioOtro;
+
+        document.addEventListener('DOMContentLoaded', function () {
+            const ddl = document.getElementById('ddlServicio');
+            if (ddl) ddl.addEventListener('change', actualizarEmbarqueCliente);
+            actualizarEmbarqueCliente();
+
+            // Corte documental: la copia de la pestaña Documental y el campo real
+            // (pestaña Marítimo, el que se guarda) se mantienen iguales.
+            const corteReal = document.getElementById('inpCorteDoc');
+            const corteDoc = document.getElementById('inpCorteDocDocumental');
+            if (corteReal && corteDoc) {
+                corteDoc.value = corteReal.value;
+                corteDoc.addEventListener('change', () => { corteReal.value = corteDoc.value; });
+                corteReal.addEventListener('change', () => { corteDoc.value = corteReal.value; });
+            }
+        });
+
+        if (COT_ID) {
+            document.addEventListener('DOMContentLoaded', function () {
+                fetch('/Operaciones/Create?handler=CotizacionData&id=' + COT_ID)
+                    .then(res => res.json())
+                    .then(result => {
+                        if (!result.success) {
+                            Swal.fire('Aviso', result.message || 'No se pudo precargar la cotización.', 'warning');
+                            return;
+                        }
+                        const d = result.data;
+                        const cantidad = d.cantidadContenedores || 1;
+                        mostrarResumenPrecarga(d, cantidad);
+
+                        // 1. Cliente asociado
+                        if (d.idCliente) {
+                            const selCliente = document.getElementById('inpCliente');
+                            if (selCliente) { selCliente.value = d.idCliente; selCliente.dispatchEvent(new Event('change')); }
+                        }
+
+                        // 2. Tipo de carga de la unidad principal (Dry/Reefer) — se
+                        // deja listo ANTES de disparar el cambio de Servicio Logístico,
+                        // porque actualizarModulos() ya re-dispara el change de todos
+                        // los ".select-tipo-carga" (con bubbles:true) como parte de su
+                        // propia inicialización — así actualizarCarga() arma la lista
+                        // de unidades (20'/40' Dry o Reefer) con el tipo correcto sin
+                        // que haya que duplicar esa lógica aquí.
+                        if (d.tipoContenedor) {
+                            const selCarga = document.getElementById('inpCarga');
+                            if (selCarga) selCarga.value = d.esReefer ? '2' : '1';
+                        }
+
+                        // 3. Servicio Logístico (dispara direcciones EXP/IMP, países,
+                        // pestañas Marítimo/Transporte/Documental y la unidad principal).
+                        if (d.idTipoServicio) {
+                            const ddlServicio = document.getElementById('ddlServicio');
+                            if (ddlServicio) { ddlServicio.value = d.idTipoServicio; ddlServicio.dispatchEvent(new Event('change')); }
+                        }
+
+                        // 4. País de origen / destino — recién ahora, porque
+                        // configurarPuertosPorMovimiento (disparado por el paso 3)
+                        // es quien repuebla estos selects para la dirección EXP/IMP
+                        // de esta cotización; setearlos antes se perdería.
+                        if (d.origen) {
+                            const selPaisOrigen = document.getElementById('inpPaisOrigen');
+                            if (selPaisOrigen) {
+                                const match = Array.from(selPaisOrigen.options).find(opt => removeAccents(opt.value) === removeAccents(d.origen));
+                                if (match) { selPaisOrigen.value = match.value; selPaisOrigen.dispatchEvent(new Event('change')); }
+                            }
+                        }
+                        if (d.destino) {
+                            const selPaisDestino = document.getElementById('inpPaisDestino');
+                            if (selPaisDestino) {
+                                const match = Array.from(selPaisDestino.options).find(opt => removeAccents(opt.value) === removeAccents(d.destino));
+                                if (match) { selPaisDestino.value = match.value; selPaisDestino.dispatchEvent(new Event('change')); }
+                            }
+                        }
+                        mostrarHintPaisDestino(d);
+
+                        // 5. Mercancía (unidad principal)
+                        if (d.mercancia) {
+                            const inpCommodity = document.getElementById('inpCommodity');
+                            if (inpCommodity) { window.fijarCommodity(inpCommodity, d.mercancia); inpCommodity.dispatchEvent(new Event('change')); }
+                        }
+
+                        // 5b. Planta y Depósito (Transporte en Chile) — SolicitarReserva
+                        // ahora usa las mismas tablas Plantas/Depositos que este select,
+                        // así que el texto debería calzar exacto; se deja la comparación
+                        // sin acentos como red de seguridad, igual que con país.
+                        if (d.plantaCarga) {
+                            const selPlanta = document.getElementById('inpPlanta');
+                            if (selPlanta) {
+                                const match = Array.from(selPlanta.options).find(opt => removeAccents(opt.value) === removeAccents(d.plantaCarga));
+                                if (match) { selPlanta.value = match.value; selPlanta.dispatchEvent(new Event('change')); }
+                            }
+                        }
+                        if (d.depositoRetiro) {
+                            const selDeposito = document.getElementById('inpDepositoRetiro');
+                            if (selDeposito) {
+                                const match = Array.from(selDeposito.options).find(opt => removeAccents(opt.value) === removeAccents(d.depositoRetiro));
+                                if (match) { selDeposito.value = match.value; selDeposito.dispatchEvent(new Event('change')); }
+                            }
+                        }
+
+                        // 6. Tipo de unidad + parámetros reefer de la unidad principal.
+                        // Con un pequeño margen (igual que el lector de PDF) para no
+                        // competir con el repintado síncrono de arriba.
+                        setTimeout(() => {
+                            if (d.tipoContenedor) {
+                                const selUnidad = document.getElementById('inpTipoConte');
+                                if (selUnidad) {
+                                    const match = Array.from(selUnidad.options).find(opt => opt.value === d.tipoContenedor);
+                                    if (match) selUnidad.value = match.value;
+                                }
+                            }
+                            if (d.esReefer) {
+                                const selCondicion = document.querySelector('select[name="CondicionReefer"]');
+                                if (selCondicion && d.condicionReefer) { selCondicion.value = d.condicionReefer; selCondicion.dispatchEvent(new Event('change', { bubbles: true })); }
+                                const inpTemp = document.querySelector('input[name="TempSeteada"]');
+                                if (inpTemp && d.temperatura != null) inpTemp.value = d.temperatura;
+                                const inpVent = document.querySelector('input[name="Ventilacion"]');
+                                if (inpVent && d.ventilacion) inpVent.value = d.ventilacion;
+                                const inpHum = document.querySelector('input[name="Humedad"]');
+                                if (inpHum && d.humedad != null) inpHum.value = d.humedad;
+                            }
+
+                            // 7. Unidades adicionales: la cotización solo pide "cuántos
+                            // contenedores" sin distinguir tipo por unidad, así que se
+                            // agregan (cantidad - 1) unidades más con el mismo tipo de
+                            // carga/reefer que la principal, usando el mismo botón que
+                            // usaría el operador a mano — nada de lógica nueva, solo se
+                            // automatiza el click y se completan sus campos.
+                            // (cantidad ya quedó declarada más arriba, junto con mostrarResumenPrecarga)
+                            const btnAgregar = document.getElementById('btnAgregarContenedor');
+                            const contenedoresContainer = document.getElementById('contenedores-container');
+                            if (cantidad > 1 && btnAgregar && contenedoresContainer) {
+                                for (let i = 1; i < cantidad; i++) {
+                                    btnAgregar.click();
+                                    const nuevoItem = contenedoresContainer.lastElementChild;
+                                    if (!nuevoItem) continue;
+                                    const idx = nuevoItem.getAttribute('data-idx');
+
+                                    const selCargaExtra = nuevoItem.querySelector('.select-tipo-carga');
+                                    if (selCargaExtra && d.tipoContenedor) {
+                                        selCargaExtra.value = d.esReefer ? '2' : '1';
+                                        selCargaExtra.dispatchEvent(new Event('change', { bubbles: true }));
+                                    }
+                                    setTimeout(() => {
+                                        const selUnidadExtra = nuevoItem.querySelector('.select-unidad');
+                                        if (selUnidadExtra && d.tipoContenedor) {
+                                            const matchExtra = Array.from(selUnidadExtra.options).find(opt => opt.value === d.tipoContenedor);
+                                            if (matchExtra) selUnidadExtra.value = matchExtra.value;
+                                        }
+                                        const inpCommodityExtra = nuevoItem.querySelector(`[name="ContenedoresExtra[${idx}].Commodity"]`);
+                                        if (inpCommodityExtra && d.mercancia) window.fijarCommodity(inpCommodityExtra, d.mercancia);
+                                        if (d.esReefer) {
+                                            const selCondicionExtra = nuevoItem.querySelector('.select-condicion-reefer');
+                                            if (selCondicionExtra && d.condicionReefer) { selCondicionExtra.value = d.condicionReefer; selCondicionExtra.dispatchEvent(new Event('change', { bubbles: true })); }
+                                            const inpTempExtra = nuevoItem.querySelector(`input[name="ContenedoresExtra[${idx}].TempSeteada"]`);
+                                            if (inpTempExtra && d.temperatura != null) inpTempExtra.value = d.temperatura;
+                                            const inpVentExtra = nuevoItem.querySelector(`input[name="ContenedoresExtra[${idx}].Ventilacion"]`);
+                                            if (inpVentExtra && d.ventilacion) inpVentExtra.value = d.ventilacion;
+                                            const inpHumExtra = nuevoItem.querySelector(`input[name="ContenedoresExtra[${idx}].Humedad"]`);
+                                            if (inpHumExtra && d.humedad != null) inpHumExtra.value = d.humedad;
+                                        }
+                                    }, 80);
+                                }
+                            }
+
+                            // 8. Solicitud de Reserva completa (oct-2026): puertos, nave
+                            // elegida del itinerario, fechas, booking/naviera del cliente,
+                            // puerto terrestre y corte documental.
+                            precargarReservaCompleta(d);
+
+                            // El detalle completo ya quedó arriba en la tarjeta fija
+                            // (mostrarResumenPrecarga) — este toast es solo la
+                            // confirmación de que se precargó bien.
+                            Swal.fire({
+                                title: '<i class="bi bi-rocket-takeoff-fill text-info me-2"></i>Cotización #' + d.idCotizacion + ' precargada',
+                                text: 'Revisa la tarjeta arriba del formulario y completa lo que falte (naviera, puertos, fechas, tarifas) antes de guardar.',
+                                icon: 'info',
+                                confirmButtonColor: 'var(--atilson-dark)',
+                                timer: 3500,
+                                timerProgressBar: true
+                            });
+                        }, 250);
+                    })
+                    .catch(err => {
+                        console.error(err);
+                        Swal.fire('Error', 'No se pudo precargar la cotización. Completa el formulario manualmente.', 'error');
+                    });
+            });
+        }
     </script>
 }

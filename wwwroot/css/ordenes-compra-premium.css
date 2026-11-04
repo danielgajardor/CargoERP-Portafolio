@@ -1,0 +1,109 @@
+/* =========================================================================
+   ÓRDENES DE COMPRA — CAPA PREMIUM
+   Mismo lenguaje visual que Control Financiero (comparte casi la misma
+   estructura de grilla/anidado) y el resto de la familia premium: gradiente
+   morado/violeta, Plus Jakarta Sans, sombras "glow", radios grandes. Solo
+   propiedades visuales — el handler AsignarOC y el bloqueo por valor
+   pendiente de transporte no fueron tocados.
+
+   Por qué va en un archivo aparte y todo acotado a .oc-premium: esta vista
+   comparte nombres de clase (.workspace-nav, .ws-btn, .table-main-grid,
+   .nested-container, .nested-table, .row-group-header...) con Finanzas/Index
+   y Facturación, que todavía no pasaron por este rediseño — acotando todo a
+   .oc-premium esas vistas no cambian en absoluto.
+   ========================================================================= */
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600&display=swap');
+
+/* ---------- 0. Tokens ---------- */
+.oc-premium {
+    --oc-brand: #6d2d9e;
+    --oc-brand-2: #8b5cf6;
+    --oc-deep: #2c1b4d;
+    --oc-ink: #140c26;
+    --oc-muted: #6b6880;
+    --oc-line: #ece8f3;
+    --oc-soft: #f8f7fc;
+    --oc-tint: #f4eefb;
+    --oc-grad: linear-gradient(135deg, #6d2d9e 0%, #8b5cf6 55%, #60a5fa 100%);
+    --oc-shadow: 0 1px 2px rgba(20,12,38,.04), 0 18px 40px -26px rgba(44,27,77,.28);
+
+    /* Esta vista ya traía su propio alias local (--atilson-slate-900/500,
+       --atilson-bg-soft, --atilson-border → design-system.css) para no
+       tocar los usos de esas variables repartidos en el archivo — se
+       realinean acá al mismo truco, esta vez al sistema premium. */
+    --atilson-slate-900: #140c26;
+    --atilson-slate-500: #6b6880;
+    --atilson-bg-soft: #f8f7fc;
+    --atilson-border: #ece8f3;
+
+    font-family: 'Plus Jakarta Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+    padding-bottom: 48px;
+}
+.oc-premium .font-monospace {
+    font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Consolas, monospace !important;
+}
+
+body:has(.oc-premium) {
+    background:
+        radial-gradient(1100px 460px at 100% -10%, rgba(139,92,246,.06), transparent 60%),
+        #f5f4f9;
+}
+
+/* ---------- 1. Encabezado de página ---------- */
+.oc-premium .oc-header-icon {
+    width: 46px; height: 46px; border-radius: 12px; flex-shrink: 0;
+    background: var(--oc-grad); color: #fff;
+    display: flex; align-items: center; justify-content: center; font-size: 20px;
+    box-shadow: 0 10px 20px -10px rgba(109,45,158,.6);
+}
+
+/* ---------- 2. Workspace nav (Main Board / Control Financiero / ...) ---------- */
+.oc-premium .workspace-nav {
+    background: #fff !important; border-color: var(--oc-line) !important; box-shadow: var(--oc-shadow) !important;
+    padding: 5px !important; border-radius: 14px !important;
+}
+.oc-premium .ws-btn { border-radius: 10px !important; }
+.oc-premium .ws-btn:hover { background: var(--oc-tint) !important; color: var(--oc-brand) !important; }
+.oc-premium .ws-btn.active {
+    background: linear-gradient(135deg, #2c1b4d, #5b2a8a) !important; color: #fff !important;
+    box-shadow: 0 10px 20px -10px rgba(44,27,77,.7) !important;
+}
+
+/* ---------- 3. Grilla principal ---------- */
+.oc-premium .fin-table-wrapper {
+    border-color: var(--oc-line) !important; border-radius: 18px !important; box-shadow: var(--oc-shadow) !important;
+}
+.oc-premium .table-main-grid > thead > tr > th {
+    border-bottom-color: var(--oc-ink) !important; letter-spacing: .6px !important;
+}
+.oc-premium .table-main-grid > tbody > tr.main-row > td { border-bottom-color: var(--oc-line) !important; }
+.oc-premium .table-main-grid > tbody > tr.main-row:hover > td { background-color: var(--oc-tint) !important; }
+
+.oc-premium .row-egreso > td:first-child { border-left-width: 4px !important; }
+
+.oc-premium .main-row .bi-chevron-right { transition: transform .25s ease; display: inline-block; }
+.oc-premium .main-row[aria-expanded="true"] .bi-chevron-right { transform: rotate(90deg); color: var(--oc-brand) !important; }
+
+.oc-premium .form-control, .oc-premium .input-group-text { border-radius: 9px !important; }
+.oc-premium .form-control:focus {
+    border-color: var(--oc-brand-2) !important; box-shadow: 0 0 0 4px rgba(139,92,246,.12) !important;
+}
+
+/* ---------- 4. Grilla anidada (detalle por proveedor) ---------- */
+.oc-premium .nested-table thead th {
+    background-color: var(--oc-tint) !important; color: var(--oc-brand) !important; border-bottom-color: var(--oc-line) !important;
+}
+.oc-premium .nested-table tbody td { border-bottom-color: var(--oc-line) !important; }
+.oc-premium .row-group-header td { background-color: var(--oc-tint) !important; color: var(--oc-brand) !important; border-bottom-color: var(--oc-line) !important; }
+
+/* ---------- 5. Botones y acciones de OC ---------- */
+.oc-premium .btn { border-radius: 9px !important; transition: all .18s ease !important; }
+.oc-premium .btn:hover:not(:disabled) { transform: translateY(-1px); }
+.oc-premium .btn-outline-success:hover { background: var(--success) !important; }
+.oc-premium .btn-oc-pdf { border-radius: 8px !important; transition: all .18s ease; }
+.oc-premium .btn-oc-pdf:hover { transform: translateY(-1px); box-shadow: 0 6px 14px -8px rgba(37,99,235,.4); }
+
+/* ---------- 6. Responsive ---------- */
+@media (prefers-reduced-motion: reduce) {
+    .oc-premium .main-row .bi-chevron-right, .oc-premium .btn, .oc-premium .btn-oc-pdf { transition: none !important; }
+}

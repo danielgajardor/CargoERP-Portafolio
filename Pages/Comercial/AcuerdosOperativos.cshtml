@@ -4,13 +4,53 @@
     ViewData["Title"] = "Bookings - Acuerdos Operativos";
 }
 
+@functions {
+    // Mismos conceptos "por contenedor" que en Control Financiero: Gate OUT/IN,
+    // Seguridad ISPS y Honorarios Agencia se generan uno por unidad técnica.
+    // Se agrupan en una sola fila editable SOLO si los N montos actuales son
+    // idénticos — si alguno ya fue calibrado distinto a mano, se dejan sueltos
+    // para no arriesgar sobreescribir un ajuste manual legítimo.
+    static readonly string[] PrefijosAgrupablesAcu = {
+        "Honorarios Agencia de Aduanas",
+        "Legalización / Emisión DUS",
+        "Gate OUT Contenedor",
+        "Gate IN Contenedor",
+        "Seguridad de la Carga ISPS"
+    };
+
+    string ObtenerConceptoBaseAcu(string? concepto)
+    {
+        if (string.IsNullOrWhiteSpace(concepto)) return concepto ?? "";
+        return System.Text.RegularExpressions.Regex.Replace(concepto, @"\s*\(U\d+\)", "").Trim();
+    }
+
+    bool EsConceptoAgrupableAcu(string? concepto)
+    {
+        string baseC = ObtenerConceptoBaseAcu(concepto);
+        return PrefijosAgrupablesAcu.Any(p => baseC.StartsWith(p, StringComparison.OrdinalIgnoreCase));
+    }
+    bool EsExentoIvaAcu(AtilsonCargoSpa.Pages.Comercial.AcuerdosOperativosModel.TxDTO tx)
+{
+    string c = tx.Concepto ?? "";
+    if (tx.GrupoCobro == "Marítimo")
+        return AtilsonCargoSpa.Pages.Finanzas.ControlFinancieroModel.EsMaritimoUsdSinIva(c)
+            || (c.StartsWith("Rebate Marítimo", StringComparison.OrdinalIgnoreCase) && tx.IvaExento != false);
+    return tx.Moneda == "USD" || c.ToUpper().Contains("ISPS") || tx.IvaExento == true;
+}
+}
+
+<link rel="stylesheet" href="~/css/acuerdos-operativos-premium.css" asp-append-version="true" />
+
 <style>
-    /* VARIABLES CORPORATIVAS ATILSON */
+    /* Tokens locales delegados al sistema de diseño compartido
+       (wwwroot/css/design-system.css, cargado globalmente desde _Layout) —
+       mismo truco que en ControlFinanciero.cshtml: alias en un solo lugar
+       en vez de reescribir cada var(--atilson-dark) de este archivo. */
     :root {
-        --atilson-dark: #0f172a;
-        --txt-main: #334155;
-        --border-soft: #e2e8f0;
-        --bg-light: #f8fafc;
+        --atilson-dark: var(--ink-900);
+        --txt-main: var(--ink-700);
+        --border-soft: var(--border);
+        --bg-light: var(--surface-sunken);
     }
 
     body {
@@ -116,6 +156,17 @@
             color: var(--atilson-dark);
         }
 
+        /* Columna "Detalles": badges apiladas en vertical para que no se
+           desordenen al achicar el ancho disponible (ej. al expandir el
+           menú lateral). El td conserva su display:table-cell normal; es
+           el div interno el que arma la columna de badges. */
+        .cell-detalles .detalles-stack {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 4px;
+        }
+
     /* FILA DESPLEGABLE */
     .row-master {
         cursor: pointer;
@@ -190,15 +241,27 @@
             }
 
     /* TABLAS DE TARIFAS INTERNAS MEJORADAS */
-    .pricing-grid {
+    /* Envoltorio con scroll horizontal: cuando el ancho disponible se
+       achica (ej. al expandir el menú lateral), la tabla no comprime ni
+       apila sus columnas/subcolumnas — en su lugar aparece un scroll
+       horizontal y las columnas mantienen su ancho mínimo legible. */
+    .pricing-grid-wrap {
         width: 100%;
-        border-collapse: collapse;
+        overflow-x: auto;
         margin-bottom: 30px;
-        background: #ffffff;
         border: 1px solid var(--border-soft);
         border-radius: 8px;
-        overflow: hidden;
         box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+    }
+
+    .pricing-grid {
+        width: 100%;
+        min-width: 640px;
+        border-collapse: collapse;
+        margin-bottom: 0;
+        background: #ffffff;
+        border: none;
+        border-radius: 0;
     }
 
         .pricing-grid th {
@@ -210,6 +273,7 @@
             padding: 14px 20px;
             border-bottom: 1px solid var(--border-soft);
             letter-spacing: 0.3px;
+            white-space: nowrap;
         }
 
         .pricing-grid td {
@@ -301,27 +365,26 @@
         }
     }
 
-    @@keyframes pulseTarifaPendiente {
-        0% {
-            opacity: 1;
-        }
-
-        50% {
-            opacity: 0.55;
-        }
-
-        100% {
-            opacity: 1;
-        }
+    .badge-contador-acu {
+        font-size: 9px;
+        font-weight: 800;
+        background: var(--border-soft);
+        color: var(--ink-600);
+        border-radius: var(--radius-sm);
+        padding: 2px 6px;
+        margin-left: 6px;
     }
 </style>
 
-<div class="container-fluid py-4" style="padding-left: 30px; padding-right: 30px; max-width: 1600px;">
+<div class="container-fluid py-4 ao-premium" style="padding-left: 30px; padding-right: 30px; max-width: 1600px;">
     <!-- HEADER EJECUTIVO -->
-    <div class="d-flex justify-content-between align-items-end mb-4 pb-2 border-bottom">
-        <div>
-            <h1 style="font-size: 22px; font-weight: 900; color: var(--atilson-dark); margin: 0; letter-spacing: -0.5px;">ACUERDOS COMERCIALES</h1>
-            <p class="text-muted small m-0 fw-medium mt-1">Calibración y negociación de tarifas por Booking (Cierre Comercial).</p>
+    <div class="page-header">
+        <div class="page-header__title-row">
+            <div class="page-header__icon"><i class="bi bi-handshake"></i></div>
+            <div>
+                <h1>Acuerdos Comerciales</h1>
+                <p class="page-header__subtitle">Calibración y negociación de tarifas por Booking (Cierre Comercial).</p>
+            </div>
         </div>
     </div>
 
@@ -338,9 +401,10 @@
         <table class="table-minimal" id="bookingsTable">
             <thead>
                 <tr>
-                    <th style="width: 30%; padding-left: 24px;">N° Booking</th>
-                    <th style="width: 50%;">Cliente Mandante</th>
-                    <th style="width: 20%;">Servicio Contratado</th>
+                    <th style="width: 25%; padding-left: 24px;">N° Booking</th>
+                    <th style="width: 35%;">Cliente Mandante</th>
+                    <th style="width: 15%;">Servicio Contratado</th>
+                    <th style="width: 25%;">Detalles</th>
                 </tr>
             </thead>
             <tbody>
@@ -354,24 +418,38 @@
                             <td class="text-uppercase text-primary text-truncate" style="max-width: 400px;">@b.Cliente</td>
                             <td>
                                 <span class="badge bg-light text-dark border px-2 py-1 fw-bold" style="font-size: 10px; letter-spacing: 0.5px;">@b.ServicioContratado</span>
-                                @if (b.TieneInterplanta)
-                                {
-                                    <span class="badge px-2 py-1 fw-bold ms-1" style="background-color: #fffbeb; color: #d97706; border: 1px solid #fde68a; font-size: 10px;" title="Operación con Múltiples Plantas">
-                                        <i class="bi bi-signpost-split-fill"></i> INTERPLANTA
-                                    </span>
-                                }
-                                @if (b.TieneConceptoPendiente)
-                                {
-                                    <span class="badge px-2 py-1 fw-bold ms-1" style="background-color: #fef2f2; color: #b91c1c; border: 1px solid #fca5a5; font-size: 10px; animation: pulseTarifaPendiente 2s infinite;" title="Faltan tarifas por asignar: @string.Join(", ", b.ConceptosPendientes)">
-                                        <i class="bi bi-exclamation-triangle-fill"></i> FALTA TARIFA
-                                    </span>
-                                }
+                            </td>
+                            <td class="cell-detalles">
+                                <div class="detalles-stack">
+                                    @if (b.TieneInterplanta)
+                                    {
+                                        <span class="badge-status badge-status--warning" title="Operación con Múltiples Plantas">
+                                            <i class="bi bi-signpost-split-fill"></i> Interplanta
+                                        </span>
+                                    }
+                                    @if (b.EsClienteEspecial)
+                                    {
+                                        <span class="badge-status badge-status--success" title="Cliente con Tarifa Plana Paquetizada">
+                                            <i class="bi bi-box-seam-fill"></i> Tarifa Plana
+                                        </span>
+                                    }
+                                    @if (b.TieneConceptoPendiente)
+                                    {
+                                        <span class="badge-status badge-status--danger is-pulsing" title="Faltan tarifas por asignar: @string.Join(", ", b.ConceptosPendientes)">
+                                            <i class="bi bi-exclamation-triangle-fill"></i> Falta Tarifa
+                                        </span>
+                                    }
+                                    @if (!b.TieneInterplanta && !b.EsClienteEspecial && !b.TieneConceptoPendiente)
+                                    {
+                                        <span class="text-muted" style="font-size: 10px;">—</span>
+                                    }
+                                </div>
                             </td>
                         </tr>
 
                         <!-- LABORATORIO DESPLEGABLE -->
                         <tr class="collapse row-detail" id="bkg-@b.IdOperacion">
-                            <td colspan="3">
+                            <td colspan="4">
                                 <div class="lab-workspace">
                                     <div class="d-flex justify-content-between align-items-center mb-4">
                                         <div>
@@ -409,9 +487,13 @@
                                     }
 
                                     <!-- PESTAÑAS (PROVEEDOR / CLIENTE) -->
-                                    <ul class="nav lab-tabs" role="tablist">
+                                                                        <ul class="nav lab-tabs" role="tablist">
                                         <li class="nav-item" role="presentation"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#prov-@b.IdOperacion" type="button" role="tab">1. LÍNEA PROVEEDOR</button></li>
                                         <li class="nav-item" role="presentation"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#cli-@b.IdOperacion" type="button" role="tab">2. LÍNEA CLIENTE</button></li>
+                                        @if (b.EsClienteEspecial)
+                                        {
+                                            <li class="nav-item" role="presentation"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#pack-@b.IdOperacion" type="button" role="tab"><i class="bi bi-box-seam me-1"></i>3. TARIFA PLANA</button></li>
+                                        }
                                     </ul>
 
                                     <div class="tab-content">
@@ -446,7 +528,14 @@
                                                     }).ToList();
                                                 }
                                                 if (!grupo.Any()) continue;
-                                                
+
+                                                var agrupablesProv = grupo.Where(t => EsConceptoAgrupableAcu(t.Concepto))
+                                                    .GroupBy(t => ObtenerConceptoBaseAcu(t.Concepto))
+                                                    .Where(g => g.Count() > 1 && g.Select(t => t.MontoNeto).Distinct().Count() == 1)
+                                                    .ToList();
+                                                var idsAgrupadosProv = agrupablesProv.SelectMany(g => g).Select(t => t.Id).ToHashSet();
+                                                var individualesProv = grupo.Where(t => !idsAgrupadosProv.Contains(t.Id)).ToList();
+
                                                 string iconCls = categoria == "Marítimo" ? "bi-water text-primary" : (categoria == "Transporte" ? "bi-truck text-success" : (categoria == "Documental" ? "bi-file-earmark-check text-purple" : (categoria == "Gate-Out/In" ? "bi-box-arrow-right text-danger" : (categoria == "Almacenamiento" ? "bi-boxes text-warning" : "bi-box text-secondary"))));
 
                                                 <div class="service-title mt-4 d-flex justify-content-between align-items-center">
@@ -455,6 +544,7 @@
                                                         SERVICIO @categoria.ToUpper()
                                                     </div>
                                                 </div>
+<div class="pricing-grid-wrap">
                                                 <table class="pricing-grid">
                                                     <thead>
                                                         <tr>
@@ -465,79 +555,122 @@
                                                         </tr>
                                                     </thead>
                                                                                                         <tbody>
-                                                        @foreach (var tx in grupo)
-                                                        {
-                                                            <tr>
-                                                                <td style="padding-left: 20px;">
-                                                                    <span class="fw-bold text-dark d-block text-uppercase" style="font-size: 12px; letter-spacing: 0.3px;">@tx.Concepto</span>
-                                                                    @if (categoria == "Gate-Out/In" && b.AplicaTarifaGatePlana)
-                                                                    {
-                                                                        string movGateAcu = tx.Concepto.ToUpper().Contains("GATE IN") ? "IN" : "OUT"; // 
-                                                                        var compsGateAcu = Model.ComponentesGate
-                                                                            .Where(c => c.IdNaviera == b.IdNaviera && c.TipoMovimiento == movGateAcu && c.TipoContenedor == b.TipoGate)
-                                                                            .OrderBy(c => c.Componente).ToList();
-                                                                        if (compsGateAcu.Any())
+                                                        <tbody>
+                                                            @foreach (var tx in individualesProv)
+                                                            {
+                                                                <tr>
+                                                                    <td style="padding-left: 20px;">
+                                                                        <span class="fw-bold text-dark d-block text-uppercase" style="font-size: 12px; letter-spacing: 0.3px;">@tx.Concepto</span>
+                                                                        @if (categoria == "Gate-Out/In" && b.AplicaTarifaGatePlana)
                                                                         {
-                                                                            <div class="mt-1 p-2 rounded" style="background:#f8fafc; border:1px dashed #cbd5e1;">
-                                                                                <span class="d-block mb-1" style="font-size:9px; font-weight:800; color:#94a3b8; text-transform:uppercase;"><i class="bi bi-diagram-3 me-1"></i>Desglose Naviera (tarifa plana)</span>
-                                                                                @foreach (var cGateAcu in compsGateAcu)
-                                                                                {
-                                                                                    <div class="d-flex justify-content-between" style="font-size:10.5px;">
-                                                                                        <span class="text-muted text-uppercase">@cGateAcu.Componente</span>
-                                                                                        <span class="fw-bold text-dark">@cGateAcu.Moneda @cGateAcu.ValorNeto?.ToString("N0")</span>
-                                                                                    </div>
-                                                                                }
-                                                                            </div>
+                                                                            string movGateAcu = tx.Concepto.ToUpper().Contains("GATE IN") ? "IN" : "OUT"; //
+                                                                            var compsGateAcu = Model.ComponentesGate
+                                                                                .Where(c => c.IdNaviera == b.IdNaviera && c.TipoMovimiento == movGateAcu && c.TipoContenedor == b.TipoGate)
+                                                                                .OrderBy(c => c.Componente).ToList();
+                                                                            if (compsGateAcu.Any())
+                                                                            {
+                                                                                <div class="mt-1 p-2 rounded" style="background:#f8fafc; border:1px dashed #cbd5e1;">
+                                                                                    <span class="d-block mb-1" style="font-size:9px; font-weight:800; color:#94a3b8; text-transform:uppercase;"><i class="bi bi-diagram-3 me-1"></i>Desglose Naviera (tarifa plana)</span>
+                                                                                    @foreach (var cGateAcu in compsGateAcu)
+                                                                                    {
+                                                                                        <div class="d-flex justify-content-between" style="font-size:10.5px;">
+                                                                                            <span class="text-muted text-uppercase">@cGateAcu.Componente</span>
+                                                                                            <span class="fw-bold text-dark">@cGateAcu.Moneda @cGateAcu.ValorNeto?.ToString("N0")</span>
+                                                                                        </div>
+                                                                                    }
+                                                                                </div>
+                                                                            }
                                                                         }
-                                                                    }
-                                                                </td>
-                                                                <td class="text-end align-middle">
-                                                                    @if (tx.MontoNeto == 0m && !tx.TarifaManual)
-                                                                    {
-                                                                        <span class="text-danger fw-bold" style="font-size: 11px; font-style: italic;">Por asignar</span>
-                                                                    }
-                                                                    else
-                                                                    {
-                                                                        <span class="font-monospace text-muted fw-bold" style="font-size: 13px;">@tx.Moneda @tx.MontoNeto.ToString("N0")</span>
-                                                                        @if (categoria == "Gate-Out/In" && tx.TipoCambio.HasValue && tx.TipoCambio.Value > 0)
+                                                                    </td>
+                                                                    <td class="text-end align-middle">
+                                                                        @if (tx.MontoNeto == 0m && !tx.TarifaManual)
                                                                         {
-                                                                            <span class="d-block" style="font-size:9.5px; color:#94a3b8; font-weight:600;">(USD @Math.Round(tx.MontoNeto / tx.TipoCambio.Value, 2).ToString("N2"))</span>
+                                                                            <span class="text-danger fw-bold" style="font-size: 11px; font-style: italic;">Por asignar</span>
                                                                         }
-                                                                    }
-                                                                </td>
-                                                                <td class="text-center align-middle">
-                                                                    @if (tx.Moneda == "USD" || tx.GrupoCobro == "Marítimo" || tx.Concepto.ToUpper().Contains("ISPS"))
-                                                                    {
-                                                                        <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25" style="font-size:9px;">EXENTO</span>
-                                                                    }
-                                                                    else
-                                                                    {
-                                                                        <span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25" style="font-size:9px;">SÍ (+19%)</span>
-                                                                    }
-                                                                </td>
-                                                                <td style="padding-right: 20px;">
-                                                                    <div class="d-flex justify-content-end mb-1">
-                                                                        <i class="bi bi-clock-history text-muted" style="font-size:11px; cursor:pointer;" title="Ver historial" onclick="abrirModalHistorial('TransaccionFinanciera', @tx.Id)"></i>
-                                                                    </div>
-                                                                    <div class="input-group input-group-sm shadow-sm" style="border-radius: 6px; overflow: hidden;">
-                                                                        <span class="input-group-text bg-light fw-bold text-dark border-0">@tx.Moneda</span>
-                                                                        <input type="number" class="form-control input-calibrar border-0 tx-input"
-                                                                               data-txid="@tx.Id"
-                                                                               data-base="@tx.MontoNeto.ToString("0", System.Globalization.CultureInfo.InvariantCulture)"
-                                                                               value="@tx.MontoNeto.ToString("0", System.Globalization.CultureInfo.InvariantCulture)"
-                                                                               onkeyup="checkAgreement(this)">
-                                                                    </div>
-                                                                    <input type="hidden" class="tx-justificacion" value="@tx.Justificacion">
-                                                                </td>
-                                                            </tr>
-                                                        }
-                                                    </tbody>
-                                                </table>
-                                            }
-                                        </div>
+                                                                        else
+                                                                        {
+                                                                            <span class="font-monospace text-muted fw-bold" style="font-size: 13px;">@tx.Moneda @tx.MontoNeto.ToString("N0")</span>
+                                                                            @if (tx.MontoOriginalUsd.HasValue && tx.MontoOriginalUsd.Value > 0)
+                                                                            {
+                                                                                <span class="d-block" style="font-size:9.5px; color:#94a3b8; font-weight:600;">(USD @tx.MontoOriginalUsd.Value.ToString("N2"))</span>
+                                                                            }
+                                                                        }
+                                                                    </td>
+                                                                    <td class="text-center align-middle">
+                                                                        @if (EsExentoIvaAcu(tx))
+                                                                        {
+                                                                            <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25" style="font-size:9px;">EXENTO</span>
+                                                                        }
+                                                                        else
+                                                                        {
+                                                                            <span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25" style="font-size:9px;">SÍ (+19%)</span>
+                                                                        }
+                                                                    </td>
+                                                                                                                                        <td style="padding-right: 20px;">
+                                                                        <div class="d-flex justify-content-end mb-1">
+                                                                            <i class="bi bi-clock-history text-muted" style="font-size:11px; cursor:pointer;" title="Ver historial" onclick="abrirModalHistorial('TransaccionFinanciera', @tx.Id)"></i>
+                                                                        </div>
+                                                                        <div class="input-group input-group-sm shadow-sm" style="border-radius: 6px; overflow: hidden;">
+                                                                            <span class="input-group-text bg-success bg-opacity-10 text-success fw-bold border-0">@tx.Moneda</span>
+                                                                            <input type="number" class="form-control input-calibrar border-0 text-success bg-success bg-opacity-10 tx-input"
+                                                                                   data-txid="@tx.Id"
+                                                                                   data-base="@tx.MontoNeto.ToString("0", System.Globalization.CultureInfo.InvariantCulture)"
+                                                                                   value="@tx.MontoNeto.ToString("0", System.Globalization.CultureInfo.InvariantCulture)"
+                                                                                   onkeyup="checkAgreement(this)">
+                                                                        </div>
+                                                                        <input type="hidden" class="tx-justificacion" value="@tx.Justificacion">
+                                                                    </td>
+                                                                </tr>
+                                                            }
+                                                            @foreach (var grpProv in agrupablesProv)
+                                                            {
+                                                                var txsGrpProv = grpProv.ToList();
+                                                                var reprProv = txsGrpProv.First();
+                                                                <tr>
+                                                                    <td style="padding-left: 20px;">
+                                                                        <span class="fw-bold text-dark d-block text-uppercase" style="font-size: 12px; letter-spacing: 0.3px;">@grpProv.Key <span class="badge-contador-acu">x @txsGrpProv.Count</span></span>
+                                                                        <span class="text-muted" style="font-size:9.5px;">Tarifa unitaria — se aplica a los @txsGrpProv.Count contenedores</span>
+                                                                    </td>
+                                                                    <td class="text-end align-middle">
+                                                                        @if (reprProv.MontoNeto == 0m && !reprProv.TarifaManual)
+                                                                        {
+                                                                            <span class="text-danger fw-bold" style="font-size: 11px; font-style: italic;">Por asignar</span>
+                                                                        }
+                                                                        else
+                                                                        {
+                                                                            <span class="font-monospace text-muted fw-bold" style="font-size: 13px;">@reprProv.Moneda @reprProv.MontoNeto.ToString("N0")</span>
+                                                                        }
+                                                                    </td>
+                                                                    <td class="text-center align-middle">
+                                                                        @if (reprProv.GrupoCobro != "Marítimo" && (reprProv.Moneda == "USD" || reprProv.Concepto.ToUpper().Contains("ISPS") || reprProv.IvaExento == true))
+                                                                        {
+                                                                            <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25" style="font-size:9px;">EXENTO</span>
+                                                                        }
+                                                                        else
+                                                                        {
+                                                                            <span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25" style="font-size:9px;">SÍ (+19%)</span>
+                                                                        }
+                                                                    </td>
+                                                                    <td style="padding-right: 20px;">
+                                                                        <div class="input-group input-group-sm shadow-sm" style="border-radius: 6px; overflow: hidden;">
+                                                                            <span class="input-group-text bg-light fw-bold text-dark border-0">@reprProv.Moneda</span>
+                                                                            <input type="number" class="form-control input-calibrar border-0 tx-input"
+                                                                                   data-txids="@string.Join(",", txsGrpProv.Select(t => t.Id))"
+                                                                                   data-base="@reprProv.MontoNeto.ToString("0", System.Globalization.CultureInfo.InvariantCulture)"
+                                                                                   value="@reprProv.MontoNeto.ToString("0", System.Globalization.CultureInfo.InvariantCulture)"
+                                                                                   onkeyup="checkAgreement(this)">
+                                                                        </div>
+                                                                    </td>
+                                                                </tr>
+                                                            }
+                                                        </tbody>
+                                                    </table>
+</div>
+                                                }
+                                            </div>
 
-                                        <!-- ============================================== -->
-                                        <!-- MUNDO CLIENTES (VENTAS / INGRESOS)             -->
+                                            <!-- ============================================== -->
+                                            <!-- MUNDO CLIENTES (VENTAS / INGRESOS)             -->
                                         <!-- ============================================== -->
                                         <div class="tab-pane fade" id="cli-@b.IdOperacion" role="tabpanel">
                                             @{
@@ -546,11 +679,20 @@
                                             @if (!ingresosPorGrupo.Any())
                                             {
                                                 <div class="alert alert-light border text-center text-muted" style="font-size: 11px;">Aún no hay ventas generadas para este Booking.</div>
-                                            }
-                                            @foreach (var grupoRaw in ingresosPorGrupo)
-                                            {
-                                                var grupo = grupoRaw.ToList();
-                                                if (grupoRaw.Key == "Documental") {
+                                                }
+                                                @foreach (var grupoRaw in ingresosPorGrupo)
+                                                {
+                                                    var grupo = grupoRaw.ToList();
+
+                                                    var agrupablesCli = grupo.Where(t => EsConceptoAgrupableAcu(t.Concepto))
+                                                        .GroupBy(t => ObtenerConceptoBaseAcu(t.Concepto))
+                                                        .Where(g => g.Count() > 1 && g.Select(t => t.MontoNeto).Distinct().Count() == 1)
+                                                        .ToList();
+                                                    var idsAgrupadosCli = agrupablesCli.SelectMany(g => g).Select(t => t.Id).ToHashSet();
+                                                    var individualesCli = grupo.Where(t => !idsAgrupadosCli.Contains(t.Id)).ToList();
+
+                                                    if (grupoRaw.Key == "Documental")
+                                                    {
                                                     var dic = new Dictionary<string, int> { {"HONORARIOS",1}, {"LEGAL",2}, {"EMISIÓN",2}, {"ACLARACIÓN",3}, {"ROLEO",4}, {"CANCELACIÓN",5}, {"ORIGEN",6}, {"FITOSANITARIO",7}, {"SANITARIO",7}, {"CAPTURA",8}, {"ISPS",9}, {"SEGURIDAD",9}, {"GATE",10}, {"COURRIER NACIONAL",11}, {"COURRIER INTERNACIONAL",12}, {"CORRECCIÓN",13} };
                                                     grupo = grupo.OrderBy(t => {
                                                         var c = (t.Concepto ?? "").ToUpper();
@@ -569,6 +711,7 @@
                                                         SERVICIO @grupoRaw.Key
                                                     </div>
                                                 </div>
+<div class="pricing-grid-wrap">
                                                 <table class="pricing-grid">
                                                     <thead>
                                                         <tr>
@@ -578,67 +721,176 @@
                                                             <th class="text-end" style="width: 30%; padding-right: 20px;">Acuerdo Comercial (Venta Real)</th>
                                                         </tr>
                                                     </thead>
-                                                    <tbody>
-                                                        @foreach (var tx in grupo)
-                                                        {
-                                                            <tr>
-                                                                <td style="padding-left: 20px;">
-                                                                    <span class="fw-bold text-dark d-block text-uppercase" style="font-size: 12px; letter-spacing: 0.3px;">@tx.Concepto</span>
-                                                                </td>
-                                                                <td class="text-end align-middle">
-                                                                    @if (tx.MontoNeto == 0m && !tx.TarifaManual)
-                                                                    {
-                                                                        <span class="text-danger fw-bold" style="font-size: 11px; font-style: italic;">Por asignar</span>
-                                                                    }
-                                                                    else
-                                                                    {
-                                                                        <span class="font-monospace text-muted fw-bold" style="font-size: 13px;">@tx.Moneda @tx.MontoNeto.ToString("N0")</span>
-                                                                        @if (grupoRaw.Key == "Gate-Out/In" && tx.TipoCambio.HasValue && tx.TipoCambio.Value > 0)
+                                                        <tbody>
+                                                            @foreach (var tx in individualesCli)
+                                                            {
+                                                                <tr>
+                                                                    <td style="padding-left: 20px;">
+                                                                        <span class="fw-bold text-dark d-block text-uppercase" style="font-size: 12px; letter-spacing: 0.3px;">@tx.Concepto</span>
+                                                                    </td>
+                                                                    <td class="text-end align-middle">
+                                                                        @if (tx.MontoNeto == 0m && !tx.TarifaManual)
                                                                         {
-                                                                            <span class="d-block" style="font-size:9.5px; color:#94a3b8; font-weight:600;">(USD @Math.Round(tx.MontoNeto / tx.TipoCambio.Value, 2).ToString("N2"))</span>
+                                                                            <span class="text-danger fw-bold" style="font-size: 11px; font-style: italic;">Por asignar</span>
                                                                         }
-                                                                    }
-                                                                </td>
-                                                                <td class="text-center align-middle">
-                                                                    @if (tx.Moneda == "USD" || tx.GrupoCobro == "Marítimo" || tx.Concepto.ToUpper().Contains("ISPS"))
-                                                                    {
-                                                                        <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25" style="font-size:9px;">EXENTO</span>
-                                                                    }
-                                                                    else
-                                                                    {
-                                                                        <span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25" style="font-size:9px;">SÍ (+19%)</span>
-                                                                    }
-                                                                </td>
-                                                                <td style="padding-right: 20px;">
-                                                                    <div class="d-flex justify-content-end mb-1">
-                                                                        <i class="bi bi-clock-history text-muted" style="font-size:11px; cursor:pointer;" title="Ver historial" onclick="abrirModalHistorial('TransaccionFinanciera', @tx.Id)"></i>
-                                                                    </div>
-                                                                    <div class="input-group input-group-sm shadow-sm" style="border-radius: 6px; overflow: hidden;">
-                                                                        <span class="input-group-text bg-success bg-opacity-10 text-success fw-bold border-0">@tx.Moneda</span>
-                                                                        <input type="number" class="form-control input-calibrar border-0 text-success bg-success bg-opacity-10 tx-input"
-                                                                               data-txid="@tx.Id"
-                                                                               data-base="@tx.MontoNeto.ToString("0", System.Globalization.CultureInfo.InvariantCulture)"
-                                                                               value="@tx.MontoNeto.ToString("0", System.Globalization.CultureInfo.InvariantCulture)"
-                                                                               onkeyup="checkAgreement(this)">
-                                                                    </div>
-                                                                    <input type="hidden" class="tx-justificacion" value="@tx.Justificacion">
-                                                                </td>
+                                                                        else
+                                                                        {
+                                                                            <span class="font-monospace text-muted fw-bold" style="font-size: 13px;">@tx.Moneda @tx.MontoNeto.ToString("N0")</span>
+                                                                            @if (tx.MontoOriginalUsd.HasValue && tx.MontoOriginalUsd.Value > 0)
+                                                                            {
+                                                                                <span class="d-block" style="font-size:9.5px; color:#94a3b8; font-weight:600;">(USD @tx.MontoOriginalUsd.Value.ToString("N2"))</span>
+                                                                            }
+                                                                        }
+                                                                    </td>
+                                                                    <td class="text-center align-middle">
+                                                                                                                                                @if (EsExentoIvaAcu(tx))
+                                                                        {
+                                                                            <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25" style="font-size:9px;">EXENTO</span>
+                                                                        }
+                                                                        else
+                                                                        {
+                                                                            <span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25" style="font-size:9px;">SÍ (+19%)</span>
+                                                                        }
+                                                                    </td>
+                                                                                                                                        <td style="padding-right: 20px;">
+                                                                        <div class="d-flex justify-content-end mb-1">
+                                                                            <i class="bi bi-clock-history text-muted" style="font-size:11px; cursor:pointer;" title="Ver historial" onclick="abrirModalHistorial('TransaccionFinanciera', @tx.Id)"></i>
+                                                                        </div>
+                                                                        @if (tx.GrupoCobro == "Marítimo" && tx.Concepto.StartsWith("Flete Marítimo"))
+                                                                        {
+                                                                            <div class="d-flex align-items-center justify-content-end gap-1">
+                                                                                <div class="input-group input-group-sm shadow-sm" style="border-radius: 6px; overflow: hidden; max-width:135px;" title="Flete Venta Real">
+                                                                                    <span class="input-group-text bg-success bg-opacity-10 text-success fw-bold border-0">@tx.Moneda</span>
+                                                                                    <input type="number" class="form-control input-calibrar border-0 text-success bg-success bg-opacity-10 tx-input"
+                                                                                           data-txid="@tx.Id"
+                                                                                           data-base="@tx.MontoNeto.ToString("0", System.Globalization.CultureInfo.InvariantCulture)"
+                                                                                           value="@tx.MontoNeto.ToString("0", System.Globalization.CultureInfo.InvariantCulture)"
+                                                                                           onkeyup="checkAgreement(this)">
+                                                                                </div>
+                                                                                <span class="fw-bold text-muted">+</span>
+                                                                                <div class="input-group input-group-sm shadow-sm" style="border-radius: 6px; overflow: hidden; max-width:150px;" title="Handling">
+                                                                                    <span class="input-group-text bg-info bg-opacity-10 text-info fw-bold border-0" style="font-size:10px;">Handling</span>
+                                                                                    <input type="number" class="form-control input-calibrar border-0 text-info bg-info bg-opacity-10 tx-input-profit"
+                                                                                           data-txid-profit="@tx.Id"
+                                                                                           data-base-profit="@tx.ProfitHandling.ToString("0", System.Globalization.CultureInfo.InvariantCulture)"
+                                                                                           value="@tx.ProfitHandling.ToString("0", System.Globalization.CultureInfo.InvariantCulture)"
+                                                                                           onkeyup="checkAgreement(this)">
+                                                                                </div>
+                                                                            </div>
+                                                                        }
+                                                                        else
+                                                                        {
+                                                                            <div class="input-group input-group-sm shadow-sm" style="border-radius: 6px; overflow: hidden;">
+                                                                                <span class="input-group-text bg-success bg-opacity-10 text-success fw-bold border-0">@tx.Moneda</span>
+                                                                                <input type="number" class="form-control input-calibrar border-0 text-success bg-success bg-opacity-10 tx-input"
+                                                                                       data-txid="@tx.Id"
+                                                                                       data-base="@tx.MontoNeto.ToString("0", System.Globalization.CultureInfo.InvariantCulture)"
+                                                                                       value="@tx.MontoNeto.ToString("0", System.Globalization.CultureInfo.InvariantCulture)"
+                                                                                       onkeyup="checkAgreement(this)">
+                                                                            </div>
+                                                                        }
+                                                                        <input type="hidden" class="tx-justificacion" value="@tx.Justificacion">
+                                                                    </td>
+                                                                </tr>
+                                                            }
+                                                            @foreach (var grpCli in agrupablesCli)
+                                                            {
+                                                                var txsGrpCli = grpCli.ToList();
+                                                                var reprCli = txsGrpCli.First();
+                                                                <tr>
+                                                                    <td style="padding-left: 20px;">
+                                                                        <span class="fw-bold text-dark d-block text-uppercase" style="font-size: 12px; letter-spacing: 0.3px;">@grpCli.Key <span class="badge-contador-acu">x @txsGrpCli.Count</span></span>
+                                                                        <span class="text-muted" style="font-size:9.5px;">Tarifa unitaria — se aplica a los @txsGrpCli.Count contenedores</span>
+                                                                    </td>
+                                                                    <td class="text-end align-middle">
+                                                                        @if (reprCli.MontoNeto == 0m && !reprCli.TarifaManual)
+                                                                        {
+                                                                            <span class="text-danger fw-bold" style="font-size: 11px; font-style: italic;">Por asignar</span>
+                                                                        }
+                                                                        else
+                                                                        {
+                                                                            <span class="font-monospace text-muted fw-bold" style="font-size: 13px;">@reprCli.Moneda @reprCli.MontoNeto.ToString("N0")</span>
+                                                                        }
+                                                                    </td>
+                                                                    <td class="text-center align-middle">
+                                                                        @if (reprCli.GrupoCobro != "Marítimo" && (reprCli.Moneda == "USD" || reprCli.Concepto.ToUpper().Contains("ISPS") || reprCli.IvaExento == true))
+                                                                        {
+                                                                            <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25" style="font-size:9px;">EXENTO</span>
+                                                                        }
+                                                                        else
+                                                                        {
+                                                                            <span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25" style="font-size:9px;">SÍ (+19%)</span>
+                                                                        }
+                                                                    </td>
+                                                                    <td style="padding-right: 20px;">
+                                                                        <div class="input-group input-group-sm shadow-sm" style="border-radius: 6px; overflow: hidden;">
+                                                                            <span class="input-group-text bg-success bg-opacity-10 text-success fw-bold border-0">@reprCli.Moneda</span>
+                                                                            <input type="number" class="form-control input-calibrar border-0 text-success bg-success bg-opacity-10 tx-input"
+                                                                                   data-txids="@string.Join(",", txsGrpCli.Select(t => t.Id))"
+                                                                                   data-base="@reprCli.MontoNeto.ToString("0", System.Globalization.CultureInfo.InvariantCulture)"
+                                                                                   value="@reprCli.MontoNeto.ToString("0", System.Globalization.CultureInfo.InvariantCulture)"
+                                                                                   onkeyup="checkAgreement(this)">
+                                                                        </div>
+                                                                    </td>
+                                                                </tr>
+                                                            }
+                                                        </tbody>
+                                                    </table>
+</div>
+                                                }
+                                                                                        </div>
+
+                                            @if (b.EsClienteEspecial)
+                                            {
+                                                <div class="tab-pane fade" id="pack-@b.IdOperacion" role="tabpanel">
+                                                    <div class="d-flex align-items-center gap-3 mb-4 p-3 rounded" style="background:#f0fdf4; border:1px solid #bbf7d0;">
+                                                        <i class="bi bi-patch-check-fill text-success fs-4"></i>
+                                                        <div style="line-height:1.3;">
+                                                            <span class="fw-bold text-success" style="font-size:12px; text-transform:uppercase;">Cliente con Tarifa Plana Paquetizada</span><br>
+                                                            <span class="text-muted" style="font-size:10.5px;">Esta matriz es solo informativa — refleja lo que Comercial configuró en el acuerdo del cliente. Para cambiar qué conceptos están incluidos, edita la tarifa del cliente en <strong>/Comercial</strong>, no aquí.</span>
+                                                        </div>
+                                                    </div>
+<div class="pricing-grid-wrap">
+                                                    <table class="pricing-grid">
+                                                        <thead>
+                                                            <tr>
+                                                                <th style="width: 60%;">Concepto Documental</th>
+                                                                <th class="text-center" style="width: 40%;">Cobertura</th>
                                                             </tr>
-                                                        }
-                                                    </tbody>
-                                                </table>
+                                                        </thead>
+                                                        <tbody>
+                                                            @foreach (var kv in b.MatrizTarifaPlana)
+                                                            {
+                                                                <tr>
+                                                                    <td style="padding-left: 20px;">
+                                                                        <span class="fw-bold text-dark d-block text-uppercase" style="font-size: 12px; letter-spacing: 0.3px;">@kv.Key</span>
+                                                                    </td>
+                                                                    <td class="text-center align-middle">
+                                                                        <div class="d-inline-flex align-items-center gap-2 px-3 py-2 rounded" style="background: @(kv.Value ? "#f0fdf4" : "#f8fafc"); border: 1px solid @(kv.Value ? "#86efac" : "#e2e8f0"); opacity: 0.9; cursor: not-allowed;" title="Definido en el acuerdo comercial del cliente — no editable aquí">
+                                                                            <input type="checkbox" class="pro-check" checked="@(kv.Value ? "checked" : null)" disabled style="pointer-events:none;">
+                                                                            <span class="fw-bold" style="font-size: 10px; letter-spacing:0.3px; color: @(kv.Value ? "#16a34a" : "#94a3b8");">
+                                                                                @(kv.Value ? "NO APLICA (Incluido en Paquete)" : "APLICA (Se cobra aparte)")
+                                                                            </span>
+                                                                            <i class="bi bi-lock-fill" style="font-size: 9px; color:#94a3b8;"></i>
+                                                                        </div>
+                                                                    </td>
+                                                                </tr>
+                                                            }
+                                                        </tbody>
+                                                    </table>
+</div>
+                                                </div>
                                             }
                                         </div>
                                     </div>
-                                </div>
-                            </td>
-                        </tr>
+                                </td>
+                            </tr>
+                        }
                     }
-                }
                 else
                 {
                     <tr>
-                        <td colspan="3" class="text-center py-5 text-muted">
+                        <td colspan="4" class="text-center py-5 text-muted">
                             <i class="bi bi-inbox fs-1 d-block mb-3 opacity-25"></i>
                             <span class="fw-bold" style="font-size: 13px;">No hay Bookings en la base de datos.</span>
                         </td>
@@ -684,15 +936,37 @@
             const payload = [];
             const inputs = detailRow.querySelectorAll('.tx-input');
 
-            inputs.forEach(input => {
-                const idTx = input.getAttribute('data-txid');
-                const baseVal = parseFloat(input.getAttribute('data-base'));
-                const currentVal = parseFloat(input.value);
+                                                        inputs.forEach(input => {
+                    const idTxsRaw = input.getAttribute('data-txids'); // fila agrupada (x N contenedores)
+                    const idTx = input.getAttribute('data-txid');      // fila individual
+                    const baseVal = parseFloat(input.getAttribute('data-base'));
+                    const currentVal = parseFloat(input.value);
+                    const montoChanged = !isNaN(currentVal) && currentVal !== baseVal;
 
-                if (!isNaN(currentVal) && currentVal !== baseVal) {
-                    payload.push({ IdTx: parseInt(idTx), NuevoMonto: currentVal, Justificacion: '' });
-                }
-            });
+                    // Flete Marítimo trae un segundo input (Profit/Handling) asociado al mismo data-txid.
+                    let profitVal = null, profitBaseVal = null, profitChanged = false;
+                    if (idTx) {
+                        const profitInput = detailRow.querySelector(`.tx-input-profit[data-txid-profit="${idTx}"]`);
+                        if (profitInput) {
+                            profitBaseVal = parseFloat(profitInput.getAttribute('data-base-profit'));
+                            profitVal = parseFloat(profitInput.value);
+                            profitChanged = !isNaN(profitVal) && profitVal !== profitBaseVal;
+                        }
+                    }
+
+                    if (!montoChanged && !profitChanged) return;
+
+                    const montoFinal = montoChanged ? currentVal : baseVal;
+                    const profitFinal = (profitVal !== null && !isNaN(profitVal)) ? profitVal : (profitBaseVal || 0);
+
+                    if (idTxsRaw) {
+                        idTxsRaw.split(',').forEach(id => {
+                            payload.push({ IdTx: parseInt(id), NuevoMonto: montoFinal, ProfitHandling: profitFinal, Justificacion: '' });
+                        });
+                    } else {
+                        payload.push({ IdTx: parseInt(idTx), NuevoMonto: montoFinal, ProfitHandling: profitFinal, Justificacion: '' });
+                    }
+                });
 
             if (payload.length === 0) { Swal.fire('Información', 'No has modificado ninguna tarifa.', 'info'); return; }
 

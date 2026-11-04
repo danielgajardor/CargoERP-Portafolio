@@ -1,0 +1,82 @@
+/* =========================================================================
+   COBRANZA — CAPA PREMIUM
+   Mismo lenguaje visual que Detalle de Operación / Control Financiero /
+   Acuerdos Operativos: gradiente morado/violeta, Plus Jakarta Sans, sombras
+   "glow", radios grandes. Solo propiedades visuales — ningún handler de
+   formulario (enviarRecordatorio, toggleSuscripcion) fue tocado.
+
+   Por qué va en un archivo aparte y todo acotado a .cob-premium: esta vista
+   usa componentes del sistema de diseño compartido (.erp-card, .badge-status,
+   .empty-state, .page-header) que están pensados para reutilizarse en
+   cualquier pantalla — acotando todo a .cob-premium, ninguna otra vista que
+   los adopte a futuro se ve afectada por este rediseño específico de Cobranza.
+   ========================================================================= */
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600&display=swap');
+
+/* ---------- 0. Tokens ---------- */
+.cob-premium {
+    --cob-brand: #6d2d9e;
+    --cob-brand-2: #8b5cf6;
+    --cob-deep: #2c1b4d;
+    --cob-ink: #140c26;
+    --cob-muted: #6b6880;
+    --cob-line: #ece8f3;
+    --cob-soft: #f8f7fc;
+    --cob-tint: #f4eefb;
+    --cob-grad: linear-gradient(135deg, #6d2d9e 0%, #8b5cf6 55%, #60a5fa 100%);
+    --cob-shadow: 0 1px 2px rgba(20,12,38,.04), 0 18px 40px -26px rgba(44,27,77,.28);
+
+    font-family: 'Plus Jakarta Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+    padding-bottom: 48px;
+}
+
+body:has(.cob-premium) {
+    background:
+        radial-gradient(1100px 460px at 100% -10%, rgba(139,92,246,.06), transparent 60%),
+        #f5f4f9;
+}
+
+/* ---------- 1. Encabezado de página ---------- */
+.cob-premium .page-header__icon {
+    background: var(--cob-grad) !important; color: #fff !important;
+    box-shadow: 0 10px 20px -10px rgba(109,45,158,.6);
+}
+.cob-premium .page-header h1, .cob-premium .page-header__title { letter-spacing: -.5px !important; }
+
+/* ---------- 2. Tarjetas de cliente ---------- */
+.cob-premium .erp-card {
+    border-color: var(--cob-line) !important; border-radius: 16px !important; box-shadow: var(--cob-shadow) !important;
+}
+.cob-premium .erp-card--hover:hover {
+    box-shadow: 0 24px 48px -28px rgba(44,27,77,.4) !important; transform: translateY(-2px) !important;
+    border-color: var(--cob-brand-2) !important;
+}
+
+/* ---------- 3. Badges de estado ---------- */
+.cob-premium .badge-status { box-shadow: 0 1px 2px rgba(20,12,38,.06); }
+
+/* ---------- 4. Botones ---------- */
+.cob-premium .btn { border-radius: 9px !important; transition: all .18s ease !important; }
+.cob-premium .btn-dark {
+    background: linear-gradient(135deg, #2c1b4d, #5b2a8a) !important; border: 0 !important;
+    box-shadow: 0 10px 22px -12px rgba(44,27,77,.85) !important;
+}
+.cob-premium .btn-dark:hover:not(:disabled) { background: linear-gradient(135deg, #3a2363, #6d2d9e) !important; }
+.cob-premium .btn:hover:not(:disabled) { transform: translateY(-1px); }
+
+/* ---------- 5. Estado vacío ---------- */
+.cob-premium .empty-state {
+    border-color: var(--cob-line) !important; border-radius: 18px !important; box-shadow: var(--cob-shadow);
+    padding: 56px 24px !important;
+}
+.cob-premium .empty-state i {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 56px; height: 56px; border-radius: 50%;
+    background: var(--cob-tint); color: var(--cob-brand) !important; opacity: 1 !important;
+    font-size: 1.5rem !important;
+}
+
+/* ---------- 6. Responsive ---------- */
+@media (prefers-reduced-motion: reduce) {
+    .cob-premium .erp-card, .cob-premium .btn { transition: none !important; }
+}

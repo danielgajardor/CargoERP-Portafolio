@@ -1,3 +1,4 @@
+using System;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Mvc;
@@ -26,6 +27,34 @@ namespace AtilsonCargoSpa.Pages
         public string Password { get; set; }
 
         public string ErrorMessage { get; set; }
+
+        // Página a la que volver tras entrar (la pone el sistema al pedir login, p. ej. el
+        // rastreo de la landing: /PortalCliente/Index?SearchString=BK123). Solo rutas locales.
+        [BindProperty(SupportsGet = true)]
+        public string? ReturnUrl { get; set; }
+
+        /// <summary>true si viene del portal de clientes (para abrir la pestaña Clientes).</summary>
+        public bool VieneDelPortal => !string.IsNullOrEmpty(ReturnUrl) && ReturnUrl.StartsWith("/PortalCliente", StringComparison.OrdinalIgnoreCase);
+
+        /// <summary>Booking o BL que se buscó en la landing antes de iniciar sesión.</summary>
+        public string? BookingBuscado
+        {
+            get
+            {
+                if (!VieneDelPortal) return null;
+                int i = ReturnUrl!.IndexOf("SearchString=", StringComparison.OrdinalIgnoreCase);
+                if (i < 0) return null;
+                string v = Uri.UnescapeDataString(ReturnUrl.Substring(i + 13).Split('&')[0].Replace('+', ' ')).Trim();
+                return v.Length is > 0 and <= 40 ? v : null;
+            }
+        }
+
+        private IActionResult DestinoTrasLogin(bool esCliente, string porDefecto)
+        {
+            if (!string.IsNullOrEmpty(ReturnUrl) && Url.IsLocalUrl(ReturnUrl) && VieneDelPortal == esCliente)
+                return LocalRedirect(ReturnUrl);
+            return RedirectToPage(porDefecto);
+        }
 
         public void OnGet()
         {
@@ -100,15 +129,62 @@ namespace AtilsonCargoSpa.Pages
                     CookieAuthenticationDefaults.AuthenticationScheme,
                     new ClaimsPrincipal(claimsIdentity));
 
+                // Mi perfil (oct-2026): último acceso (si falta el script SQL, no hace nada).
+                if (HttpContext.RequestServices.GetService(typeof(AtilsonCargoSpa.Services.PerfilUsuarioService)) is AtilsonCargoSpa.Services.PerfilUsuarioService perfiles)
+                    await perfiles.RegistrarAccesoAsync(usuario.Id);
+
                 // --- EL DESVIADOR AUTOMÁTICO ---
+                // (Si venía de una página protegida de su zona, vuelve a esa página.)
                 if (usuario.Rol == "Cliente")
                 {
-                    return RedirectToPage("/PortalCliente/Index"); // A su extranet privada
+                    return DestinoTrasLogin(true, "/PortalCliente/Index"); // A su extranet privada
                 }
                 else
                 {
-                    return RedirectToPage("/Dashboard"); // A la matriz de Atilson
+                    return DestinoTrasLogin(false, "/App/Dashboard"); // A la matriz de Atilson
                 }
+            }
+
+            // Portal (oct-2026): si el correo corresponde a un registro de empresa aún en
+            // revisión (o rechazado), se explica en vez del mensaje genérico.
+            try
+            {
+                string correoNorm = Correo.Trim().ToLower();
+                var solicitud = await _context.SolicitudesRegistroCliente.AsNoTracking()
+                    .Where(s => s.Correo == correoNorm && s.Estado != SolicitudRegistroCliente.EstadoAprobada)
+                    .OrderByDescending(s => s.FechaSolicitud)
+                    .FirstOrDefaultAsync();
+                if (solicitud != null && usuario == null)
+                {
+                    ErrorMessage = solicitud.Estado == SolicitudRegistroCliente.EstadoPendiente
+                        ? "Tu registro está en revisión. Te avisaremos por correo cuando Atilson apruebe tu cuenta."
+                        : $"Tu solicitud de registro no fue aprobada: {solicitud.MotivoRechazo}. Contacta a tu ejecutivo(a) de Atilson.";
+                    return Page();
+                }
+            }
+            catch
+            {
+                // Sin la tabla de registros (script SQL pendiente) se usa el mensaje de siempre.
+            }
+            // Equipo Atilson (oct-2026): cuenta del equipo pedida en /RegistroEquipo y aún sin validar.
+            try
+            {
+                string correoNorm = Correo.Trim().ToLower();
+                var solicitudEquipo = await _context.SolicitudesRegistroEquipo.AsNoTracking()
+                    .Where(s => s.Correo == correoNorm && s.Estado != SolicitudRegistroEquipo.EstadoAprobada)
+                    .OrderByDescending(s => s.FechaSolicitud)
+                    .FirstOrDefaultAsync();
+                if (solicitudEquipo != null && usuario == null)
+                {
+                    ErrorMessage = solicitudEquipo.Estado == SolicitudRegistroEquipo.EstadoPendiente
+                        ? "Tu cuenta del equipo está pendiente: un administrador debe asignarte el rol y validarla. Te avisaremos por correo."
+                        : $"Tu solicitud de cuenta no fue aprobada: {solicitudEquipo.MotivoRechazo}. Habla con tu jefatura.";
+                    return Page();
+                }
+            }
+            catch
+            {
+                // Sin la tabla de registros (script SQL pendiente) se usa el mensaje de siempre.
             }
 
             ErrorMessage = "Credenciales incorrectas o cuenta inactiva.";

@@ -1,0 +1,94 @@
+/* Página "Nosotros" (nov-2026). El encabezado usa las clases sv-* de servicios-web.css. */
+.ns-h2 { font-size: clamp(30px, 3.2vw, 44px); margin-bottom: 28px; }
+.ns-ficha-iso { width: 30px; height: auto; }
+
+/* Quiénes somos */
+.ns-quienes { padding: 100px 0; }
+.ns-quienes-grid { display: grid; grid-template-columns: minmax(0, 7fr) minmax(0, 5fr); gap: 72px; align-items: center; }
+.ns-destacado { font-size: clamp(22px, 2.2vw, 28px); line-height: 1.45; font-weight: 500; color: var(--tinta); margin: 0 0 22px; letter-spacing: -0.01em; }
+.ns-parrafo { color: var(--gris); font-size: 17px; max-width: 60ch; }
+.ns-foto { position: relative; margin: 0; aspect-ratio: 4 / 5; border-radius: 26px; overflow: hidden; background: var(--noche); box-shadow: 0 40px 80px -40px rgba(22,14,47,.6); }
+.ns-foto > img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.ns-foto--marca { background: radial-gradient(120% 80% at 80% 10%, #4b3a9c 0%, #21164a 45%, var(--noche) 100%); }
+.ns-foto--marca::before { content: ""; position: absolute; inset: 0; background: repeating-radial-gradient(circle at 70% 30%, transparent 0 46px, rgba(195,182,245,.07) 46px 47px); }
+.ns-foto-iso { position: absolute; right: -14%; bottom: -8%; width: 92% !important; height: auto !important; opacity: .14; object-fit: contain !important; }
+.ns-foto figcaption { position: absolute; left: 24px; bottom: 22px; color: #fff; font-weight: 600; display: flex; align-items: center; gap: 8px; font-size: 15px; }
+.ns-foto figcaption i { color: var(--lila); }
+
+/* Historia: una línea con hitos (es una secuencia en el tiempo) */
+.ns-historia { background: var(--niebla); padding: 100px 0; }
+.ns-linea { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(var(--n), minmax(0, 1fr)); gap: 28px; position: relative; }
+.ns-linea::before { content: ""; position: absolute; left: 0; right: 0; top: 17px; height: 2px; background: linear-gradient(90deg, var(--indigo-300), var(--indigo)); opacity: .45; }
+.ns-linea li { position: relative; padding-top: 0; }
+.ns-anio { position: relative; z-index: 1; display: inline-flex; align-items: center; height: 36px; padding: 0 16px; border-radius: 999px; background: #fff; border: 2px solid var(--indigo); color: var(--indigo); font-weight: 800; font-size: 15px; margin-bottom: 20px; }
+.ns-linea li:last-child .ns-anio { background: var(--indigo); color: #fff; }
+.ns-linea h3 { font-size: 18px; font-weight: 750; margin: 0 0 6px; }
+.ns-linea p { color: var(--gris); font-size: 15px; margin: 0; }
+
+/* Misión, visión y valores */
+.ns-proposito { padding: 100px 0 90px; }
+.ns-mv { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+.ns-mv article { padding: 36px; border-radius: 22px; border: 1px solid var(--linea); background: #fff; }
+.ns-mv article:first-child { background: var(--noche); border-color: var(--noche); color: #fff; }
+.ns-mv article:first-child p { color: #d6d0ec; }
+.ns-mv-ico { width: 52px; height: 52px; border-radius: 16px; display: grid; place-items: center; font-size: 23px; background: var(--niebla); color: var(--indigo); margin-bottom: 20px; }
+.ns-mv article:first-child .ns-mv-ico { background: rgba(255,255,255,.08); color: var(--lila); }
+.ns-mv h3 { font-size: 24px; font-weight: 750; font-stretch: 110%; margin: 0 0 10px; }
+.ns-mv p { font-size: 18px; line-height: 1.55; color: var(--gris); margin: 0; }
+.ns-valores-tit { font-size: 15px; font-weight: 700; color: var(--gris); margin: 64px 0 8px; }
+.ns-valores { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); column-gap: 32px; }
+.ns-valores li { border-top: 1px solid var(--linea); padding: 24px 0 8px; display: flex; flex-direction: column; gap: 6px; }
+.ns-valores i { width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center; background: var(--niebla); color: var(--indigo); font-size: 19px; margin-bottom: 10px; }
+.ns-valores b { font-size: 18px; font-weight: 750; }
+.ns-valores span { color: var(--gris); font-size: 15px; }
+
+/* Equipo */
+.ns-equipo { padding: 100px 0; background: linear-gradient(180deg, #fff 0%, var(--niebla) 100%); }
+.ns-equipo-cab { display: flex; justify-content: space-between; align-items: end; gap: 24px; flex-wrap: wrap; margin-bottom: 36px; }
+.ns-equipo-cab .ns-h2 { margin: 0; }
+.ns-equipo-cab p { color: var(--gris); font-size: 17px; margin: 0; max-width: 46ch; }
+.ns-personas { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 22px; }
+.ns-persona { position: relative; background: #fff; border-radius: 22px; padding: 14px 14px 22px; box-shadow: 0 0 0 1px var(--linea), 0 24px 50px -40px rgba(22,14,47,.5); display: flex; flex-direction: column; transition: transform .25s cubic-bezier(.2,.8,.2,1), box-shadow .25s; }
+.ns-persona:hover { transform: translateY(-4px); box-shadow: 0 0 0 1px var(--indigo-300), 0 30px 60px -36px rgba(22,14,47,.55); }
+.ns-persona-foto { aspect-ratio: 5 / 4; border-radius: 16px; overflow: hidden; margin-bottom: 18px; background: radial-gradient(120% 90% at 80% 10%, #5b45b8 0%, #2c1f63 55%, var(--noche) 100%); display: grid; place-items: center; }
+.ns-persona-foto img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.ns-persona-foto span { color: #fff; font-size: 54px; font-weight: 800; font-stretch: 115%; letter-spacing: .02em; opacity: .9; }
+.ns-area { align-self: flex-start; font-size: 12.5px; font-weight: 700; color: var(--indigo); background: var(--niebla); border-radius: 999px; padding: 4px 10px; margin: 0 6px 10px; }
+.ns-persona b { font-size: 18px; margin: 0 6px; }
+.ns-persona small { color: var(--gris); font-size: 14.5px; margin: 2px 6px 0; }
+.ns-persona-in { position: absolute; right: 24px; bottom: 22px; color: var(--gris); font-size: 18px; }
+.ns-persona-in:hover { color: var(--indigo); }
+
+/* Trabaja con nosotros + dónde estamos */
+.ns-cierre { padding: 90px 0 10px; }
+.ns-cierre-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+.ns-tarjeta { border-radius: 22px; padding: 36px; border: 1px solid var(--linea); display: flex; flex-direction: column; align-items: flex-start; gap: 10px; }
+.ns-tarjeta > i { font-size: 26px; color: var(--indigo); }
+.ns-tarjeta h3 { font-size: 24px; font-weight: 750; font-stretch: 110%; margin: 4px 0 0; }
+.ns-tarjeta p { color: var(--gris); font-size: 16.5px; margin: 0 0 14px; max-width: 46ch; }
+.ns-tarjeta--oscura { background: var(--noche); border-color: var(--noche); color: #fff; }
+.ns-tarjeta--oscura > i { color: var(--lila); }
+.ns-tarjeta--oscura p { color: #c9c3e2; }
+
+@media (max-width: 991px) {
+    .ns-quienes-grid, .ns-mv, .ns-cierre-grid { grid-template-columns: 1fr; gap: 32px; }
+    .ns-foto { aspect-ratio: 16 / 10; }
+    .ns-linea { grid-template-columns: 1fr; gap: 0; }
+    .ns-linea::before { left: 17px; right: auto; top: 18px; bottom: 18px; width: 2px; height: auto; background: linear-gradient(180deg, var(--indigo-300), var(--indigo)); }
+    .ns-linea li { padding: 0 0 26px 0; }
+    .ns-anio { margin-bottom: 10px; }
+    .ns-linea h3, .ns-linea p { padding-left: 48px; }
+    .ns-valores { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .ns-personas { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 575px) {
+    .ns-quienes, .ns-historia, .ns-proposito, .ns-equipo { padding: 64px 0; }
+    .ns-valores, .ns-personas { grid-template-columns: 1fr; }
+    .ns-mv article, .ns-tarjeta { padding: 26px; }
+    .ns-persona { display: grid; grid-template-columns: 84px 1fr; column-gap: 14px; align-items: center; padding: 12px; }
+    .ns-persona-foto { grid-row: 1 / span 3; width: 84px; margin: 0; }
+    .ns-area, .ns-persona b, .ns-persona small { margin-left: 0; margin-right: 0; }
+    .ns-area { margin-bottom: 4px; justify-self: start; }
+    .ns-persona-foto span { font-size: 28px; }
+}
+@media (prefers-reduced-motion: reduce) { .ns-persona { transition: none; } }

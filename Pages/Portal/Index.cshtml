@@ -519,7 +519,7 @@
                                         <tr class="clickable" onclick="window.location.href='/Portal/Tracking?BookingNumber=@op.NumeroBooking'">
                                             <td class="fw-bold text-dark">@op.NumeroBooking</td>
                                             <td>@(op.IdPuertoOrigenNavigation?.NombrePuerto ?? "-") <i class="bi bi-arrow-right text-muted opacity-50 mx-1"></i> @(op.IdPuertoDestinoNavigation?.NombrePuerto ?? "-")</td>
-                                            <td class="text-muted">@(op.FechaModificacion?.ToString("dd MMM yyyy") ?? "-")</td>
+                                            <td class="text-muted">@(op.FechaModificacion?.ToString("dd MMM yyyy", new System.Globalization.CultureInfo("es-CL")) ?? "-")</td>
                                             <td><span class="status-badge" style="background-color: @estBg; color: @estTxt; border-color: @estBorder;">@estadoFlow</span></td>
                                             <td class="text-end"><i class="bi bi-box-arrow-in-up-right text-muted fs-6"></i></td>
                                         </tr>

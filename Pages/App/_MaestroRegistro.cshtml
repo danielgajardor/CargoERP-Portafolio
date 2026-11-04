@@ -1,0 +1,89 @@
+@model AtilsonCargoSpa.Services.MaestroAuditoriaVm
+@using AtilsonCargoSpa.Services
+@*
+    Panel "Registro de cambios" de las fichas de maestros: quién creó el registro, quién
+    lo modificó por última vez (fecha y hora) y el detalle de cada cambio.
+*@
+<aside class="mx-tarjeta mx-registro" aria-label="Registro de cambios">
+    <div class="mx-tarjeta-cab">
+        <i class="bi bi-clock-history"></i>
+        <h2>Registro de cambios</h2>
+    </div>
+    <div class="mx-tarjeta-cuerpo">
+        <div class="mx-reg-dato">
+            <i class="bi bi-person-plus"></i>
+            <div>
+                <strong>Creado</strong>
+                @if (!string.IsNullOrWhiteSpace(Model.CreadoPor) || Model.CreadoEl.HasValue)
+                {
+                    <span>@(string.IsNullOrWhiteSpace(Model.CreadoPor) ? "Usuario no registrado" : Model.CreadoPor) · @MaestrosAuditoria.FormatoFecha(Model.CreadoEl)</span>
+                }
+                else
+                {
+                    <span class="text-muted">Sin registro</span>
+                }
+            </div>
+        </div>
+        <div class="mx-reg-dato">
+            <i class="bi bi-pencil-square"></i>
+            <div>
+                <strong>Última modificación</strong>
+                @if (!string.IsNullOrWhiteSpace(Model.ModificadoPor) || Model.ModificadoEl.HasValue)
+                {
+                    <span data-mx-ultima-mod>@(string.IsNullOrWhiteSpace(Model.ModificadoPor) ? "Usuario no registrado" : Model.ModificadoPor) · @MaestrosAuditoria.FormatoFecha(Model.ModificadoEl)</span>
+                }
+                else
+                {
+                    <span class="text-muted">Sin modificaciones registradas</span>
+                }
+            </div>
+        </div>
+
+        <div class="mx-hist-titulo">Detalle de cambios</div>
+        @if (Model.Historial.Any())
+        {
+            <ul class="mx-hist">
+                @foreach (var h in Model.Historial)
+                {
+                    <li>
+                        <div class="mx-hist-campo">@h.Campo</div>
+                        @if (h.Comentario == h.Campo)
+                        {
+                            @* Evento (creación, desactivación...): solo el detalle, sin antes → después *@
+                            if (!string.IsNullOrWhiteSpace(h.ValorNuevo))
+                            {
+                                <div class="mx-hist-valores">@h.ValorNuevo</div>
+                            }
+                        }
+                        else if (h.ValorAnterior != null || h.ValorNuevo != null)
+                        {
+                            <div class="mx-hist-valores">
+                                @if (h.ValorAnterior != null)
+                                {
+                                    <del>@h.ValorAnterior</del> <span aria-hidden="true">→</span>
+                                }
+                                else
+                                {
+                                    <span>(vacío)</span> <span aria-hidden="true">→</span>
+                                }
+                                @if (h.ValorNuevo != null)
+                                {
+                                    <ins>@h.ValorNuevo</ins>
+                                }
+                                else
+                                {
+                                    <span>(vacío)</span>
+                                }
+                            </div>
+                        }
+                        <div class="mx-hist-meta">@h.Usuario · @MaestrosAuditoria.FormatoFecha(h.FechaCambio)</div>
+                    </li>
+                }
+            </ul>
+        }
+        else
+        {
+            <p class="mx-hist-vacio mb-0">Aún no hay cambios registrados desde que se activó el historial (oct-2026). Cada guardado nuevo queda aquí con usuario, fecha y hora.</p>
+        }
+    </div>
+</aside>

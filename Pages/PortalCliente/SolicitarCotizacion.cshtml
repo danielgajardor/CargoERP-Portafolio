@@ -1,0 +1,421 @@
+@page
+@model AtilsonCargoSpa.Pages.PortalCliente.SolicitarCotizacionModel
+@{
+    ViewData["Title"] = "Solicitar Cotización";
+    Layout = "_LayoutCliente";
+    var puertosPorPais = Model.Puertos.GroupBy(p => string.IsNullOrWhiteSpace(p.Pais) ? "OTROS" : p.Pais!.Trim().ToUpper());
+    var opcionesCarga = new Dictionary<string, (string Icono, string Texto)>
+    {
+        ["FRUTA FRESCA"] = ("bi-basket", "Fruta fresca"),
+        ["FRUTA CONGELADA"] = ("bi-snow", "Fruta congelada"),
+        ["FRUTA DESHIDRATADA"] = ("bi-sun", "Fruta deshidratada"),
+        ["PRODUCTOS DEL MAR"] = ("bi-water", "Productos del mar")
+    };
+}
+
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+<link rel="stylesheet" href="~/css/portal-forms.css" asp-append-version="true" />
+
+<div class="container py-4">
+    <div class="af-wrap">
+        <a asp-page="/PortalCliente/Index" class="af-back"><i class="bi bi-arrow-left"></i> Inicio</a>
+
+        <div class="af-head">
+            <h1>Solicitar cotización</h1>
+            <p>Dinos la ruta y el tipo de carga, y te respondemos con la tarifa. Puedes ver la respuesta en <a asp-page="./MisCotizaciones">Mis cotizaciones</a>.</p>
+        </div>
+
+        <nav class="af-flow" aria-label="Tipo de solicitud">
+            <a asp-page="./SolicitarCotizacion" class="af-flow-card is-active" aria-current="page">
+                <div class="af-flow-ico"><i class="bi bi-calculator"></i></div>
+                <div><strong>Solicitar cotización</strong><span>Todavía no tengo tarifa</span></div>
+            </a>
+            <a asp-page="./SolicitarReserva" class="af-flow-card">
+                <div class="af-flow-ico"><i class="bi bi-calendar-check"></i></div>
+                <div><strong>Solicitar servicio</strong><span>Ya tengo tarifa acordada</span></div>
+            </a>
+        </nav>
+
+        @if (!ModelState.IsValid)
+        {
+            <div class="af-alert" role="alert">
+                <i class="bi bi-exclamation-circle"></i>
+                <div>
+                    <strong>Revisa el formulario, hay datos pendientes</strong>
+                    <ul>
+                        @foreach (var error in ModelState.Values.SelectMany(v => v.Errors))
+                        {
+                            <li>@error.ErrorMessage</li>
+                        }
+                    </ul>
+                </div>
+            </div>
+        }
+
+        <form method="post" id="formCotizacion" novalidate>
+            <div class="af-panel">
+
+                <!-- Servicio -->
+                <div class="af-section">
+                    <div class="af-section-head">
+                        <div class="af-section-ico"><i class="bi bi-briefcase"></i></div>
+                        <div>
+                            <h2>¿Qué necesitas cotizar?</h2>
+                            <p>Puedes cotizar un tramo o la cadena completa.</p>
+                        </div>
+                    </div>
+
+                    <label class="af-label">Dirección <span class="af-req">*</span></label>
+                    <div class="svc-row">
+                        <div class="svc-check">
+                            <input type="checkbox" id="dirExp" checked />
+                            <label for="dirExp"><span class="svc-check-box"></span> Exportación</label>
+                        </div>
+                        <div class="svc-check">
+                            <input type="checkbox" id="dirImp" />
+                            <label for="dirImp"><span class="svc-check-box"></span> Importación</label>
+                        </div>
+                    </div>
+                    <label class="af-label mt-2">Servicios <span class="af-req">*</span></label>
+                    <div class="svc-row" id="segModulos">
+                        <div class="svc-check">
+                            <input type="checkbox" id="modMar" value="MAR" />
+                            <label for="modMar"><span class="svc-check-box"></span><i class="bi bi-water svc-check-icon"></i> Marítimo</label>
+                        </div>
+                        <div class="svc-check">
+                            <input type="checkbox" id="modTer" value="TER" />
+                            <label for="modTer"><span class="svc-check-box"></span><i class="bi bi-truck svc-check-icon"></i> Terrestre</label>
+                        </div>
+                        <div class="svc-check">
+                            <input type="checkbox" id="modDoc" value="DOC" />
+                            <label for="modDoc"><span class="svc-check-box"></span><i class="bi bi-file-earmark-text svc-check-icon"></i> Documental</label>
+                        </div>
+                    </div>
+                    <p class="svc-hint" id="svcHint">Selecciona al menos un servicio.</p>
+                    <input type="hidden" id="hdnTipoServicio" asp-for="NuevaCotizacion.TipoServicio" />
+                </div>
+
+                <!-- Marítimo -->
+                <div class="af-section af-conditional" data-modulo="MAR">
+                    <div class="af-section-head">
+                        <div class="af-section-ico"><i class="bi bi-water"></i></div>
+                        <div>
+                            <h2>Flete marítimo</h2>
+                            <p>La tarifa se cotiza por contenedor, según la ruta y el tipo de equipo.</p>
+                        </div>
+                    </div>
+                    <div class="af-grid af-grid--6">
+                        <div class="af-field af-col-3">
+                            <label class="af-label" for="selPol">Puerto de origen <span class="af-req">*</span></label>
+                            <select asp-for="NuevaCotizacion.IdPuertoOrigen" id="selPol" class="af-select select2-enable" data-placeholder="Busca un puerto">
+                                <option value="">-- Selecciona un puerto --</option>
+                                @foreach (var grupo in puertosPorPais)
+                                {
+                                    <optgroup label="@grupo.Key">
+                                        @foreach (var p in grupo)
+                                        {
+                                            <option value="@p.Id">@p.NombrePuerto</option>
+                                        }
+                                    </optgroup>
+                                }
+                            </select>
+                        </div>
+                        <div class="af-field af-col-3">
+                            <label class="af-label" for="selPod">Puerto de destino <span class="af-req">*</span></label>
+                            <select asp-for="NuevaCotizacion.IdPuertoDestino" id="selPod" class="af-select select2-enable" data-placeholder="Busca un puerto">
+                                <option value="">-- Selecciona un puerto --</option>
+                                @foreach (var grupo in puertosPorPais)
+                                {
+                                    <optgroup label="@grupo.Key">
+                                        @foreach (var p in grupo)
+                                        {
+                                            <option value="@p.Id">@p.NombrePuerto</option>
+                                        }
+                                    </optgroup>
+                                }
+                            </select>
+                        </div>
+                        <div class="af-field af-col-3">
+                            <label class="af-label" for="selTipoContenedor">Tipo de contenedor <span class="af-req">*</span></label>
+                            <select asp-for="NuevaCotizacion.TipoContenedor" id="selTipoContenedor" class="af-select">
+                                <option value="">-- Selecciona --</option>
+                                @foreach (var tc in AtilsonCargoSpa.Pages.PortalCliente.SolicitarCotizacionModel.TiposContenedor)
+                                {
+                                    <option value="@tc">@(tc == "PALLETS" ? "CARGA SUELTA / PALLETS" : tc)</option>
+                                }
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Terrestre -->
+                <div class="af-section af-conditional" data-modulo="TER">
+                    <div class="af-section-head">
+                        <div class="af-section-ico"><i class="bi bi-truck"></i></div>
+                        <div>
+                            <h2>Transporte terrestre</h2>
+                            <p id="terHint">Dónde se carga el contenedor y a qué puerto se lleva.</p>
+                        </div>
+                    </div>
+                    @{
+                        var cc = Model.NuevaCotizacion;
+                        string otra = AtilsonCargoSpa.Helpers.PortalUbicacionesHelper.OpcionOtra;
+                        var plantasPorZona = Model.Plantas.GroupBy(p => (p.Ciudad?.Nombre ?? "Sin comuna").Trim().ToUpper()).OrderBy(g => g.Key).ToList();
+                    }
+                    <div class="af-grid af-grid--6">
+                        <div class="af-field af-col-3">
+                            <label class="af-label" for="selPlanta">Planta <span class="af-req">*</span></label>
+                            <select name="NuevaCotizacion.PlantaCarga" id="selPlanta" class="af-select select2-enable">
+                                <option value="">-- Selecciona una planta --</option>
+                                @foreach (var g in plantasPorZona)
+                                {
+                                    <optgroup label="@g.Key">
+                                        @foreach (var p in g)
+                                        {
+                                            <option value="@p.Nombre" selected="@(cc.PlantaCarga == p.Nombre)">@p.Nombre</option>
+                                        }
+                                    </optgroup>
+                                }
+                                <option value="@otra" selected="@(cc.PlantaCarga == otra)">Otra planta…</option>
+                            </select>
+                            @if (Model.Plantas.Any())
+                            {
+                                <p class="af-field-hint">Tus plantas registradas. <a href="/PortalCliente/MisUbicaciones">Administrar mis plantas</a></p>
+                            }
+                            else
+                            {
+                                <p class="af-field-hint">Aún no tienes plantas registradas: elige «Otra planta» o regístralas en <a href="/PortalCliente/MisUbicaciones">Mis plantas y depósitos</a>.</p>
+                            }
+                        </div>
+                        <div class="af-field af-col-3" id="terPuertoManual">
+                            <label class="af-label" for="selPuertoTer"><span id="lblPuertoTer">Puerto de salida</span> <span class="af-req">*</span></label>
+                            <select name="NuevaCotizacion.IdPuertoTerrestre" id="selPuertoTer" class="af-select">
+                                <option value="">-- Selecciona --</option>
+                                @foreach (var p in Model.PuertosChile)
+                                {
+                                    <option value="@p.Id" selected="@(cc.IdPuertoTerrestre == p.Id)">@p.NombrePuerto</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="af-field af-col-3" id="terPuertoAuto">
+                            <span class="af-label" id="lblPuertoTerAuto">Puerto de salida</span>
+                            <p class="af-auto-value">Según el puerto marítimo elegido</p>
+                        </div>
+                        <div class="af-field" style="grid-column: 1 / -1;" id="otraPlanta" hidden="@(cc.PlantaCarga == otra ? null : "hidden")">
+                            <div class="af-grid af-grid--6">
+                                <div class="af-field af-col-3">
+                                    <label class="af-label" for="inpOtraPlanta">Nombre de la planta <span class="af-req">*</span></label>
+                                    <input asp-for="OtraPlantaNombre" id="inpOtraPlanta" class="af-input" maxlength="200" />
+                                </div>
+                                <div class="af-field af-col-3">
+                                    <label class="af-label" for="selOtraZona">Zona (comuna) <span class="af-req">*</span></label>
+                                    <select asp-for="OtraPlantaIdCiudad" asp-items="Model.Zonas" id="selOtraZona" class="af-select" data-buscador="si">
+                                        <option value="">Escribe o elige la comuna</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <label style="display:flex; gap:8px; align-items:center; font-size:13px; margin-top:8px;">
+                                <input asp-for="GuardarOtraPlanta" type="checkbox" /> Guardar en mis plantas para próximas solicitudes
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Documental -->
+                <div class="af-section af-conditional" data-modulo="DOC">
+                    <div class="af-section-head">
+                        <div class="af-section-ico"><i class="bi bi-file-earmark-text"></i></div>
+                        <div>
+                            <h2>Servicio documental</h2>
+                            <p>Con el tipo de carga sabemos qué trámites y certificados aplican.</p>
+                        </div>
+                    </div>
+                    <label class="af-label">Tipo de carga <span class="af-req">*</span></label>
+                    <div class="af-chip-row" role="radiogroup" aria-label="Tipo de carga">
+                        @{ int iCarga = 0; }
+                        @foreach (var tipo in AtilsonCargoSpa.Pages.PortalCliente.SolicitarCotizacionModel.TiposCargaDocumental)
+                        {
+                            iCarga++;
+                            <div class="af-chip">
+                                <input type="radio" id="carga@(iCarga)" name="NuevaCotizacion.TipoCargaDocumental" value="@tipo" checked="@(Model.NuevaCotizacion.TipoCargaDocumental == tipo)" />
+                                <label for="carga@(iCarga)"><i class="bi @(opcionesCarga[tipo].Icono)"></i> @opcionesCarga[tipo].Texto</label>
+                            </div>
+                        }
+                    </div>
+                </div>
+
+                <!-- Observaciones -->
+                <div class="af-section">
+                    <div class="af-section-head">
+                        <div class="af-section-ico"><i class="bi bi-chat-left-text"></i></div>
+                        <div>
+                            <h2>Comentarios</h2>
+                            <p>Opcional. Cualquier detalle que debamos considerar para cotizar.</p>
+                        </div>
+                    </div>
+                    <textarea asp-for="NuevaCotizacion.Comentarios" class="af-input" rows="3" maxlength="1000" placeholder="Ej: carga paletizada, frecuencia semanal..."></textarea>
+                </div>
+
+                <div class="af-submit-row">
+                    <p class="af-submit-hint">Te avisamos por correo cuando la cotización esté lista.</p>
+                    <button type="submit" id="btnEnviar" class="af-btn-primary">Solicitar cotización</button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+@section Scripts {
+    <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+
+    @if (Model.Exito)
+    {
+        <script>
+            document.addEventListener('DOMContentLoaded', function () {
+                Swal.fire({
+                    icon: 'success',
+                    title: '¡Cotización solicitada!',
+                    text: 'Nuestro equipo comercial preparará la tarifa. Te avisaremos por correo y podrás verla en "Mis cotizaciones".',
+                    confirmButtonText: 'Ver mis cotizaciones',
+                    showCancelButton: true,
+                    cancelButtonText: 'Cerrar',
+                    confirmButtonColor: '#8b5cf6'
+                }).then(function (r) {
+                    if (r.isConfirmed) window.location.href = '@Url.Page("./MisCotizaciones")';
+                });
+            });
+        </script>
+    }
+
+    <script>
+        (function () {
+            const ORDEN = ['MAR', 'TER', 'DOC'];
+            const NOMBRES = { MAR: 'Marítimo', TER: 'Terrestre', DOC: 'Documental' };
+            const dirExp = document.getElementById('dirExp');
+            const dirImp = document.getElementById('dirImp');
+            const modCheckboxes = document.querySelectorAll('#segModulos input[type="checkbox"]');
+            const hdn = document.getElementById('hdnTipoServicio');
+            const hint = document.getElementById('svcHint');
+            let direccion = 'EXP';
+            let modulos = [];
+
+            // Mismo formato que SolicitarReserva ("EXP MAR+TER",
+            // "IMP INTEGRAL (MAR+TER+DOC)") para que Operaciones lo lea igual.
+            function calcularTipoServicio() {
+                if (modulos.length === 0) return '';
+                const ordenados = ORDEN.filter(function (m) { return modulos.includes(m); });
+                if (ordenados.length === 3) return direccion + ' INTEGRAL (MAR+TER+DOC)';
+                return direccion + ' ' + ordenados.join('+');
+            }
+
+            function actualizar() {
+                hdn.value = calcularTipoServicio();
+                if (modulos.length === 0) {
+                    hint.textContent = 'Selecciona al menos un servicio.';
+                } else {
+                    hint.classList.remove('text-danger');
+                    hint.textContent = (direccion === 'EXP' ? 'Exportación' : 'Importación') + ' · ' +
+                        ORDEN.filter(function (m) { return modulos.includes(m); }).map(function (m) { return NOMBRES[m]; }).join(' + ');
+                }
+                document.querySelectorAll('.af-conditional').forEach(function (el) {
+                    el.classList.toggle('is-open', modulos.includes(el.getAttribute('data-modulo')));
+                });
+                document.getElementById('terHint').textContent = direccion === 'EXP'
+                    ? 'Dónde se carga el contenedor y a qué puerto se lleva.'
+                    : 'En qué puerto se retira el contenedor y a qué planta se entrega.';
+                // Con Marítimo el puerto del tramo es el del embarque; sin Marítimo lo elige el cliente.
+                const conMar = modulos.includes('MAR');
+                document.getElementById('terPuertoManual').hidden = conMar;
+                document.getElementById('terPuertoAuto').hidden = !conMar;
+                const lbl = direccion === 'EXP' ? 'Puerto de salida' : 'Puerto de llegada';
+                document.getElementById('lblPuertoTer').textContent = lbl;
+                document.getElementById('lblPuertoTerAuto').textContent = lbl;
+                document.getElementById('otraPlanta').hidden = document.getElementById('selPlanta').value !== '@AtilsonCargoSpa.Helpers.PortalUbicacionesHelper.OpcionOtra';
+            }
+
+            function actualizarModulos() {
+                modulos = Array.from(modCheckboxes).filter(function (cb) { return cb.checked; }).map(function (cb) { return cb.value; });
+                actualizar();
+            }
+
+            function setDireccion(d) {
+                direccion = d;
+                dirExp.checked = d === 'EXP';
+                dirImp.checked = d === 'IMP';
+                actualizar();
+            }
+
+            dirExp.addEventListener('change', function () { setDireccion(this.checked ? 'EXP' : 'IMP'); });
+            dirImp.addEventListener('change', function () { setDireccion(this.checked ? 'IMP' : 'EXP'); });
+            modCheckboxes.forEach(function (cb) { cb.addEventListener('change', actualizarModulos); });
+
+            function inicializarDesdeValor(valor) {
+                if (!valor) return;
+                direccion = valor.indexOf('IMP') === 0 ? 'IMP' : 'EXP';
+                dirExp.checked = direccion === 'EXP';
+                dirImp.checked = direccion === 'IMP';
+                modulos = valor.indexOf('INTEGRAL') !== -1
+                    ? ['MAR', 'TER', 'DOC']
+                    : ORDEN.filter(function (m) { return valor.indexOf(m) !== -1; });
+                modCheckboxes.forEach(function (cb) { cb.checked = modulos.includes(cb.value); });
+            }
+
+            document.addEventListener('DOMContentLoaded', function () {
+                if (window.jQuery && $.fn.select2) {
+                    $('.select2-enable').select2({
+                        width: '100%',
+                        language: {
+                            noResults: function () { return 'Sin resultados'; },
+                            searching: function () { return 'Buscando...'; }
+                        }
+                    });
+                }
+                inicializarDesdeValor(hdn.value);
+                const selPlanta = document.getElementById('selPlanta');
+                selPlanta.addEventListener('change', actualizar);
+                if (window.jQuery) jQuery(selPlanta).on('change', actualizar);
+                actualizar();
+            });
+
+            function faltante(mensaje, el) {
+                Swal.fire({ icon: 'warning', title: 'Falta información', text: mensaje, confirmButtonColor: '#8b5cf6' });
+                if (el) (el.closest('.af-field') || el).scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+
+            document.getElementById('formCotizacion').addEventListener('submit', function (e) {
+                if (!hdn.value) {
+                    e.preventDefault();
+                    hint.classList.add('text-danger');
+                    hint.textContent = 'Selecciona al menos un servicio para continuar.';
+                    document.getElementById('segModulos').scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    return;
+                }
+                const pol = document.getElementById('selPol');
+                const pod = document.getElementById('selPod');
+                const tc = document.getElementById('selTipoContenedor');
+                const val = function (id) { return (document.getElementById(id).value || '').trim(); };
+                const otra = val('selPlanta') === '@AtilsonCargoSpa.Helpers.PortalUbicacionesHelper.OpcionOtra';
+
+                if (modulos.includes('MAR')) {
+                    if (!pol.value || !pod.value) { e.preventDefault(); return faltante('Selecciona el puerto de origen y el de destino.', !pol.value ? pol : pod); }
+                    if (pol.value === pod.value) { e.preventDefault(); return faltante('El puerto de origen y el de destino no pueden ser el mismo.', pod); }
+                    if (!tc.value) { e.preventDefault(); return faltante('Selecciona el tipo de contenedor.', tc); }
+                }
+                if (modulos.includes('TER')) {
+                    if (!val('selPlanta')) { e.preventDefault(); return faltante('Selecciona la planta (o elige «Otra planta»).', document.getElementById('selPlanta')); }
+                    if (otra && !val('inpOtraPlanta')) { e.preventDefault(); return faltante('Escribe el nombre de la otra planta.', document.getElementById('inpOtraPlanta')); }
+                    if (otra && !val('selOtraZona')) { e.preventDefault(); return faltante('Elige la zona (comuna) de la otra planta.', document.getElementById('selOtraZona')); }
+                    if (!modulos.includes('MAR') && !val('selPuertoTer')) { e.preventDefault(); return faltante(direccion === 'EXP' ? 'Selecciona el puerto de salida.' : 'Selecciona el puerto de llegada.', document.getElementById('selPuertoTer')); }
+                }
+                if (modulos.includes('DOC') && !document.querySelector('input[name="NuevaCotizacion.TipoCargaDocumental"]:checked')) {
+                    e.preventDefault(); return faltante('Selecciona el tipo de carga para el servicio documental.', document.querySelector('.af-chip-row'));
+                }
+
+                const btn = document.getElementById('btnEnviar');
+                btn.disabled = true;
+                btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span> Enviando...';
+            });
+        })();
+    </script>
+}

@@ -187,28 +187,150 @@ namespace AtilsonCargoSpa.Pages.Operaciones
 
             // 👇 NUEVA LISTA DE AGENCIAS DE ADUANA 👇
             ViewData["AgenciasList"] = await _context.AgenciasAduanas.OrderBy(a => a.NombreAgencia).ToListAsync();
-
-            // Lista de transportistas para el desplegable con búsqueda predictiva de 
-            // Empresa Transporte. IdTipoProveedor 2 y 10 son ambos "Transportista"
-            // (registros duplicados entre sí por una carga histórica); se excluyen
-            // Depósitos (12) y otros tipos. Se deduplica por nombre normalizado
-            // (trim + mayúsculas) porque el mismo transportista aparece repetido
-            // entre los tipos 2 y 10.
-            var proveedoresTransporteRaw = await _context.Proveedores
-                .Where(p => p.Activo == 1 && (p.IdTipoProveedor == 2 || p.IdTipoProveedor == 10))
-                .ToListAsync();
-            ViewData["ProveedoresTransporteList"] = proveedoresTransporteRaw
-                .Where(p => !string.IsNullOrWhiteSpace(p.NombreProveedor))
-                .GroupBy(p => p.NombreProveedor.Trim().ToUpper())
-                .Select(g => g.First())
-                .OrderBy(p => p.NombreProveedor)
-                .ToList();
         }
-      
+
+        // oct-2026: cuando el ejecutivo aprueba una cotización desde las
+        // notificaciones del Panel Admin (ver verDetalleCotizacionPortal en
+        // operaciones-index.js), llega aquí con ?cotId=N. CotId solo viaja
+        // hasta la vista — la carga real de datos pasa por
+        // OnGetCotizacionDataAsync, igual que OnPostProcesarPdfAsync.
+        [BindProperty(SupportsGet = true)]
+        public int? CotId { get; set; }
+
         public async Task<IActionResult> OnGetAsync()
         {
             await CargarSelectListsAsync();
             return Page();
+        }
+
+        // Misma idea que OnPostProcesarPdfAsync (lector de PDF): devuelve los
+        // datos de la cotización como JSON para que el JS del formulario los
+        // inyecte en los mismos campos, sin que el operador tenga que
+        // reseleccionar cliente/ruta/tipo de servicio ni volver a preguntarle
+        // al cliente los datos de contenedor/reefer que ya entregó.
+        public async Task<IActionResult> OnGetCotizacionDataAsync(int id)
+        {
+            try
+            {
+                var cot = await _context.Cotizaciones
+                    .Include(c => c.IdClienteNavigation)
+                    .Include(c => c.IdPuertoOrigenNavigation)
+                    .Include(c => c.IdPuertoDestinoNavigation)
+                    .Include(c => c.IdPuertoTerrestreNavigation)
+                    .Include(c => c.IdItinerarioNavigation)
+                    .Include(c => c.IdNavieraNavigation)
+                    .FirstOrDefaultAsync(c => c.Id == id);
+
+                if (cot == null)
+                    return new JsonResult(new { success = false, message = "No se encontró la cotización #" + id + "." });
+
+                bool esReefer = !string.IsNullOrWhiteSpace(cot.TipoContenedor) &&
+                                 cot.TipoContenedor.Contains("REEFER", StringComparison.OrdinalIgnoreCase);
+
+                // oct-2026 (Solicitar Reserva completa): nave elegida del itinerario,
+                // puertos, booking/naviera del cliente y tarifa de la cotización de
+                // origen, para precargar también Marítimo/Terrestre/Documental.
+                var inv = System.Globalization.CultureInfo.InvariantCulture;
+                var it = cot.IdItinerarioNavigation;
+                DateTime? etd = it != null ? it.Etd.ToDateTime(TimeOnly.MinValue) : cot.FechaTentativaEmbarque;
+                DateTime? eta = it?.Eta.ToDateTime(TimeOnly.MinValue);
+                DateTime? corteDoc = cot.FechaCorteDocumental ?? it?.CorteDocumental;
+
+                var tarifa = new List<string>();
+                if (cot.IdCotizacionOrigen != null)
+                {
+                    var origen = await _context.Cotizaciones.AsNoTracking().FirstOrDefaultAsync(c => c.Id == cot.IdCotizacionOrigen);
+                    if (origen != null)
+                    {
+                        if (origen.MontoMaritimo != null) tarifa.Add("Marítimo " + CotizacionesModel.FormatearMonto(origen.MontoMaritimo, origen.MonedaMaritimo) + "/cont.");
+                        if (origen.MontoTerrestre != null) tarifa.Add("Terrestre " + CotizacionesModel.FormatearMonto(origen.MontoTerrestre, origen.MonedaTerrestre));
+                        if (origen.MontoDocumental != null) tarifa.Add("Documental " + CotizacionesModel.FormatearMonto(origen.MontoDocumental, origen.MonedaDocumental));
+                    }
+                }
+
+                return new JsonResult(new
+                {
+                    success = true,
+                    data = new
+                    {
+                        idCotizacion = cot.Id,
+                        idCliente = cot.IdCliente,
+                        cliente = !string.IsNullOrWhiteSpace(cot.IdClienteNavigation?.NombreCliente) ? cot.IdClienteNavigation!.NombreCliente : cot.IdClienteNavigation?.RazonSocial,
+                        idTipoServicio = MapearIdTipoServicio(cot.TipoServicio),
+                        tipoServicioTexto = cot.TipoServicio,
+                        origen = cot.Origen,
+                        destino = cot.Destino,
+                        mercancia = cot.Mercancia,
+                        plantaCarga = cot.PlantaCarga,
+                        depositoRetiro = cot.DepositoRetiro,
+                        tipoContenedor = cot.TipoContenedor,
+                        esReefer = esReefer,
+                        condicionReefer = cot.CondicionReefer,
+                        temperatura = cot.Temperatura,
+                        humedad = cot.Humedad,
+                        ventilacion = cot.Ventilacion,
+                        cantidadContenedores = cot.CantidadContenedores ?? 1,
+                        comentarios = cot.Comentarios,
+                        polNombre = cot.IdPuertoOrigenNavigation?.NombrePuerto,
+                        podNombre = cot.IdPuertoDestinoNavigation?.NombrePuerto,
+                        puertoTerrestre = cot.IdPuertoTerrestreNavigation?.NombrePuerto,
+                        zonaEntrega = cot.ZonaEntrega,
+                        idNaviera = cot.IdNaviera,
+                        naviera = cot.IdNavieraNavigation?.NombreNaviera,
+                        nave = cot.Nave,
+                        booking = cot.NumeroBooking,
+                        instructivo = cot.NumeroInstructivo,
+                        etd = etd?.ToString("yyyy-MM-dd", inv),
+                        eta = eta?.ToString("yyyy-MM-dd", inv),
+                        corteDoc = corteDoc?.ToString("yyyy-MM-dd'T'HH:mm", inv),
+                        fechaCarga = cot.FechaCarga?.ToString("yyyy-MM-dd'T'HH:mm", inv),
+                        desdeItinerario = it != null,
+                        idCotizacionOrigen = cot.IdCotizacionOrigen,
+                        tarifaCotizada = tarifa
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                return new JsonResult(new { success = false, message = "Error leyendo la cotización: " + ex.Message });
+            }
+        }
+
+        // Traduce el texto libre que genera SolicitarReserva (ej. "EXP MAR+TER",
+        // "IMP INTEGRAL (MAR+TER+DOC)") al Id de las 14 combinaciones fijas del
+        // <select> de este formulario. El único punto de diferencia entre
+        // ambos formatos es el espaciado alrededor de "+", así que basta
+        // normalizar (mayúsculas, sin espacios) antes de comparar.
+        private static int? MapearIdTipoServicio(string? tipoServicioCotizacion)
+        {
+            if (string.IsNullOrWhiteSpace(tipoServicioCotizacion)) return null;
+
+            string Normalizar(string s) => s.ToUpperInvariant().Replace(" ", "");
+
+            var combos = new Dictionary<int, string>
+            {
+                { 1, "EXP INTEGRAL (MAR+TER+DOC)" },
+                { 2, "EXP MAR+TER" },
+                { 3, "EXP MAR+DOC" },
+                { 4, "EXP TER+DOC" },
+                { 5, "EXP MAR" },
+                { 6, "EXP TER" },
+                { 7, "EXP DOC" },
+                { 8, "IMP INTEGRAL (MAR+TER+DOC)" },
+                { 9, "IMP MAR+TER" },
+                { 10, "IMP MAR+DOC" },
+                { 11, "IMP TER+DOC" },
+                { 12, "IMP MAR" },
+                { 13, "IMP TER" },
+                { 14, "IMP DOC" },
+            };
+
+            string normalizado = Normalizar(tipoServicioCotizacion);
+            foreach (var kv in combos)
+            {
+                if (Normalizar(kv.Value) == normalizado) return kv.Key;
+            }
+            return null;
         }
 
         [BindProperty]
@@ -245,11 +367,18 @@ namespace AtilsonCargoSpa.Pages.Operaciones
             // --- NORMALIZAR CAMPOS OBLIGATORIOS ---
             if (!esMaritimo)
             {
-                Operacione.IdNaviera = _context.Navieras.FirstOrDefault()?.Id ?? 1;
+                // oct-2026 (minuta Portal Web de Clientes): las operaciones sin tramo
+                // marítimo (Terrestre y/o Documental) también registran Naviera y Nave
+                // del embarque del cliente — vienen de "Datos del Embarque", el mismo
+                // bloque que usa el marítimo (Operacione.IdNaviera / Operacione.Nave).
+                if (Operacione.IdNaviera <= 0 || !await _context.Navieras.AnyAsync(n => n.Id == Operacione.IdNaviera))
+                    Operacione.IdNaviera = _context.Navieras.FirstOrDefault()?.Id ?? 1;
+                Operacione.Nave = string.IsNullOrWhiteSpace(Operacione.Nave) ? null : Operacione.Nave.Trim().ToUpper();
                 Operacione.IdTipoCarga = 1;
                 Operacione.IdPuertoOrigen = null;
                 Operacione.IdPuertoDestino = null;
             }
+
             else
             {
                 if (Operacione.IdNaviera == 0)
@@ -257,6 +386,12 @@ namespace AtilsonCargoSpa.Pages.Operaciones
                 if (Operacione.IdTipoCarga == 0)
                     Operacione.IdTipoCarga = 1;
             }
+
+            // Propietario de Contrato: solo valores de la lista; "Otros" guarda el texto.
+            Operacione.PropietarioContrato = AtilsonCargoSpa.Models.Operacione.NormalizarPropietarioContrato(Operacione.PropietarioContrato);
+            Operacione.PropietarioContratoOtro = Operacione.PropietarioContrato == "OTROS" && !string.IsNullOrWhiteSpace(Operacione.PropietarioContratoOtro)
+                ? Operacione.PropietarioContratoOtro.Trim().ToUpper()
+                : null;
 
             if (Operacione.IdCliente == 0)
                 Operacione.IdCliente = _context.Clientes.FirstOrDefault()?.Id ?? 1;
@@ -316,12 +451,24 @@ namespace AtilsonCargoSpa.Pages.Operaciones
                 Operacione.Co2 = null;
             }
 
-            // --- TIPO DE EMISIÓN B/L (opcional, solo aplica si es marítimo) ---
+            // --- TIPO DE EMISIÓN B/L (opcional al crear, solo aplica si es marítimo) ---
+            // Mismo catálogo que Detalle/Comercial/Finanzas (EmisionBlHelper). Con
+            // Originales se guarda también el Lugar de emisión. Si falta un dato
+            // (Lugar u "Otro" sin texto) no se bloquea la creación: se guarda lo
+            // válido y el resto se completa en Gestión de Matriz, donde es obligatorio.
             if (esMaritimo)
             {
-                var tiposBlSeleccionados = Request.Form["TipoEmisionBl"].Where(v => !string.IsNullOrWhiteSpace(v)).ToArray();
-                Operacione.TipoEmisionBl = tiposBlSeleccionados.Any() ? string.Join(",", tiposBlSeleccionados) : null;
-                Operacione.TipoEmisionBlOtro = tiposBlSeleccionados.Contains("OTRO") ? Request.Form["TipoEmisionBlOtro"].ToString()?.Trim() : null;
+                var emisionBl = AtilsonCargoSpa.Helpers.EmisionBlHelper.LeerFormulario(Request.Form);
+                if (emisionBl.TieneOtro && emisionBl.Otro == null) emisionBl = emisionBl with { Tipo = null };
+                AtilsonCargoSpa.Helpers.EmisionBlHelper.Aplicar(Operacione, emisionBl);
+                Operacione.TipoTarifaMaritima = Operacione.TipoTarifaMaritima == "SPOT" || Operacione.TipoTarifaMaritima == "CONTRATO" ? Operacione.TipoTarifaMaritima : null;
+            }
+            else
+            {
+                Operacione.TipoEmisionBl = null;
+                Operacione.TipoEmisionBlOtro = null;
+                Operacione.UbicacionOriginalesDestino = null;
+                Operacione.TipoTarifaMaritima = null;
             }
             Operacione.OperacionesTerrestres ??= new List<OperacionesTerrestre>();
             Operacione.OperacionesDocumentales ??= new List<OperacionesDocumentale>();
@@ -367,6 +514,23 @@ namespace AtilsonCargoSpa.Pages.Operaciones
                 Operacione.OperacionesTerrestres.Add(new OperacionesTerrestre
                 {
                     TerminalTerrestreStr = termMaritimo,
+                    // Depósito de retiro vacío (oct-2026): sin terrestre se elige en Marítimo,
+                    // para la tarifa del Gate del depósito.
+                    DepositoRetiro = string.IsNullOrWhiteSpace(Request.Form["DepositoRetiroGateMar"]) ? null : Request.Form["DepositoRetiroGateMar"].ToString().Trim(),
+                    FechaCreacion = DateTime.Now,
+                    UsuarioCreador = nombreUsuario,
+                    Activo = true,
+                    SorteoEscaner = false
+                });
+            }
+
+            // Solo documental (oct-2026): el depósito de retiro vacío se elige en Documental
+            // y se guarda en un registro terrestre principal (lo usa la tarifa del Gate).
+            if (!esTerrestre && !esMaritimo && !string.IsNullOrWhiteSpace(Request.Form["DepositoRetiroGateDoc"]))
+            {
+                Operacione.OperacionesTerrestres.Add(new OperacionesTerrestre
+                {
+                    DepositoRetiro = Request.Form["DepositoRetiroGateDoc"].ToString().Trim(),
                     FechaCreacion = DateTime.Now,
                     UsuarioCreador = nombreUsuario,
                     Activo = true,
@@ -519,6 +683,19 @@ namespace AtilsonCargoSpa.Pages.Operaciones
             // el instante en que se crea la operación — no solo tras el primer edit.
             await _finanzasSync.SincronizarAsync(Operacione.Id, nombreUsuario);
 
+            // Si la operación nace de una solicitud de reserva del Portal
+            // (Create?cotId=N), se marca como convertida: deja de aparecer en el
+            // Centro de Notificaciones y no se vuelve a crear por error.
+            if (CotId != null)
+            {
+                var solicitud = await _context.Cotizaciones.FirstOrDefaultAsync(c => c.Id == CotId && c.TipoSolicitud != Cotizacion.TipoCotizacion);
+                if (solicitud != null && solicitud.Estado == "NUEVA SOLICITUD")
+                {
+                    solicitud.Estado = Cotizacion.EstadoConvertida;
+                    await _context.SaveChangesAsync();
+                }
+            }
+
             TempData["SuccessMsg"] = $"La operación {Operacione.NumeroBooking} fue creada exitosamente.";
 
             bool esAjax = Request.Headers["X-Requested-With"] == "XMLHttpRequest";
@@ -527,7 +704,9 @@ namespace AtilsonCargoSpa.Pages.Operaciones
             if (esAjax && generarPdf)
             {
                 string pdfUrl = Url.Page("/Operaciones/ReservaPdf", new { id = Operacione.Id });
-                return new JsonResult(new { success = true, id = Operacione.Id, pdfUrl });
+                string? correoCliente = Operacione.IdCliente == null ? null
+                    : await _context.Clientes.Where(c => c.Id == Operacione.IdCliente).Select(c => c.Correo).FirstOrDefaultAsync();
+                return new JsonResult(new { success = true, id = Operacione.Id, pdfUrl, correoCliente });
             }
 
             if (generarPdf)

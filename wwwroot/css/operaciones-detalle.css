@@ -1,0 +1,2878 @@
+    /* oct-2026 (mejora visual Marítimo/Transporte): estos tokens locales ahora son
+       alias de design-system.css (ya cargado globalmente desde _Layout.cshtml), igual
+       que se hizo con ControlFinanciero/AcuerdosOperativos/Cobranza — mismos colores
+       en todo el sistema, sin tocar ninguna clase que ya use estos nombres acá. */
+    :root {
+        --atilson-dark: var(--ink-900);
+        --atilson-purple: var(--brand);
+        --atilson-purple-deep: var(--brand-ink);
+        --atilson-purple-soft: var(--brand-soft);
+        --atilson-purple-border: #e3d4f5;
+        --txt-main: var(--ink-900);
+        --txt-muted: var(--ink-600);
+        --border-soft: var(--border);
+        --bg-main: var(--surface);
+        --bg-soft: var(--surface-sunken);
+        /* --shadow-xs/sm/md/lg: no se redefinen acá — con eso basta para que las reglas
+           de este archivo que ya usan var(--shadow-sm), etc. hereden directamente los
+           valores canónicos de design-system.css (redefinirlas acá como var(--shadow-sm))
+           sería una referencia circular e invalidaría la propiedad). */
+
+        /* Nuevos, para el rediseño de esta ronda — reutilizan la misma paleta */
+        --op-eyebrow: var(--ink-600);
+        --op-card-bg: var(--surface-sunken);
+        --op-card-border: var(--border);
+
+        /* oct-2026 (auditoría panel Documental): estos tonos se repetían ~170 veces
+           como hex sueltos en style="..." dentro de _PanelDocumental.cshtml — no
+           coinciden exacto con ningún token de design-system.css (son más saturados:
+           la paleta de botones de acción Aprobado/Rechazado/Enviar y de badges de
+           estado), pero sí se repetían siempre con el mismo valor para el mismo
+           significado. Se nombran acá con el mismo valor que ya tenían — cero cambio
+           visual — para dejar de depender de hex mágico repetido en el markup. */
+        --doc-info: #0ea5e9;         /* celeste — botón "Enviar a Agencia/Entidad", íconos de info */
+        --doc-info-soft: #f0f9ff;
+        --doc-info-border: #bae6fd;
+        --doc-info-deep: #0284c7;    /* texto sobre fondo --doc-info-soft */
+        --doc-success: #10b981;      /* esmeralda — botón "Aprobado" */
+        --doc-success-soft: #ecfdf5;
+        --doc-success-border: #86efac;
+        --doc-danger: #ef4444;       /* rojo — botón "Rechazado" */
+        --doc-danger-strong: #b91c1c;
+        --doc-danger-deep: #991b1b;
+        --doc-warning: #eab308;      /* amarillo — badges de alerta */
+        --doc-warning-soft: #fefce8;
+        --doc-warning-deep: #a16207;
+        --doc-accent-orange: #f59e0b; /* franja de acento (fila COA) */
+        --doc-gray: #9ca3af;          /* gris tenue — placeholders, íconos secundarios */
+        --doc-gray-deep: #6b7280;     /* gris medio — texto secundario */
+        --doc-gray-border: #e5e7eb;
+        --doc-ink: #111827;           /* texto fuerte (variante de --ink-900 para este panel) */
+        --doc-slate: #475569;         /* texto secundario (variante de --ink-700) */
+        --doc-slate-deep: #1e293b;
+        --doc-bg-faint: #fafbfc;      /* fondo casi blanco (inputs de solo lectura) */
+    }
+
+    body { background: #f1f5f9; font-family: 'Inter', system-ui, sans-serif; }
+
+    /* oct-2026: cabecera rediseñada — una sola fila (antes: fila de título + grid de 4
+       columnas que repetía Cliente/Servicio ya mostrados en el subtítulo). Ver el resto
+       de las reglas .detalle-* más abajo en este archivo. */
+    .detalle-header {
+        background: linear-gradient(120deg, var(--ink-900) 0%, #241539 55%, var(--atilson-purple-deep) 130%);
+        border-radius: var(--radius-lg); padding: 16px 22px; margin-bottom: 18px; color: #fff;
+        box-shadow: 0 8px 20px -10px rgba(76,29,122,.4);
+        border: 1px solid rgba(255,255,255,.08);
+        display: flex; align-items: center; justify-content: space-between; gap: 20px; flex-wrap: wrap;
+    }
+
+    .modern-tabs {
+        display: flex; flex-wrap: wrap; gap: 6px;
+        border-bottom: 1px solid var(--border-soft); margin-bottom: 20px; padding: 0 2px;
+    }
+    .modern-tabs .nav-link {
+        background: transparent !important; border: none !important; border-bottom: 2px solid transparent !important;
+        border-radius: 10px 10px 0 0 !important; color: var(--txt-muted) !important;
+        font-weight: 800 !important; font-size: 11px; text-transform: uppercase; letter-spacing: .4px !important;
+        padding: 11px 16px !important; transition: all .16s ease !important;
+    }
+    .modern-tabs .nav-link:hover { background: var(--atilson-purple-soft) !important; color: var(--atilson-purple-deep) !important; }
+    .modern-tabs .nav-link.active {
+        background: #fff !important; color: var(--atilson-purple-deep) !important;
+        border-bottom: 2px solid var(--atilson-purple) !important;
+        box-shadow: 0 -1px 0 0 var(--border-soft) inset, var(--shadow-xs) !important;
+    }
+
+    .form-section {
+        background: #fff !important; border: 1px solid var(--border-soft) !important;
+        border-radius: 14px !important; box-shadow: var(--shadow-sm) !important; padding: 26px 28px !important;
+    }
+    .section-title-sm {
+        font-size: 11.5px !important; font-weight: 900; letter-spacing: .7px !important;
+        color: var(--atilson-dark) !important; text-transform: uppercase;
+        border-bottom: 1px solid var(--border-soft) !important; padding-bottom: 12px !important;
+        margin-bottom: 18px !important; display: flex; justify-content: space-between; align-items: center;
+    }
+    .mod-label {
+        font-size: 9px; font-weight: 800; letter-spacing: .5px !important; color: #9398a8 !important;
+        text-transform: uppercase; margin-bottom: 4px; display: block;
+    }
+    .p-3.border.rounded, .border.rounded.bg-light {
+        border-color: var(--border-soft) !important; background: var(--bg-soft) !important; border-radius: 12px !important;
+    }
+
+    .erp-input, .inline-field {
+        border-radius: 9px !important; transition: border-color .15s ease, box-shadow .15s ease, background-color .15s ease;
+    }
+    .erp-input {
+        font-size: 13px; border: 1px solid var(--border-soft) !important; background-color: var(--bg-soft) !important;
+        padding: 8px 12px; width: 100%;
+    }
+    .erp-input:focus {
+        border-color: var(--atilson-purple) !important; background: #fff !important;
+        box-shadow: 0 0 0 3px rgba(109,45,158,.10) !important; outline: none !important;
+    }
+    .inline-field {
+        border: 1px solid transparent; background: transparent; padding: 6px 10px;
+        font-size: 13px; font-weight: 700; color: #0f172a; width: 100%; pointer-events: none;
+    }
+    .edit-mode .inline-field {
+        border: 1px solid var(--border-soft) !important; background: var(--bg-soft) !important;
+        pointer-events: auto !important;
+    }
+    .edit-mode .inline-field:focus {
+        border-color: var(--atilson-purple) !important; background: #fff !important;
+        box-shadow: 0 0 0 3px rgba(109,45,158,.10) !important;
+    }
+
+    .btn-edit-inline {
+        font-size: 11px; font-weight: 800; color: var(--atilson-purple); text-transform: uppercase;
+        cursor: pointer; text-decoration: none; padding: 7px 14px; border-radius: 8px !important;
+        background: var(--atilson-purple-soft) !important; border: 1px solid var(--atilson-purple-border) !important;
+        transition: all .16s ease;
+    }
+    .btn-edit-inline:hover {
+        background: var(--atilson-purple) !important; color: #fff !important; border-color: var(--atilson-purple) !important;
+        transform: translateY(-1px); box-shadow: 0 4px 10px -2px rgba(109,45,158,.35);
+    }
+
+    .edit-only-inline { display: none !important; }
+    .edit-mode .edit-only-inline { display: inline-block !important; }
+
+    .select2-container--default .select2-selection--single {
+        height: 38px !important; border: 1px solid var(--border-soft) !important;
+        border-radius: 9px !important; background-color: var(--bg-soft) !important;
+    }
+    .edit-mode .select2-container--default .select2-selection--single { background-color: #fff !important; }
+    .select2-container--default .select2-selection--single .select2-selection__rendered {
+        line-height: 34px !important; font-size: 13px; font-weight: 700; color: var(--txt-main); padding-left: 8px !important;
+    }
+    .select2-container--open .select2-selection--single {
+        border-color: var(--atilson-purple) !important; box-shadow: 0 0 0 3px rgba(109,45,158,.10) !important;
+    }
+    .select2-dropdown { border-radius: 10px !important; box-shadow: var(--shadow-md) !important; border: 1px solid var(--atilson-purple) !important; }
+
+    .btn { border-radius: 9px !important; transition: all .15s ease !important; }
+    .btn-dark { background: var(--atilson-dark) !important; border: none !important; }
+    .btn-dark:hover { background: #050810 !important; box-shadow: 0 6px 16px -4px rgba(0,0,0,.35); transform: translateY(-1px); }
+        select.edit-only-depositoretiro + .select2-container,
+    select.edit-only-planta + .select2-container { display: none !important; }
+    .edit-mode select.edit-only-depositoretiro + .select2-container,
+    .edit-mode select.edit-only-planta + .select2-container { display: inline-block !important; }
+    .file-status-txt { display: none; }
+    .edit-mode .file-status-txt { display: inline; }
+        /* oct-2026 (consolidación Documental): las clases .pro-* (sidebar,
+           tarjetas, inputs, botones, checks...) quedaron definidas una sola
+           vez, más abajo, junto al resto del "Sistema Documental Pro" — acá
+           había una copia antigua que una ronda posterior volvía a pisar por
+           completo sin que nadie la borrara; ver esa sección para el detalle. */
+    .log-incidencias-wrap { overflow-y: auto; font-size: 11px; }
+
+/* WORKFLOW DOCUMENTAL INTRALÉGICO ATILSON */
+    .style-sm {
+    font-size: 11px !important;
+    }
+
+    .style-xs {
+    font-size: 10px !important;
+    }
+
+    .font-mono {
+    font-family: 'SFMono-Regular', Consolas, monospace;
+    }
+
+    .fw-black {
+    font-weight: 900 !important;
+    }
+
+    .select-sm {
+    padding: 4px 8px !important;
+    font-size: 11px !important;
+    }
+
+    .doc-input-num {
+    font-size: 12px !important;
+    font-weight: bold !important;
+    opacity: 0.5;
+    }
+
+    .select-aplica-ok {
+    opacity: 1 !important;
+    border-color: #22c55e !important;
+    background-color: #f0fdf4 !important;
+    }
+
+    /* Barra de progreso interactiva del Certificado de Captura */
+    .progress-flow {
+    margin: 15px 0;
+    background: linear-gradient(to right, #cbd5e1 0%, #cbd5e1 100%);
+    background-size: 100% 2px;
+    background-repeat: no-repeat;
+    background-position: center 20px;
+    }
+
+    .step-flow {
+    flex: 1;
+    position: relative;
+    z-index: 1;
+    }
+
+    .icon-step {
+    width: 36px;
+    height: 36px;
+    background: #fff;
+    border: 2px solid #cbd5e1;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto;
+    color: #64748b;
+    transition: all 0.3s;
+    }
+
+    .step-flow.active .icon-step {
+    border-color: #ef4444;
+    background: #fef2f2;
+    color: #ef4444;
+    box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.15);
+    }
+
+    /* NOTA: este archivo definía aquí un segundo bloque ":root" con valores
+       distintos al de la cabecera del archivo (--atilson-dark: #0f172a vs.
+       #0b1220, etc.) que además quedaba pisado más abajo por un tercer
+       bloque idéntico al de la cabecera. Se eliminó este bloque duplicado/
+       contradictorio (auditoría oct-2026): el valor que realmente se
+       renderizaba ya era el de la cabecera, así que no cambia nada visual.
+       Ver el ":root" al inicio del archivo como única fuente de verdad
+       para estos tokens en esta página. */
+
+    body {
+    background-color: #f1f5f9;
+    font-family: 'Inter', system-ui, sans-serif;
+    }
+
+    /* NAVEGACIÓN Y FILTROS */
+    .workspace-nav {
+    background: var(--bg-main);
+    padding: 5px;
+    border-radius: 8px;
+    border: 1px solid var(--border-soft);
+    display: inline-flex;
+    gap: 2px;
+    margin-bottom: 24px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.02);
+    }
+
+    .ws-btn {
+    font-size: 11px;
+    font-weight: 800;
+    text-transform: uppercase;
+    padding: 8px 18px;
+    border-radius: 6px;
+    color: var(--txt-muted);
+    text-decoration: none;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    letter-spacing: 0.5px;
+    }
+
+    .ws-btn:hover {
+    background: var(--bg-soft);
+    color: var(--txt-main);
+    }
+
+    .ws-btn.active {
+    background: var(--atilson-dark);
+    color: #ffffff;
+    box-shadow: 0 2px 5px rgba(15, 23, 42, 0.15);
+    }
+
+    .ws-btn i {
+    font-size: 14px;
+    margin-right: 6px;
+    }
+
+    .filter-panel {
+    background: #fff;
+    padding: 12px 20px;
+    border-radius: 12px;
+    border: 1px solid var(--border-soft);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);
+    margin-bottom: 20px;
+    }
+
+    .search-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    flex-grow: 1;
+    max-width: 450px;
+    }
+
+    .search-wrapper i {
+    color: var(--txt-muted);
+    font-size: 18px;
+    }
+
+    .search-input {
+    border: none;
+    font-size: 14px;
+    font-weight: 500;
+    width: 100%;
+    outline: none;
+    color: var(--txt-main);
+    background: transparent;
+    }
+
+    .quick-filters {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    border-left: 1px solid var(--border-soft);
+    padding-left: 20px;
+    }
+
+    .filter-group {
+    display: flex;
+    align-items: center;
+    background: var(--bg-soft);
+    border: 1px solid var(--border-soft);
+    border-radius: 6px;
+    overflow: hidden;
+    }
+
+    .filter-group-icon {
+    padding: 6px 10px;
+    background: #fff;
+    color: var(--txt-muted);
+    border-right: 1px solid var(--border-soft);
+    font-size: 12px;
+    }
+
+    .filter-group select {
+    border: none;
+    background: transparent;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--txt-main);
+    cursor: pointer;
+    padding: 6px 30px 6px 10px;
+    outline: none;
+    }
+
+    #btnResetFilters {
+    background: #fff;
+    border: 1px solid var(--border-soft);
+    border-radius: 6px;
+    padding: 6px 12px;
+    transition: all 0.2s;
+    color: var(--txt-muted);
+    }
+
+    #btnResetFilters:hover {
+    background: #fef2f2;
+    color: #dc2626;
+    border-color: #fca5a5;
+    }
+
+    /* TABLA PRINCIPAL */
+    .table-container {
+    background: #fff;
+    border: 1px solid var(--border-soft);
+    border-radius: 12px;
+    box-shadow: 0 4px 6px -1px rgba(0,0,0,0.02);
+    overflow-x: auto;
+    }
+
+    .table-exec {
+    min-width: 1600px;
+    border-collapse: separate;
+    border-spacing: 0;
+    margin-bottom: 0;
+    }
+
+    .table-exec th {
+    background: #f8fafc;
+    color: var(--txt-muted);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border-soft);
+    font-weight: 800;
+    white-space: nowrap;
+    }
+
+    .table-exec td {
+    padding: 14px 20px;
+    border-bottom: 1px solid #f1f5f9;
+    vertical-align: top;
+    transition: all 0.2s ease;
+    cursor: pointer;
+    }
+
+    .table-exec th:first-child, .table-exec td:first-child {
+    position: sticky;
+    left: 0;
+    z-index: 2;
+    border-right: 1px solid var(--border-soft);
+    }
+
+    .table-exec th:first-child {
+    background-color: #f8fafc;
+    z-index: 3;
+    }
+
+    .row-main td:first-child {
+    background-color: #ffffff;
+    }
+
+    .row-main:hover td:first-child {
+    background-color: #f8fafc;
+    }
+
+    .row-sub td:first-child {
+    background-color: #fafcfd;
+    }
+
+    .row-sub:hover td:first-child {
+    background-color: #f1f5f9;
+    }
+
+    .row-main:hover td {
+    background-color: #f8fafc;
+    }
+
+    .row-sub td {
+    background-color: #fafcfd;
+    border-bottom: 1px solid #f1f5f9;
+    position: relative;
+    }
+
+    /* ANIMACIÓN ROJA PARA ALERTAS */
+    @keyframes pulse-alert {
+    0% {
+    background-color: #fffbfa;
+    }
+
+    50% {
+    background-color: #fee2e2;
+    }
+
+    100% {
+    background-color: #fffbfa;
+    }
+    }
+
+    .row-alert td {
+    animation: pulse-alert 2.5s infinite;
+    border-bottom: 1px solid #fecaca !important;
+    border-top: 1px solid #fecaca !important;
+    }
+
+    .row-alert td:first-child {
+    border-left: 3px solid #ef4444 !important;
+    }
+
+
+
+    /* TEXTOS Y BADGES TABLA */
+    .icon-alert-wrapper {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    }
+
+    .icon-alert {
+    font-size: 16px;
+    color: #ef4444;
+    margin-right: 6px;
+    cursor: pointer;
+    transition: 0.2s;
+    }
+
+    .icon-alert:hover {
+    transform: scale(1.2);
+    }
+
+    .booking-txt {
+    font-size: 13px;
+    font-weight: 900;
+    letter-spacing: -0.3px;
+    color: var(--atilson-dark);
+    }
+
+    .contenedor-row-line, .estado-row-line {
+    height: 22px;
+    box-sizing: border-box;
+}
+
+    .estado-badge {
+    font-size: 10px;
+    font-weight: 700;
+    padding: 3px 10px;
+    border-radius: 5px;
+    text-transform: none;
+    letter-spacing: 0;
+    white-space: nowrap;
+    border: 1px solid transparent;
+    transition: filter 0.15s, border-color 0.15s;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 150px;
+    height: 22px;
+    box-sizing: border-box;
+    text-align: center;
+    box-shadow: none;
+}
+
+.estado-badge:hover {
+    filter: brightness(0.97);
+}
+
+    .servicio-bw {
+    background: #ffffff;
+    color: #475569;
+    border: 1px solid #cbd5e1;
+    font-size: 9px;
+    font-weight: 800;
+    padding: 4px 8px;
+    border-radius: 4px;
+    text-transform: uppercase;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    white-space: nowrap;
+    min-width: 130px;
+    text-align: center;
+    }
+
+    .data-label {
+    font-size: 9px;
+    font-weight: 800;
+    color: #94a3b8;
+    text-transform: uppercase;
+    display: inline-block;
+    width: 35px;
+    }
+
+    .data-val {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--txt-main);
+    }
+
+    .badge-ing-pen {
+    font-size: 9px;
+    font-weight: 900;
+    padding: 3px 6px;
+    border-radius: 4px;
+    margin-left: 8px;
+    cursor: pointer;
+    transition: all 0.2s;
+    user-select: none;
+    }
+
+    .badge-ing-pen.ing {
+    background-color: #10b981;
+    color: white;
+    border: 1px solid #059669;
+    }
+
+    .badge-ing-pen.pen {
+    background-color: #fef2f2;
+    color: #ef4444;
+    border: 1px solid #fca5a5;
+    }
+
+    .badge-ing-pen:hover {
+    filter: brightness(0.9);
+    transform: scale(1.05);
+    }
+
+    .status-icon.ok {
+    color: #10b981;
+    }
+
+    .status-icon.pend {
+    color: #cbd5e1;
+    }
+
+    .status-icon.warn {
+    color: #f59e0b;
+    }
+
+    .status-icon.danger {
+    color: #ef4444;
+    }
+
+    .btn-action-dot {
+    color: #94a3b8;
+    font-size: 18px;
+    padding: 5px;
+    text-decoration: none;
+    border-radius: 50%;
+    transition: all 0.2s;
+    }
+
+    .btn-action-dot:hover {
+    background-color: #f1f5f9;
+    color: #0f172a;
+    }
+
+        .tab-status-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    margin-right: 6px;
+    background: transparent;
+    vertical-align: middle;
+}
+.tab-status-dot.status-green { background: #10b981; box-shadow: 0 0 0 2px rgba(16,185,129,0.15); }
+.tab-status-dot.status-orange { background: #f59e0b; box-shadow: 0 0 0 2px rgba(245,158,11,0.15); } 
+
+/* Anillo de progreso por pestaña — se llena en sentido horario a medida que
+   se completan los campos requeridos; al 100% queda verde sólido con check. */
+.tab-progress-ring {
+    width: 15px;
+    height: 15px;
+    border-radius: 50%;
+    background: conic-gradient(#10b981 calc(var(--pct, 0) * 1%), #e2e8f0 0);
+    position: relative;
+    display: inline-block;
+    margin-right: 6px;
+    vertical-align: middle;
+    transition: background 0.35s ease;
+    flex-shrink: 0;
+}
+.tab-progress-ring::after {
+    content: '';
+    position: absolute;
+    inset: 2.5px;
+    background: #fff;
+    border-radius: 50%;
+    transition: background 0.35s ease;
+}
+.tab-progress-ring[data-complete="true"] {
+    background: #10b981;
+}
+.tab-progress-ring[data-complete="true"]::after {
+    content: '\2713';
+    inset: 0;
+    background: transparent;
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 9px;
+    font-weight: 900;
+}
+
+
+    /* =========================================================
+    NUEVO MEGA MODAL: ULTRA COMPACTO, ESTABLE Y CON AIRE
+    ========================================================= */
+        .modal-mega-wide {
+    max-width: 1720px;
+    width: 97%;
+    margin: 1.25rem auto;
+    }
+    .modal-minimal .modal-content {
+    border-radius: 12px;
+    border: none;
+    box-shadow: 0 25px 50px -12px rgba(0,0,0,0.3);
+    overflow: hidden;
+    }
+
+    .modal-minimal .modal-body {
+    padding: 28px 32px;
+    background-color: var(--bg-soft);
+    max-height: 90vh;
+    overflow-y: auto;
+    }
+
+    .atilson-banner {
+    background: linear-gradient(135deg, #0f172a 0%, #6d2d9e 100%);
+    color: #fff;
+    border-radius: 10px;
+    padding: 15px 25px;
+    margin-bottom: 15px;
+    box-shadow: 0 4px 10px -2px rgba(109, 45, 158, 0.25);
+    position: relative;
+    }
+
+    .banner-label {
+    font-size: 10px;
+    font-weight: 700;
+    color: #cbd5e1;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    display: block;
+    margin-bottom: 4px;
+    }
+
+    .banner-input {
+    border: 1px solid transparent;
+    background: transparent;
+    color: #ffffff;
+    font-size: 13px;
+    font-weight: 800;
+    padding: 6px 10px;
+    border-radius: 6px;
+    width: 100%;
+    pointer-events: none;
+    -moz-appearance: none;
+    -webkit-appearance: none;
+    appearance: none;
+    transition: 0.2s;
+    margin-left: -10px;
+    }
+
+    .edit-mode .banner-input {
+    background: rgba(255,255,255,0.15);
+    border: 1px solid rgba(255,255,255,0.4);
+    pointer-events: auto;
+    }
+
+    .edit-mode .banner-input:focus {
+    background: rgba(255,255,255,0.25);
+    outline: none;
+    border-color: #fff;
+    }
+
+    .edit-mode select.banner-input {
+    appearance: auto;
+    }
+
+    .edit-mode select.banner-input option {
+    color: #0f172a;
+    background: #fff;
+    }
+
+    .edit-only-file {
+    display: none;
+    }
+
+    .edit-mode .edit-only-file {
+    display: block;
+    font-size: 11px;
+    padding: 3px;
+    }
+
+    .btn-edit-banner {
+    font-size: 11px;
+    font-weight: 800;
+    color: #fff;
+    text-transform: uppercase;
+    background: rgba(255,255,255,0.1);
+    border: 1px solid rgba(255,255,255,0.2);
+    padding: 4px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: 0.3s;
+    text-decoration: none;
+    }
+
+    .btn-edit-banner:hover {
+    background: rgba(255,255,255,0.25);
+    color: #fff;
+    }
+
+        /* TABS MODERNOS TIPO FOLDER — mismo ancho, sin apretarse */
+    .modern-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    border-bottom: 1px solid var(--border-soft);
+    margin-bottom: 0;
+    padding-bottom: 0;
+    padding-left: 0;
+    }
+    .modern-tabs .nav-link {
+    flex: 1 1 0;
+    min-width: 118px;
+    text-align: center;
+    white-space: nowrap;
+    font-size: 11px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    padding: 12px 14px;
+    border-radius: 8px 8px 0 0;
+    color: var(--txt-muted);
+    background: #f1f5f9;
+    border: 1px solid var(--border-soft);
+    transition: all 0.2s ease;
+    margin-bottom: -1px;
+    box-shadow: none;
+    }
+
+    .modern-tabs .nav-link:hover {
+    color: var(--atilson-purple);
+    background: #e2e8f0;
+    }
+
+    .modern-tabs .nav-link.active {
+    background: #ffffff !important;
+    color: var(--atilson-purple) !important;
+    border-color: var(--border-soft) var(--border-soft) #ffffff var(--border-soft) !important;
+    border-top: 3px solid var(--atilson-purple) !important;
+    z-index: 2;
+    position: relative;
+    }
+
+    /* =========================================================
+       SELECTOR DE CONTENEDOR — sub-tabs dentro de LAR y Documental
+       cuando el booking tiene 2+ contenedores. Visualmente distinto
+       de .modern-tabs para que se entienda que es "elegir contenedor",
+       no otro nivel de navegación de módulo.
+       ========================================================= */
+    .container-subtabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 5px;
+    background: #eef0f4;
+    border-radius: 10px;
+    margin-bottom: 20px;
+    border: 1px solid var(--border-soft);
+    }
+    .container-subtabs .nav-link {
+    font-size: 11px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    padding: 9px 18px;
+    border-radius: 7px;
+    color: #64748b;
+    background: transparent;
+    border: none;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    }
+    .container-subtabs .nav-link:hover {
+    background: #e2e8f0;
+    color: #0f172a;
+    }
+    .container-subtabs .nav-link.active {
+    background: #ffffff;
+    color: var(--atilson-purple);
+    box-shadow: 0 2px 6px rgba(15,23,42,0.1);
+    }
+    .container-subtabs-hint {
+    font-size: 10.5px;
+    color: #94a3b8;
+    font-weight: 600;
+    margin: -12px 0 16px 2px;
+    }
+
+    /* SECCIONES DE FORMULARIO CON ALTURA FIJA PARA NO BRINCAR */
+    .modal-minimal .tab-content {
+    position: relative;
+    }
+
+    .modal-minimal .tab-content .form-section {
+    background: #ffffff;
+    border: 1px solid var(--border-soft);
+    border-radius: 0 8px 8px 8px;
+    padding: 28px 32px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+    min-height: 380px;
+    }
+
+    /* Altura mínima fija para el tab-content del modal, evita saltos bruscos */
+    .modal-minimal .tab-content {
+    min-height: 480px;
+    transition: min-height 0.25s ease;
+    }
+
+    .section-title-sm {
+    font-size: 12px;
+    font-weight: 900;
+    color: var(--atilson-dark);
+    text-transform: uppercase;
+    border-bottom: 1px solid var(--border-soft);
+    padding-bottom: 10px;
+    margin-bottom: 15px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    }
+
+    .mod-label {
+    font-size: 9px;
+    font-weight: 800;
+    color: #94a3b8;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 4px;
+    display: block;
+    }
+
+    .inline-field {
+    border: 1px solid transparent;
+    background: transparent;
+    padding: 6px 10px;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 700;
+    color: #0f172a;
+    width: 100%;
+    transition: all 0.2s;
+    pointer-events: none;
+    margin-left: -10px;
+    -moz-appearance: none;
+    -webkit-appearance: none;
+    appearance: none;
+    }
+
+    .edit-mode .inline-field {
+    border-color: var(--border-soft);
+    background: #f8fafc;
+    pointer-events: auto;
+    }
+
+    .edit-mode select.inline-field {
+    appearance: auto;
+    }
+
+    .edit-mode .inline-field:focus {
+    border-color: var(--atilson-purple);
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(109, 45, 158, 0.1);
+    background: #fff;
+    }
+
+    .btn-edit-inline {
+    font-size: 11px;
+    font-weight: 800;
+    color: var(--atilson-purple);
+    text-transform: uppercase;
+    cursor: pointer;
+    text-decoration: none;
+    padding: 6px 12px;
+    border-radius: 6px;
+    border: 1px solid transparent;
+    transition: 0.2s;
+    }
+
+    .btn-edit-inline:hover {
+    background: #f3e8ff;
+    border-color: #d8b4fe;
+    }
+
+    .history-log {
+    font-size: 10px;
+    color: var(--txt-muted);
+    margin-top: 6px;
+    padding-left: 10px;
+    border-left: 2px solid var(--atilson-purple);
+    line-height: 1.2;
+    }
+
+    /* ALERTAS GLOBALES FLOTANTES */
+        #global-alert-box {
+    display: none;
+    position: fixed;
+    z-index: 9999999;
+    background: #ffffff;
+    border: 1px solid #fca5a5;
+    border-radius: 10px;
+    padding: 18px 20px;
+    width: 380px;
+    max-height: 440px;
+    overflow-y: auto;
+    box-shadow: 0 18px 40px rgba(0,0,0,0.2);
+    pointer-events: none;
+    }
+
+    #global-alert-box h6 {
+    font-size: 11px !important;
+    letter-spacing: 0.5px;
+    }
+
+    /* El contenido inyectado son los mismos bloques que arma GenerarAlertasProactivas
+       en el servidor (con colores Bootstrap info/warning/danger). Acá se simplifican
+       a solo dos tonos — negro para lo informativo, rojo para lo crítico — sobre
+       fondo blanco, con más aire entre cada bloque. */
+    #global-alert-content > div {
+    background: #ffffff !important;
+    margin-bottom: 12px !important;
+    padding: 12px 14px !important;
+    font-size: 12px !important;
+    line-height: 1.5 !important;
+    border-radius: 8px !important;
+    box-shadow: none !important;
+    }
+    #global-alert-content > div:last-child {
+    margin-bottom: 0 !important;
+    }
+    #global-alert-content .text-info,
+    #global-alert-content .text-warning,
+    #global-alert-content .text-dark,
+    #global-alert-content .border-info,
+    #global-alert-content .border-warning {
+    color: #0f172a !important;
+    border-color: #0f172a !important;
+    }
+    #global-alert-content .text-danger,
+    #global-alert-content .border-danger {
+    color: #dc2626 !important;
+    border-color: #dc2626 !important;
+    }
+    #global-alert-content strong {
+    font-size: 11.5px !important;
+    letter-spacing: 0.3px;
+    }
+
+    #global-alert-box::before {
+    content: '';
+    position: absolute;
+    top: -6px;
+    left: 15px;
+    width: 12px;
+    height: 12px;
+    background: #fff;
+    border-left: 1px solid #fca5a5;
+    border-top: 1px solid #fca5a5;
+    transform: rotate(45deg);
+    }
+
+    #modalAlertas .btn-alert-action {
+    display: block !important;
+    margin-top: 12px;
+    }
+
+    .erp-label {
+    font-size: 10px;
+    font-weight: 800;
+    color: var(--txt-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 6px;
+    display: block;
+    }
+
+    .erp-input {
+    font-size: 13px;
+    border: 1px solid var(--border-soft);
+    border-radius: 6px;
+    background-color: var(--bg-soft);
+    padding: 8px 12px;
+    width: 100%;
+    color: var(--txt-main);
+    font-weight: 500;
+    }
+
+    .modal-minimal:not(#megaModal) .form-section {
+    background: #ffffff;
+    border: 1px solid var(--border-soft);
+    border-radius: 8px;
+    padding: 15px 25px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+    }
+
+        /* FIX SWEETALERT EN MODALES BOOTSTRAP */
+    .swal2-container {
+    z-index: 1060 !important;
+    }
+    /* =========================================================
+       SELECT2 — BÚSQUEDA PREDICTIVA (Naviera, POL, POD, Depósito,
+       Planta, Agencia). El dropdown se ancla al propio modal para
+       evitar el problema clásico de z-index/foco de Select2 dentro
+       de un modal de Bootstrap.
+       ========================================================= */
+    .select2-container { width: 100% !important; }
+    .select2-container--open { z-index: 20000 !important; }
+    .select2-container--default .select2-selection--single {
+        height: 38px !important;
+        border: 1px solid var(--border-soft) !important;
+        border-radius: 6px !important;
+        background-color: #f8fafc !important;
+        padding: 2px 4px;
+    }
+    .edit-mode .select2-container--default .select2-selection--single {
+        background-color: #fff !important;
+    }
+    .select2-container--default .select2-selection--single .select2-selection__rendered {
+        line-height: 34px !important;
+        font-size: 13px;
+        font-weight: 700;
+        color: var(--txt-main);
+        padding-left: 8px !important;
+    }
+    .select2-container--default .select2-selection--single .select2-selection__arrow {
+        height: 36px !important;
+    }
+    .select2-container--default.select2-container--disabled .select2-selection--single {
+        background-color: #f1f5f9 !important;
+        cursor: default;
+    }
+    .select2-dropdown {
+        border: 1px solid var(--atilson-purple) !important;
+        border-radius: 8px !important;
+        box-shadow: 0 10px 25px rgba(0,0,0,0.15);
+    }
+    .select2-search--dropdown { padding: 6px; }
+    .select2-search__field {
+        border: 1px solid var(--border-soft) !important;
+        border-radius: 6px !important;
+        padding: 6px 8px !important;
+        font-size: 12.5px;
+        font-weight: 700;
+        text-transform: uppercase;
+        outline: none;
+    }
+    .select2-results__option--highlighted { background-color: var(--atilson-purple) !important; }
+    /* Depósito y Planta se ocultan hasta modo edición: Select2 crea su widget
+       como HERMANO del <select> original, así que el toggle vista/edición debe
+       aplicarse a ese hermano, no al select (que Select2 ya oculta por su cuenta). */
+        select.edit-only-depositoretiro + .select2-container,
+    select.edit-only-planta + .select2-container,
+    select.edit-only-empresatransporte + .select2-container { display: none !important; }
+    .edit-mode select.edit-only-depositoretiro + .select2-container,
+    .edit-mode select.edit-only-planta + .select2-container,
+    .edit-mode select.edit-only-empresatransporte + .select2-container { display: inline-block !important; }
+    /* Texto "Sin archivo" oculto hasta modo edición */
+    .file-status-txt {
+    display: none;
+    }
+
+    .edit-mode .file-status-txt {
+    display: inline;
+    }
+
+    /* FIX SWITCHES DISABLED (SAG/SERNAPESCA) */
+    /* MEJORA VISUAL SWITCHES (ESTILO IOS/COMPACTO) */
+    /* =========================================================
+    MEJORA VISUAL SWITCHES (ESTILO IOS / COMPACTO EXACTO)
+    ========================================================= */
+    .custom-switch-md {
+    display: flex !important;
+    align-items: center;
+    gap: 8px;
+    padding-left: 0 !important;
+    }
+
+    .custom-switch-md .form-check-input {
+    appearance: none !important;
+    -webkit-appearance: none !important;
+    width: 36px !important;
+    height: 20px !important;
+    background-color: #cbd5e1 !important;
+    background-image: none !important; /* Apaga la pelotita doble de Bootstrap */
+    border: none !important;
+    border-radius: 50px !important;
+    position: relative;
+    cursor: pointer;
+    outline: none !important;
+    box-shadow: inset 0 1px 3px rgba(0,0,0,0.1);
+    transition: background-color 0.3s ease;
+    margin: 0 !important;
+    }
+
+    .locked-finanzas {
+    background-color: #f0fdf4 !important;
+    color: #16a34a !important;
+    font-weight: 800 !important;
+    cursor: not-allowed;
+}
+
+    /* La única pelotita blanca (nuestra) */
+    .custom-switch-md .form-check-input::after {
+    content: '';
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 16px;
+    height: 16px;
+    background-color: white;
+    border-radius: 50%;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.2);
+    transition: left 0.3s ease;
+    }
+
+    /* Movimiento de la pelotita al encender */
+    .custom-switch-md .form-check-input:checked::after {
+    left: calc(100% - 18px);
+    }
+
+    /* Colores personalizados */
+    .custom-switch-md .form-check-input:checked {
+    background-color: var(--atilson-purple) !important;
+    }
+
+    .custom-switch-md .form-check-input.sw-info:checked {
+    background-color: #0ea5e9 !important;
+    }
+
+    .custom-switch-md .form-check-input.sw-success:checked {
+    background-color: #10b981 !important;
+    }
+
+    .custom-switch-md .form-check-input.sw-danger:checked {
+    background-color: #ef4444 !important;
+    }
+
+    .custom-switch-md .form-check-input:disabled {
+    opacity: 0.6 !important;
+    cursor: not-allowed;
+    }
+
+    .custom-switch-md .form-check-label {
+    font-size: 11px;
+    font-weight: 900;
+    cursor: pointer;
+    margin-bottom: 0;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    }
+
+    /* ESTILOS MINIMALISTAS CERTIFICADOS Y SLOTS */
+    .select-minimal {
+    font-size: 10px !important;
+    padding: 4px 18px 4px 8px !important;
+    border-radius: 6px;
+    border: 1px solid #cbd5e1;
+    font-weight: 800;
+    background-color: #f8fafc;
+    cursor: pointer;
+    color: #1e293b;
+    }
+
+    .slot-btn {
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 800;
+    border: 1px solid #e2e8f0;
+    background: #fff;
+    color: #64748b;
+    transition: all 0.2s;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    }
+
+    .slot-btn.active {
+    background: var(--atilson-dark);
+    color: #fff;
+    border-color: var(--atilson-dark);
+    box-shadow: 0 2px 4px rgba(15,23,42,0.2);
+    }
+
+    .slot-btn:hover:not(.active) {
+    background: #f1f5f9;
+    }
+
+    .slot-pane {
+    animation: fadeIn 0.3s ease;
+    }
+
+    @keyframes fadeIn {
+    from {
+    opacity: 0;
+    transform: translateY(-5px);
+    }
+
+    to {
+    opacity: 1;
+    transform: translateY(0);
+    }
+    }
+
+    /* =========================================================
+   FIX VISUAL PARA SELECTORES DESPLEGABLES EN EDICIÓN
+========================================================= */
+select.inline-field:disabled, select.banner-input:disabled, select.erp-input:disabled {
+    background-image: none !important;
+    padding-right: 10px !important;
+}
+
+select.inline-field:not(:disabled), select.banner-input:not(:disabled), select.erp-input:not(:disabled) {
+    appearance: none !important; 
+    -webkit-appearance: none !important;
+    -moz-appearance: none !important;
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23343a40' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='m2 5 6 6 6-6'/%3e%3c/svg%3e") !important;
+    background-repeat: no-repeat !important;
+    background-position: right .75rem center !important;
+    background-size: 16px 12px !important;
+    padding-right: 2.25rem !important;
+    background-color: #fff !important;
+}
+
+   /* =========================================================
+       PANEL DESPLEGABLE DOCUMENTOS BASE (VERSIÓN ULTRA ANCHA) 
+       ========================================================= */
+    .doc-base-panel {
+        position: fixed !important;
+        top: 0 !important;
+        right: -850px !important; /* Oculta el panel completamente a la derecha */
+        width: 700px !important;  /* <--- AQUÍ ESTÁ EL NUEVO ANCHO (Casi el doble de grande) */
+        height: 100vh !important;
+        background: #fafbfd !important;
+        border-left: 4px solid var(--atilson-purple) !important;
+        z-index: 1065 !important;
+        transition: right 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+        overflow-y: auto !important;
+        box-shadow: -5px 0 25px rgba(0,0,0,0.15) !important;
+        padding: 30px !important;
+    }
+
+    .doc-base-panel.open {
+        right: 0 !important;
+    }
+
+    .btn-docbase-toggle {
+    background: #fff;
+    color: var(--atilson-dark);
+    font-size: 11px;
+    font-weight: 800;
+    text-transform: uppercase;
+    padding: 8px 16px;
+    border-radius: 8px;
+    border: 1px solid #cbd5e1;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    transition: 0.2s;
+    }
+
+    .btn-docbase-toggle:hover {
+    background: var(--bg-soft);
+    border-color: var(--atilson-dark);
+    transform: translateY(-1px);
+    }
+
+    /* FIX SWITCHES DISABLED (SAG/SERNAPESCA) */
+    .custom-switch-md .form-check-input:checked {
+    background-color: var(--atilson-purple) !important;
+    border-color: var(--atilson-purple) !important;
+    }
+
+    .custom-switch-md .form-check-input:checked:disabled {
+    opacity: 0.8 !important;
+    }
+
+    /* ESTILOS MINIMALISTAS CERTIFICADOS Y SLOTS */
+    .select-minimal {
+    font-size: 10px !important;
+    padding: 4px 18px 4px 8px !important;
+    border-radius: 6px;
+    border: 1px solid #cbd5e1;
+    font-weight: 800;
+    background-color: #f8fafc;
+    cursor: pointer;
+    color: #1e293b;
+    }
+
+    .slot-btn {
+    width: 22px;
+    height: 22px;
+    padding: 0;
+    border-radius: 50%;
+    font-size: 10px;
+    font-weight: 800;
+    border: 1px solid #cbd5e1;
+    background: #fff;
+    color: #64748b;
+    transition: all 0.2s;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin-right: 4px;
+    }
+
+    .slot-btn.active {
+    background: var(--atilson-dark);
+    color: #fff;
+    border-color: var(--atilson-dark);
+    box-shadow: 0 2px 4px rgba(15,23,42,0.2);
+    }
+
+    .slot-btn:hover:not(.active) {
+    background: #f1f5f9;
+    }
+
+    .slot-pane {
+    animation: fadeIn 0.3s ease;
+    }
+
+    @keyframes fadeIn {
+    from {
+    opacity: 0;
+    transform: translateY(-5px);
+    }
+
+    to {
+    opacity: 1;
+    transform: translateY(0);
+    }
+    }
+
+    /* PANEL DESPLEGABLE DOCUMENTOS BASE */
+    .doc-base-panel {
+    position: fixed;
+    top: 0;
+    right: -450px;
+    width: 420px;
+    height: 100vh;
+    background: #fafbfd;
+    border-left: 4px solid var(--atilson-purple);
+    z-index: 9999;
+    transition: right 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    overflow-y: auto;
+    box-shadow: -5px 0 25px rgba(0,0,0,0.15);
+    padding: 25px;
+    }
+
+    .doc-base-panel.open {
+    right: 0;
+    }
+
+    .btn-docbase-toggle {
+    background: #fff;
+    color: var(--atilson-dark);
+    font-size: 11px;
+    font-weight: 800;
+    text-transform: uppercase;
+    padding: 8px 16px;
+    border-radius: 8px;
+    border: 1px solid #cbd5e1;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    transition: 0.2s;
+    }
+
+    .btn-docbase-toggle:hover {
+    background: var(--bg-soft);
+    border-color: var(--atilson-dark);
+    transform: translateY(-1px);
+    }
+
+
+/* FILAS COMPACTAS: subcertificados y paneles internos */
+.style-table-doc tbody tr td {
+    padding-top: 3px !important;
+    padding-bottom: 3px !important;
+    vertical-align: middle !important;
+    font-size: 10px !important;
+}
+
+/* Filas principales de certificado */
+.row-cert td {
+    padding-top: 4px !important;
+    padding-bottom: 4px !important;
+}
+
+/* Filas de subcerts ultra-compactas */
+#row-coa td, #row-dt td, #row-cod td, #row-cla td, #row-nep td,
+[id^="row-coa-"] td, [id^="row-dt-"] td, [id^="row-cod-"] td,
+[id^="row-cla-"] td, [id^="row-nep-"] td {
+    padding-top: 2px !important;
+    padding-bottom: 2px !important;
+    font-size: 9px !important;
+    line-height: 1.2 !important;
+}
+
+/* Paneles expandibles internos: reducir padding */
+[id^="panel-coa-"] .p-3,
+[id^="panel-dt-"] .p-3,
+[id^="panel-cod-"] .p-3,
+[id^="panel-cla-"] .p-3,
+[id^="panel-nep-"] .p-3 {
+    padding: 8px 12px !important;
+}
+
+/* Log de incidencias compacto */
+[id^="log-"][id$="-txt"] {
+    max-height: 70px;
+    overflow-y: auto;
+    padding: 2px 0;
+    font-size: 8px !important;
+    line-height: 1.3;
+}
+
+.style-table-doc thead th {
+    font-size: 9px !important;
+    padding: 5px 4px !important;
+    white-space: nowrap;
+}
+
+/* Botones dentro de subcerts: más pequeños */
+[id^="row-coa-"] .btn,
+[id^="row-dt-"] .btn,
+[id^="row-cod-"] .btn,
+[id^="row-cla-"] .btn,
+[id^="row-nep-"] .btn {
+    padding: 2px 6px !important;
+    font-size: 9px !important;
+}
+
+/* Input groups en subcerts: más compactos */
+[id^="row-coa-"] .input-group,
+[id^="row-dt-"] .input-group,
+[id^="row-cod-"] .input-group,
+[id^="row-cla-"] .input-group,
+[id^="row-nep-"] .input-group {
+    margin-bottom: 2px !important;
+}
+
+    /* Altura fija para el slot-body cuando se activa */
+    .slots-container .slot-frame {
+    min-height: unset !important;
+    }
+
+    .modal-minimal .slot-body.tab-content {
+    min-height: unset !important;
+    }
+
+    /* Labels de columna de radio con texto visible */
+    .style-table-doc thead th {
+    font-size: 9px !important;
+    padding: 6px 4px !important;
+    white-space: nowrap;
+    }
+
+    .style-table-doc tbody td {
+    font-size: 10px !important;
+    }
+
+    /* =========================================================
+    NUEVOS CHECKBOX CUADRADOS (ESTILO ATILSON)
+    ========================================================= */
+    .cuadradito-check {
+    appearance: none !important;
+    -webkit-appearance: none !important;
+    width: 20px !important;
+    height: 20px !important;
+    background-color: #f8fafc !important;
+    border: 2px solid #cbd5e1 !important;
+    border-radius: 4px !important;
+    cursor: pointer;
+    position: relative;
+    display: inline-block;
+    vertical-align: middle;
+    transition: all 0.2s ease;
+    margin: 0 !important;
+    /* LÍNEAS A AGREGAR PARA CORREGIR EL DESCUADRE: */
+    padding: 0 !important;
+    min-width: 20px !important;
+    flex-shrink: 0;
+    }
+
+    .cuadradito-check:checked {
+    background-color: #6d2d9e !important;
+    border-color: #6d2d9e !important;
+    background-image: none !important; /* Esto elimina el punto blanco de Bootstrap */
+    }
+
+    .cuadradito-check:checked::after {
+    content: '';
+    position: absolute;
+    top: 2px;
+    left: 6px;
+    width: 5px;
+    height: 10px;
+    border: solid white;
+    border-width: 0 2px 2px 0;
+    transform: rotate(45deg);
+    }
+
+    .cuadradito-check:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    }
+
+    .status-btn-doc {
+    font-size: 9px;
+    font-weight: 800;
+    text-transform: uppercase;
+    padding: 4px 8px;
+    border-radius: 4px;
+    text-align: left;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+    }
+
+    /* =========================================================
+    TIMELINE / BITÁCORA DE HISTORIALES (ESTILO ATILSON)
+    ========================================================= */
+    .timeline-atilson {
+    position: relative;
+    padding-left: 25px;
+    margin-top: 15px;
+    margin-bottom: 15px;
+    }
+
+    .timeline-atilson::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 9px;
+    width: 2px;
+    background: var(--border-soft);
+    }
+
+    .timeline-item {
+    position: relative;
+    margin-bottom: 20px;
+    animation: fadeIn 0.4s ease;
+    }
+
+    .timeline-badge {
+    position: absolute;
+    left: -25px;
+    top: 6px;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    border: 2px solid #fff;
+    z-index: 2;
+    }
+
+    .timeline-content {
+    background: #fff;
+    border: 1px solid var(--border-soft);
+    border-radius: 8px;
+    padding: 12px 16px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+    position: relative;
+    }
+
+    .timeline-content::before {
+    content: '';
+    position: absolute;
+    left: -6px;
+    top: 8px;
+    width: 10px;
+    height: 10px;
+    background: #fff;
+    border-left: 1px solid var(--border-soft);
+    border-bottom: 1px solid var(--border-soft);
+    transform: rotate(45deg);
+    }
+    /* STEpper de Trazabilidad Documental ATILSON */
+    .stepper-trazabilidad {
+    display: flex;
+    justify-content: space-between;
+    position: relative;
+    margin: 15px 0 5px 0;
+    width: 100%;
+    }
+
+    .stepper-trazabilidad::before {
+    content: '';
+    position: absolute;
+    top: 12px;
+    left: 5%;
+    right: 5%;
+    height: 2px;
+    background: #cbd5e1;
+    z-index: 1;
+    }
+
+    .step-item {
+    position: relative;
+    z-index: 2;
+    text-align: center;
+    width: 16.6%;
+    cursor: pointer;
+    transition: 0.3s;
+    }
+
+    .step-circle {
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    background: #fff;
+    border: 2px solid #cbd5e1;
+    margin: 0 auto 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+    color: transparent;
+    transition: all 0.3s;
+    box-shadow: 0 0 0 3px #f8fafc;
+    }
+
+    .step-title {
+    font-size: 9px;
+    font-weight: 800;
+    color: #64748b;
+    text-transform: uppercase;
+    line-height: 1.2;
+    }
+
+    /* Estados del Stepper */
+    .step-item.completed .step-circle {
+    border-color: #10b981;
+    background: #10b981;
+    color: #fff;
+    }
+
+    .step-item.completed .step-title {
+    color: #10b981;
+    }
+
+    .step-item.rejected .step-circle {
+    border-color: #ef4444;
+    background: #ef4444;
+    color: #fff;
+    }
+
+    .step-item.rejected .step-title {
+    color: #ef4444;
+    }
+
+    /* Efecto Hover */
+    .step-item:not(.rejected):not(.disabled):hover .step-circle {
+    transform: scale(1.15);
+    border-color: #6d2d9e;
+    }
+
+    .tr-collapse td {
+    padding: 0 !important;
+    border: none !important;
+    }
+
+    .doc-val-input {
+    border-left: none;
+    border-radius: 0 6px 6px 0;
+    }
+
+    .doc-val-input.val-pendiente {
+    color: #94a3b8 !important;
+    font-style: italic;
+    font-weight: 700 !important;
+    background-color: #f8fafc !important;
+    border: 1px dashed #cbd5e1 !important;
+    cursor: not-allowed;
+    }
+
+    .doc-val-input.val-asignado {
+    color: #16a34a !important;
+    background-color: #f0fdf4 !important;
+    border-color: #bbf7d0 !important;
+    font-weight: 800 !important;
+    cursor: not-allowed;
+    }
+
+    .doc-num-input {
+    border-right: 1px dashed #cbd5e1;
+    border-radius: 6px 0 0 6px;
+    }
+
+    /* MEJORAS TABLA CERTIFICADOS */
+    .row-cert {
+    cursor: pointer;
+    transition: background-color 0.2s;
+    }
+
+    .row-cert:hover {
+    background-color: #f8fafc;
+    }
+
+    /* Diseño Horizontal de Slots (Ahorra muchísimo espacio vertical) */
+    .slot-frame {
+    border: 1px solid var(--border-soft);
+    border-radius: 6px;
+    background-color: #fff;
+    display: flex;
+    flex-direction: row; /* Cambio a fila para ahorrar espacio vertical */
+    align-items: stretch;
+    overflow: hidden;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.02);
+    }
+
+    .slot-nav {
+    background-color: #f8fafc;
+    border-right: 1px solid var(--border-soft); /* Borde a la derecha */
+    border-bottom: none;
+    padding: 6px;
+    display: flex;
+    flex-direction: column; /* Números en columna */
+    justify-content: center;
+    align-items: center;
+    min-width: 45px; /* Un poco más ancho para que quepan bien */
+    }
+
+    .slot-body {
+    padding: 8px 12px;
+    flex-grow: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    }
+
+    /* Texto junto a los botones de radio */
+    .radio-label-inline {
+    font-size: 9px;
+    font-weight: 800;
+    color: #64748b;
+    cursor: pointer;
+    user-select: none;
+    margin-top: 2px;
+    }
+
+    /* =========================================================
+    INDICADORES ESTADO ENVÍO CORREO (E, P, A)
+    ========================================================= */
+    .email-badge {
+    font-size: 9px;
+    font-weight: 900;
+    padding: 3px 6px;
+    border-radius: 6px;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    user-select: none;
+    cursor: help;
+    transition: all 0.2s;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+.email-badge i { font-size: 6px; } /* Puntito de color */
+
+    /* P = Pendiente (Gris/Rojo Suave) */
+    .email-badge.pend { background-color: #f8fafc; color: #94a3b8; border: 1px solid #cbd5e1; }
+    .email-badge.pend i { color: #94a3b8; }
+
+    /* P (rojo) = Modificado después de haber sido enviado, pendiente de reenvío */
+    .email-badge.pend-red { background-color: #fef2f2; color: #dc2626; border: 1px solid #fca5a5; font-weight: 900; animation: pulse-alert 2.5s infinite; }
+    .email-badge.pend-red i { color: #dc2626; }
+
+    /* E = Enviado (Verde) */
+    .email-badge.env { background-color: #f0fdf4; color: #16a34a; border: 1px solid #bbf7d0; }
+    .email-badge.env i { color: #22c55e; }
+
+    /* A = Actualizado / Reenviado (Azul) */
+    .email-badge.act { background-color: #f0f9ff; color: #0284c7; border: 1px solid #bae6fd; }
+    .email-badge.act i { color: #0ea5e9; }
+
+    /* ANIMACIÓN DEL BOTÓN DESPLEGABLE MSC */
+    .chevron-icon {
+    transition: transform 0.3s ease;
+    }
+
+    .row-cert[aria-expanded="true"] .chevron-icon {
+    transform: rotate(90deg);
+    }
+
+    /* Filas de subcertificados secundarios: ultra-compactas */
+[id^="row-coa-"], [id^="row-dt-"], [id^="row-cod-"],
+[id^="row-cla-"], [id^="row-nep-"] {
+    font-size: 10px !important;
+}
+[id^="row-coa-"] td, [id^="row-dt-"] td, [id^="row-cod-"],
+[id^="row-cla-"] td, [id^="row-nep-"] td {
+    padding-top: 2px !important;
+    padding-bottom: 2px !important;
+    line-height: 1.2 !important;
+}
+
+/* Log de incidencias: compacto y bien encuadrado */
+.log-incidencias-wrap {
+    max-height: 80px;
+    overflow-y: auto;
+    font-size: 9px;
+    line-height: 1.3;
+    padding: 2px 0;
+}
+.log-inc-entry {
+    display: flex;
+    align-items: flex-start;
+    gap: 5px;
+    padding: 3px 0;
+    border-bottom: 1px solid #f1f5f9;
+}
+.log-inc-entry:last-child { border-bottom: none; }
+.log-inc-dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    margin-top: 3px;
+}
+.log-inc-meta {
+    font-weight: 800;
+    color: #0f172a;
+    text-transform: uppercase;
+    font-size: 8px;
+}
+.log-inc-hora {
+    color: #94a3b8;
+    font-size: 8px;
+    margin-left: 4px;
+}
+.log-inc-usuario {
+    color: #6d2d9e;
+    font-weight: 700;
+    font-size: 8px;
+    margin-left: 4px;
+}
+.log-inc-desc {
+    color: #475569;
+    font-size: 9px;
+    margin-top: 1px;
+    line-height: 1.2;
+}
+/* RESTRICCIONES VISUALES DE EDICIÓN */
+    .edit-only-flex { display: none !important; }
+    .edit-mode .edit-only-flex { display: flex !important; }
+    .edit-only-inline { display: none !important; }
+    .edit-mode .edit-only-inline { display: inline-block !important; }
+    .edit-only-block { display: none !important; }
+    .edit-mode .edit-only-block { display: block !important; }
+
+  /* =========================================================
+       SISTEMA DOCUMENTAL PRO (V3) - DISEÑO TIPO DASHBOARD
+
+       oct-2026 (consolidación): estas clases .pro-* tenían 3-4 definiciones
+       repartidas en distintos puntos del archivo ("REDISEÑO PRO V4",
+       "SIDEBAR DOCUMENTAL (V3)" y una copia vieja cerca del inicio) — cada
+       ronda agregaba su propia capa de ajustes sin tocar ni borrar la
+       anterior, así que varias reglas quedaban pisadas y no hacían nada
+       visualmente, solo ensuciaban el archivo. Quedó todo junto acá, en el
+       valor final que realmente se estaba viendo (resultado de esa cascada),
+       usando los tokens de design-system.css donde el color coincidía
+       exactamente con uno ya existente — así un cambio de marca a futuro se
+       refleja aquí también sin tener que editar 3-4 lugares distintos.
+
+       Único cambio real de color (no solo de orden): el estado "editando"
+       de los campos (.pro-input) resaltaba en azul (#3b82f6) en vez del
+       morado corporativo que usa el resto del sistema (Marítimo, Transporte,
+       el indicador de la pestaña activa de este mismo sidebar...) — quedó
+       unificado a var(--atilson-purple), igual que en todas partes.
+       ========================================================= */
+    .pro-wrapper { display: flex; border: 1px solid var(--border-soft) !important; border-radius: 14px !important; background: var(--bg-main); min-height: 550px; overflow: hidden; box-shadow: var(--shadow-sm) !important; }
+
+    /* Menú Lateral */
+    .pro-sidebar { width: 250px; background: linear-gradient(180deg, #fbfbfd 0%, var(--bg-soft) 100%) !important; border-right: 1px solid var(--border-soft); padding: 18px 12px !important; display: flex; flex-direction: column; gap: 4px; }
+    .pro-sidebar .pro-label { font-size: 9.5px !important; color: #9ca3af !important; margin: 14px 4px 8px !important; padding-top: 14px; border-top: 1px solid #eceef1; }
+    .pro-sidebar .pro-label:first-child { margin-top: 2px; padding-top: 0; border-top: none; }
+    .pro-nav-btn { position: relative; width: 100%; text-align: left; padding: 10px 14px 10px 16px !important; margin-bottom: 6px; border-radius: 8px !important; border: none; background: transparent; font-size: 12px !important; font-weight: 600; color: #4b5563; transition: background .15s ease, transform .15s ease !important; display: flex; align-items: center; }
+    .pro-nav-btn::before { content: ''; position: absolute; left: -10px; top: 50%; width: 3px; height: 0; background: var(--atilson-purple); border-radius: 0 3px 3px 0; transform: translateY(-50%); transition: height 0.2s ease; }
+    .pro-nav-btn:hover { background: #f1f2f4 !important; color: var(--txt-main); transform: translateX(1px); }
+    .pro-nav-btn.active { background: var(--bg-main) !important; color: var(--txt-main); font-weight: 700; border: 1px solid var(--border-soft); box-shadow: 0 1px 2px rgba(15,23,42,.06), 0 4px 10px -4px rgba(15,23,42,.08) !important; }
+    .pro-nav-btn.active::before { height: 18px; }
+    .pro-nav-btn.disabled { opacity: 0.35 !important; pointer-events: none !important; cursor: not-allowed !important; }
+    .pro-dot { width: 8px; height: 8px; border-radius: 50%; margin-right: 12px; flex-shrink: 0; }
+
+    /* Contenido */
+    .pro-content-area { flex-grow: 1; padding: 28px 36px !important; background: var(--bg-main); position: relative; }
+    .pro-title { font-size: 18px; font-weight: 800; color: var(--txt-main); margin-bottom: 4px; letter-spacing: -0.3px; display: flex; align-items: center; }
+    .pro-subtitle { font-size: 12px; color: #6b7280; margin-bottom: 30px; }
+
+    /* Formularios y Tarjetas */
+    .pro-card, .pro-card-gray, .pro-card-red { border-radius: 12px; padding: 20px; margin-bottom: 20px; }
+    .pro-card { background: var(--bg-main); border: 1px solid var(--border-soft); box-shadow: var(--shadow-xs); }
+    .pro-card-gray { background: var(--bg-soft); border: 1px solid var(--border-soft); }
+    .pro-card-red { background: #fef8f8; border: 1px solid #fde2e2; }
+
+    .pro-label { font-size: 10px; font-weight: 700; color: var(--txt-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; display: block; }
+    .pro-input { width: 100%; border: 1px solid var(--border-soft); border-radius: 6px; padding: 8px 12px; font-size: 13px; color: var(--txt-main); background: var(--bg-soft); transition: all 0.2s; }
+    .pro-input[readonly] { cursor: default; }
+    .edit-mode .pro-input:not([readonly]) { background: var(--bg-main) !important; border-color: var(--atilson-purple) !important; box-shadow: 0 0 0 3px rgba(109,45,158,.10); outline: none; }
+
+    /* Trazabilidad (Stepper) */
+    .pro-stepper { display: flex; justify-content: space-between; position: relative; margin: 10px 0 30px; padding: 0 20px; }
+    .pro-stepper::before { content: ''; position: absolute; top: 12px; left: 30px; right: 30px; height: 2px; background: #e5e7eb; z-index: 1; }
+    .pro-step { position: relative; z-index: 2; display: flex; flex-direction: column; align-items: center; gap: 8px; background: #fff; padding: 0 10px; }
+    .pro-step-icon { width: 26px; height: 26px; border-radius: 50%; background: #ffffff; border: 2px solid #d1d5db; display: flex; align-items: center; justify-content: center; font-size: 12px; color: transparent; transition: all 0.3s; }
+    .pro-step.completed .pro-step-icon { background: #10b981; border-color: #10b981; color: white; }
+    .pro-step.rejected .pro-step-icon { background: #ef4444; border-color: #ef4444; color: white; }
+    .pro-step-text { font-size: 10px; font-weight: 700; color: #6b7280; text-transform: uppercase; }
+    .pro-step.completed .pro-step-text { color: var(--txt-main); }
+
+    /* Tablas de Reemisiones */
+    .pro-table { width: 100%; border-collapse: collapse; }
+    .pro-table th { font-size: 10px; font-weight: 700; color: #94a3b8; text-transform: uppercase; padding-bottom: 10px; border-bottom: 1px solid var(--border-soft); text-align: left; }
+    .pro-table td { padding: 12px 0; border-bottom: 1px dashed #e5e7eb; vertical-align: middle; }
+
+    /* (.pro-check: la definición real y más completa está más abajo, en
+       "CHECKBOXES PERFECTOS (SIN BUGS VISUALES)" — esta copia de acá nunca
+       se llegaba a ver, quedaba pisada por esa; se borró en vez de dejar
+       dos definiciones peleando por lo mismo otra vez) */
+
+    /* Botones Clean */
+    .pro-btn { font-size: 11px; font-weight: 700; padding: 8px 16px; border-radius: 6px; border: none; cursor: pointer; transition: filter 0.2s; display: inline-flex; align-items: center; gap: 6px; text-decoration: none; }
+    .pro-btn:hover { filter: brightness(0.9); color: white; }
+
+   /* =========================================================
+       CHECKBOXES PERFECTOS (SIN BUGS VISUALES)
+       ========================================================= */
+    .pro-check {
+        appearance: none !important;
+        -webkit-appearance: none !important;
+        background-color: var(--bg-main) !important;
+        background-image: none !important;
+        margin: 0;
+        border: 1.5px solid var(--border-strong);
+        cursor: pointer;
+        display: inline-block;
+        position: relative;
+        flex-shrink: 0;
+        width: 19px; height: 19px; border-radius: 4px;
+        transition: all 0.2s ease;
+    }
+    .pro-check:checked { background-color: var(--atilson-dark) !important; border-color: var(--atilson-dark) !important; box-shadow: 0 0 0 3px rgba(15,23,42,0.08); }
+    .pro-check:checked::after {
+        content: ''; position: absolute; width: 5px; height: 10px;
+        border: solid white; border-width: 0 2px 2px 0;
+        transform: rotate(45deg); top: 1px; left: 5px;
+    }
+    
+    /* Input de Archivos Minimalista para que no rompa el diseño al editar */
+    .pro-file-input {
+        font-size: 9px !important;
+        padding: 4px !important;
+        background: #f8fafc;
+        border: 1px dashed #94a3b8;
+        border-radius: 4px;
+        width: 100%;
+        color: #475569;
+        cursor: pointer;
+        margin-top: 4px;
+    }
+    .pro-file-input::file-selector-button {
+        background: #e2e8f0; border: none; border-radius: 3px;
+        color: #334155; font-weight: bold; padding: 2px 6px; margin-right: 6px; cursor: pointer;
+    }
+
+    /* =========================================================
+       DOCUMENTOS BASE - DISEÑO LINEAL (FULL WIDTH)
+       ========================================================= */
+    .base-row { display: flex; align-items: center; padding: 12px 20px; border-bottom: 1px solid #f1f5f9; transition: background 0.2s; }
+    .base-row:hover { background: #f8fafc; }
+    .base-row:last-child { border-bottom: none; }
+    
+    .mini-stepper { display: flex; align-items: center; gap: 4px; margin-top: 4px; }
+    .mini-step { font-size: 8px; font-weight: 800; padding: 2px 6px; border-radius: 4px; background: #e2e8f0; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; }
+    .mini-step.active { background: #10b981; color: #ffffff; }
+    .mini-arrow { font-size: 8px; color: #cbd5e1; }
+
+    /* Ocultamos los inputs de archivo por defecto con animación suave para no romper el layout */
+    .edit-only-file {
+        max-height: 0;
+        opacity: 0;
+        overflow: hidden;
+        transition: all 0.3s ease;
+        margin-top: 0 !important;
+        padding-top: 0 !important;
+        padding-bottom: 0 !important;
+        border: none !important;
+        display: block !important;
+    }
+
+    .edit-mode .edit-only-file {
+        max-height: 40px;
+        opacity: 1;
+        margin-top: 4px !important;
+        padding: 4px !important;
+        border: 1px dashed #94a3b8 !important;
+    }
+
+    /* =========================================================
+       V3: MOTOR DE EDICIÓN FLUIDO Y SIN DESORDEN
+       ========================================================= */
+    /* Ocultamos los inputs de archivo por defecto sin romper el layout */
+    .v3-edit-only {
+        max-height: 0;
+        opacity: 0;
+        overflow: hidden;
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        margin-top: 0;
+    }
+    /* Cuando se habilita la edición, los archivos se deslizan suavemente */
+    .edit-mode .v3-edit-only {
+        max-height: 45px;
+        opacity: 1;
+        margin-top: 8px;
+    }
+    
+    /* (el efecto de foco de .pro-input en modo edición y .pro-input[readonly]
+       quedaron consolidados junto al resto de .pro-* — ver "SISTEMA
+       DOCUMENTAL PRO (V3)" más arriba en este archivo) */
+    /* Ocultar el botón de 3ra planta si ya existe */
+    .hide-if-has-p3 { display: none !important; }
+    /* =========================================================
+   REDISEÑO PRO V4 — fusionado con "SISTEMA DOCUMENTAL PRO (V3)" más
+   arriba (oct-2026, consolidación) — lo que no era .pro-* queda acá.
+   ========================================================= */
+
+/* Contenido: transición suave al cambiar de pestaña (sin saltos) */
+.tab-pane { animation: proFadeIn 0.18s ease; }
+@keyframes proFadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Íconos de títulos de sección: color e tamaño uniforme */
+.section-title-sm i, .pro-title i {
+  font-size: 14px !important;
+  color: var(--atilson-purple) !important;
+  margin-right: 6px;
+}
+
+/* =========================================================================
+   NIVEL PREMIUM — REDISEÑO VISUAL COMPARTIDO (afecta todas las pestañas
+   del modal: Marítimo, Transporte, Documental, Matriz/BL, LAR, Gate,
+   Almacenamiento, Courier, Extracostos, Historial). Solo propiedades
+   visuales — ninguna propiedad de display/pointer-events/appearance que
+   ya controla la lógica de edición fue modificada.
+
+   NOTA (auditoría oct-2026): este ":root" repetía exactamente los mismos
+   valores que el ":root" de la cabecera del archivo — quedó eliminado como
+   duplicado (ver nota en la cabecera). No afecta el resultado visual: los
+   tokens de la cabecera ya aplican a toda la página, incluido el modal.
+   ========================================================================= */
+
+/* --- CASCARÓN DEL MODAL --- */
+.modal-minimal .modal-content {
+  border-radius: 18px !important;
+  box-shadow: var(--shadow-lg) !important;
+}
+.modal-minimal .modal-body {
+  background: linear-gradient(180deg, #fbfbfd 0%, var(--bg-soft) 140px);
+  padding: 26px 30px !important;
+}
+.modal-minimal .modal-body::-webkit-scrollbar { width: 8px; }
+.modal-minimal .modal-body::-webkit-scrollbar-track { background: transparent; }
+.modal-minimal .modal-body::-webkit-scrollbar-thumb {
+  background: #d8d4e6; border-radius: 10px;
+}
+.modal-minimal .modal-body::-webkit-scrollbar-thumb:hover { background: var(--atilson-purple); }
+
+/* --- BANNER SUPERIOR (CABECERA DEL BOOKING) --- */
+.atilson-banner {
+  background: linear-gradient(120deg, #0b1220 0%, #241539 55%, var(--atilson-purple-deep) 130%);
+  border-radius: 14px;
+  padding: 20px 28px;
+  box-shadow: 0 10px 28px -10px rgba(76,29,122,.45);
+  border: 1px solid rgba(255,255,255,.06);
+}
+.banner-label {
+  color: #b8b2d4 !important;
+  font-weight: 800;
+  letter-spacing: .6px;
+}
+.banner-input {
+  font-weight: 800 !important;
+  letter-spacing: .2px;
+}
+.edit-mode .banner-input {
+  background: rgba(255,255,255,.12) !important;
+  border: 1px solid rgba(255,255,255,.3) !important;
+  border-radius: 8px;
+}
+.edit-mode .banner-input:focus {
+  background: rgba(255,255,255,.2) !important;
+  box-shadow: 0 0 0 3px rgba(167,139,250,.25);
+}
+.btn-edit-banner {
+  border-radius: 8px;
+  letter-spacing: .6px;
+  background: rgba(255,255,255,.08) !important;
+  transition: all .18s ease;
+}
+.btn-edit-banner:hover {
+  background: rgba(255,255,255,.18) !important;
+  transform: translateY(-1px);
+}
+
+/* --- PESTAÑAS PRINCIPALES DEL MODAL (Marítimo/Transporte/Documental/etc.) --- */
+.modern-tabs {
+  gap: 6px !important;
+  border-bottom: 1px solid var(--border-soft) !important;
+  padding: 0 2px !important;
+}
+.modern-tabs .nav-link {
+  background: transparent !important;
+  border: none !important;
+  border-bottom: 2px solid transparent !important;
+  border-radius: 10px 10px 0 0 !important;
+  color: var(--txt-muted) !important;
+  font-weight: 800 !important;
+  letter-spacing: .4px !important;
+  padding: 11px 16px !important;
+  transition: all .16s ease !important;
+}
+.modern-tabs .nav-link:hover {
+  background: var(--atilson-purple-soft) !important;
+  color: var(--atilson-purple-deep) !important;
+}
+.modern-tabs .nav-link.active {
+  background: var(--bg-main) !important;
+  color: var(--atilson-purple-deep) !important;
+  border-bottom: 2px solid var(--atilson-purple) !important;
+  box-shadow: 0 -1px 0 0 var(--border-soft) inset, var(--shadow-xs) !important;
+}
+
+/* --- SECCIONES / TARJETAS DE CONTENIDO --- */
+.modal-minimal .tab-content .form-section,
+.modal-minimal:not(#megaModal) .form-section {
+  background: var(--bg-main) !important;
+  border: 1px solid var(--border-soft) !important;
+  border-radius: 14px !important;
+  box-shadow: var(--shadow-sm) !important;
+  padding: 26px 28px !important;
+}
+.section-title-sm {
+  font-size: 11.5px !important;
+  letter-spacing: .7px !important;
+  color: var(--atilson-dark) !important;
+  border-bottom: 1px solid var(--border-soft) !important;
+  padding-bottom: 12px !important;
+  margin-bottom: 18px !important;
+}
+.mod-label {
+  letter-spacing: .5px !important;
+  color: #9398a8 !important;
+  font-weight: 800 !important;
+}
+
+/* --- CAMPOS DE FORMULARIO (texto, select, fecha) --- */
+.erp-input, .inline-field {
+  border-radius: 9px !important;
+  transition: border-color .15s ease, box-shadow .15s ease, background-color .15s ease;
+}
+.erp-input {
+  border: 1px solid var(--border-soft) !important;
+  background-color: var(--bg-soft) !important;
+}
+.erp-input:focus {
+  border-color: var(--atilson-purple) !important;
+  background-color: #fff !important;
+  box-shadow: 0 0 0 3px rgba(109,45,158,.10) !important;
+  outline: none !important;
+}
+.erp-input::placeholder { color: #aab0bf; font-weight: 500; }
+.edit-mode .inline-field {
+  border: 1px solid var(--border-soft) !important;
+  background: var(--bg-soft) !important;
+  border-radius: 9px !important;
+}
+.edit-mode .inline-field:focus {
+  border-color: var(--atilson-purple) !important;
+  background: #fff !important;
+  box-shadow: 0 0 0 3px rgba(109,45,158,.10) !important;
+}
+.inline-field:not(.edit-mode *) {
+  color: var(--txt-main);
+}
+
+/* --- BOTÓN "EDITAR" (dentro de cada sección) --- */
+.btn-edit-inline {
+  background: var(--atilson-purple-soft) !important;
+  border: 1px solid var(--atilson-purple-border) !important;
+  border-radius: 8px !important;
+  letter-spacing: .5px !important;
+  padding: 7px 14px !important;
+  transition: all .16s ease;
+}
+.btn-edit-inline:hover {
+  background: var(--atilson-purple) !important;
+  color: #fff !important;
+  border-color: var(--atilson-purple) !important;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 10px -2px rgba(109,45,158,.35);
+}
+
+/* --- Cancelar / Guardar, junto a Editar en el título de la sección ---
+   Antes vivían al fondo del formulario, lejos de donde se activa el modo
+   edición. El control de la edición es todo del título ("Editar" la abre,
+   "Cancelar"/"Guardar" la cierran), así que los tres botones viven juntos
+   ahí — visibilidad ya resuelta por las reglas .edit-mode .edit-only-inline
+   existentes, sin JS nuevo. */
+.section-title-actions { display: flex; align-items: center; gap: 8px; }
+.btn-cancel-inline, .btn-save-inline {
+  font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .5px;
+  cursor: pointer; padding: 7px 14px; border-radius: 8px !important; transition: all .16s ease;
+}
+.btn-cancel-inline {
+  background: #fff !important; color: var(--txt-muted) !important; border: 1px solid var(--border-soft) !important;
+}
+.btn-cancel-inline:hover { background: var(--bg-soft) !important; color: var(--txt-main) !important; border-color: #cbd5e1 !important; }
+.btn-save-inline {
+  background: var(--atilson-dark) !important; color: #fff !important; border: 1px solid var(--atilson-dark) !important;
+}
+.btn-save-inline:hover { background: #000 !important; border-color: #000 !important; transform: translateY(-1px); box-shadow: 0 4px 10px -2px rgba(0,0,0,.35); }
+
+/* --- Variante compacta (icono-solo) de Cancelar/Guardar, para filas angostas
+   como las de "Otros Subcerts" (COA/DT/CODAUT/CLAVE/NEPPEX) — mismo lenguaje
+   visual que .btn-cancel-inline/.btn-save-inline, sin el texto. */
+.btn-cancel-icon, .btn-save-icon {
+  width: 24px; height: 24px; padding: 0 !important; border-radius: 6px !important;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 11px; cursor: pointer; transition: all .16s ease;
+}
+.btn-cancel-icon {
+  background: #fff !important; color: var(--txt-muted) !important; border: 1px solid var(--border-soft) !important;
+}
+.btn-cancel-icon:hover { background: var(--bg-soft) !important; color: var(--txt-main) !important; border-color: #cbd5e1 !important; }
+.btn-save-icon {
+  background: var(--atilson-dark) !important; color: #fff !important; border: 1px solid var(--atilson-dark) !important;
+}
+.btn-save-icon:hover { background: #000 !important; border-color: #000 !important; transform: translateY(-1px); box-shadow: 0 3px 8px -2px rgba(0,0,0,.35); }
+
+/* --- ALERTAS (tarifa pendiente, bloqueado, etc.) --- */
+.form-section .alert-danger {
+  background: #fff5f5 !important;
+  border: 1px solid #fecaca !important;
+  border-left: 3px solid #dc2626 !important;
+  border-radius: 10px !important;
+  color: #991b1b !important;
+}
+.form-section .alert-light {
+  background: var(--bg-soft) !important;
+  border: 1px solid var(--border-soft) !important;
+  border-radius: 10px !important;
+}
+.alert-secondary {
+  background: #f1f0f6 !important;
+  border: 1px solid #ddd9ea !important;
+  border-left: 3px solid var(--atilson-purple) !important;
+  border-radius: 10px !important;
+  color: var(--atilson-purple-deep) !important;
+}
+
+/* --- SWITCHES Y CHECKBOXES --- */
+.custom-switch-md .form-check-input {
+  box-shadow: inset 0 1px 2px rgba(0,0,0,.12) !important;
+}
+.custom-switch-md .form-check-input:checked {
+  box-shadow: 0 2px 6px -1px rgba(109,45,158,.4) !important;
+}
+.cuadradito-check {
+  border-radius: 5px !important;
+  border-width: 1.5px !important;
+  transition: all .15s ease;
+}
+.cuadradito-check:checked {
+  box-shadow: 0 2px 5px -1px rgba(109,45,158,.4) !important;
+}
+
+/* --- STEPPERS (trazabilidad) --- */
+.stepper-trazabilidad::before { background: #e4e1ee !important; }
+.step-circle {
+  box-shadow: 0 0 0 4px #fff, 0 1px 3px rgba(15,23,42,.08) !important;
+}
+.step-item.completed .step-circle {
+  border-color: #16a34a !important;
+  background: #16a34a !important;
+  box-shadow: 0 0 0 4px #fff, 0 0 0 7px rgba(22,163,74,.12) !important;
+}
+.step-item.rejected .step-circle {
+  border-color: #dc2626 !important;
+  background: #dc2626 !important;
+  box-shadow: 0 0 0 4px #fff, 0 0 0 7px rgba(220,38,38,.12) !important;
+}
+.pro-stepper::before { background: #e4e1ee !important; }
+.pro-step-icon { box-shadow: 0 0 0 4px #fff, 0 1px 3px rgba(15,23,42,.08) !important; }
+.pro-step.completed .pro-step-icon {
+  box-shadow: 0 0 0 4px #fff, 0 0 0 7px rgba(16,185,129,.12) !important;
+}
+
+/* --- BITÁCORAS / LOGS DE INCIDENCIAS --- */
+.log-incidencias-wrap {
+  background: var(--bg-soft) !important;
+  border: 1px solid var(--border-soft) !important;
+  border-radius: 10px !important;
+}
+.log-incidencias-wrap::-webkit-scrollbar { width: 6px; }
+.log-incidencias-wrap::-webkit-scrollbar-thumb { background: #d8d4e6; border-radius: 10px; }
+
+/* --- TARJETAS INTERNAS (bloques gris dentro de secciones) --- */
+.form-section .border.rounded.bg-light,
+.form-section .p-3.border.rounded {
+  border-color: var(--border-soft) !important;
+  background: var(--bg-soft) !important;
+  border-radius: 12px !important;
+}
+
+/* --- BADGES DE ESTADO --- */
+.estado-badge, .email-badge, .servicio-bw {
+  border-radius: 7px !important;
+}
+
+/* --- BOTONES GENÉRICOS DENTRO DEL MODAL --- */
+.modal-minimal .btn {
+  border-radius: 9px !important;
+  transition: all .15s ease !important;
+}
+.modal-minimal .btn:not(.btn-link):not(.btn-action-dot):not(.btn-edit-inline):not(.btn-edit-banner):hover {
+  transform: translateY(-1px);
+}
+.modal-minimal .btn-dark {
+  background: var(--atilson-dark) !important;
+  border: none !important;
+}
+.modal-minimal .btn-dark:hover {
+  background: #050810 !important;
+  box-shadow: 0 6px 16px -4px rgba(0,0,0,.35);
+}
+
+/* --- SELECT2 (Naviera, POL, POD, Depósito, Planta, Agencia) --- */
+.select2-container--default .select2-selection--single {
+  border-radius: 9px !important;
+  border: 1px solid var(--border-soft) !important;
+}
+.select2-container--open .select2-selection--single {
+  border-color: var(--atilson-purple) !important;
+  box-shadow: 0 0 0 3px rgba(109,45,158,.10) !important;
+}
+.select2-dropdown {
+  border-radius: 10px !important;
+  box-shadow: var(--shadow-md) !important;
+}
+
+/* --- TABLAS INTERNAS (Pro, Reemisiones) --- */
+.pro-table th {
+  letter-spacing: .5px !important;
+  color: #9398a8 !important;
+}
+.pro-table td { border-bottom: 1px dashed var(--border-soft) !important; }
+
+/* (.pro-wrapper / .pro-sidebar: fusionados junto al resto de .pro-* —
+   ver "SISTEMA DOCUMENTAL PRO (V3)") */
+
+/* ============ FASE 6 — HEADER PREMIUM, CARDS Y RESP-WIDGET ============ */
+.back-link {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: 11px; font-weight: 700; color: var(--txt-muted);
+    text-decoration: none; margin-bottom: 10px; padding: 4px 2px;
+    transition: color .15s ease;
+}
+.back-link:hover { color: var(--atilson-purple); }
+.back-link i { font-size: 12px; }
+
+.detalle-header-main { display: flex; align-items: center; gap: 14px; min-width: 0; }
+.detalle-header-main > div:last-child { min-width: 0; }
+.detalle-header-icon {
+    width: 42px; height: 42px; border-radius: var(--radius-md); flex-shrink: 0;
+    background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.12);
+    display: flex; align-items: center; justify-content: center; font-size: 18px; color: #d8b4fe;
+}
+.detalle-kicker {
+    font-size: 9px; font-weight: 800; color: #b8b2d4;
+    letter-spacing: .6px; text-transform: uppercase; display: block; margin-bottom: 2px;
+}
+.detalle-title { font-size: 20px; font-weight: 800; margin: 0; letter-spacing: -.2px; line-height: 1.15; }
+.detalle-subtitle {
+    font-size: 11.5px; font-weight: 500; color: #cbd5e1; margin-top: 2px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 480px;
+}
+.detalle-header-chips { display: flex; align-items: stretch; gap: 10px; flex-wrap: wrap; }
+.detalle-chip {
+    background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.1);
+    border-radius: var(--radius-sm); padding: 6px 14px; min-width: 92px;
+    display: flex; flex-direction: column; gap: 1px; justify-content: center;
+}
+.detalle-chip-label { font-size: 8.5px; font-weight: 800; letter-spacing: .5px; text-transform: uppercase; color: #a89fc4; }
+.detalle-chip-val { font-size: 12px; font-weight: 700; color: #fff; text-transform: uppercase; }
+.detalle-chip--accent { background: rgba(216,180,254,.15); border-color: rgba(216,180,254,.3); }
+.detalle-chip--accent .detalle-chip-label { color: #e9d5ff; }
+@media (max-width: 768px) {
+    .detalle-header { flex-direction: column; align-items: flex-start; }
+    .detalle-subtitle { max-width: none; }
+}
+
+.form-subcard {
+    background: var(--bg-soft); border: 1px solid var(--border-soft);
+    border-radius: 12px; padding: 18px 20px; height: 100%;
+}
+.form-subcard-title {
+    font-size: 10.5px; font-weight: 900; letter-spacing: .5px; text-transform: uppercase;
+    color: var(--txt-main); margin: 0 0 14px; padding-bottom: 10px;
+    border-bottom: 1px solid var(--border-soft); display: flex; align-items: center; gap: 7px;
+}
+.form-subcard-title i { color: var(--atilson-purple); font-size: 13px; }
+
+/* Pills de Solicitud Servicio / Asig. Preliminar / Asig. Final (Transporte) — antes con
+   estilos grises sueltos repetidos en cada <button>, ahora un solo lugar con el acento
+   de marca para que combine con el resto del sistema. */
+.ter-sub-pills { gap: 6px; }
+.ter-sub-pills .nav-link {
+    font-size: 11px; font-weight: 700; padding: 7px 14px;
+    border: 1px solid var(--border-soft) !important; border-radius: var(--radius-sm) !important;
+    color: var(--txt-muted); background: var(--bg-soft);
+    transition: all .15s ease;
+}
+.ter-sub-pills .nav-link:hover { background: var(--atilson-purple-soft); color: var(--atilson-purple-deep); border-color: var(--atilson-purple-border) !important; }
+.ter-sub-pills .nav-link.active {
+    background: var(--atilson-purple) !important; color: #fff !important; border-color: var(--atilson-purple) !important;
+    box-shadow: var(--shadow-xs);
+}
+
+/* "Seguir Camión" — desplegable inline (antes modal) sobre las pestañas Solicitud
+   Servicio/Asig. Preliminar/Asig. Final. El botón hace de barra-acordeón; el mapa
+   Leaflet vive adentro del .collapse, una instancia por unidad técnica (idSuffix). */
+.ter-ruta-toggle {
+    width: 100%; display: flex; align-items: center; gap: 12px;
+    background: var(--atilson-purple-soft); border: 1px solid var(--atilson-purple-border);
+    border-radius: var(--radius-md); padding: 10px 16px; text-align: left;
+    cursor: pointer; transition: all .16s ease;
+}
+.ter-ruta-toggle:hover { border-color: var(--atilson-purple); box-shadow: var(--shadow-xs); }
+.ter-ruta-toggle__icon {
+    width: 32px; height: 32px; border-radius: 50%; flex-shrink: 0;
+    background: #fff; color: var(--atilson-purple); border: 1px solid var(--atilson-purple-border);
+    display: flex; align-items: center; justify-content: center; font-size: 14px;
+}
+.ter-ruta-toggle__label { flex-grow: 1; display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.ter-ruta-toggle__label strong { font-size: 11.5px; font-weight: 800; color: var(--atilson-purple-deep); }
+.ter-ruta-toggle__resumen { font-size: 10px; font-weight: 600; color: var(--txt-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ter-ruta-toggle__chevron { color: var(--atilson-purple); font-size: 12px; flex-shrink: 0; transition: transform .2s ease; }
+.ter-ruta-toggle[aria-expanded="true"] .ter-ruta-toggle__chevron { transform: rotate(180deg); }
+
+.ter-ruta-body {
+    border: 1px solid var(--atilson-purple-border); border-top: none;
+    border-radius: 0 0 var(--radius-md) var(--radius-md); overflow: hidden;
+    background: #fff;
+}
+.ter-ruta-mapa { height: 360px; width: 100%; background: var(--bg-soft); }
+.ter-ruta-nota { padding: 8px 14px; font-size: 10.5px; color: var(--txt-muted); border-top: 1px solid var(--border-soft); background: var(--bg-soft); }
+
+.status-toggle-row {
+    display: flex; align-items: center; gap: 10px; cursor: pointer;
+    font-size: 12px; font-weight: 800; color: var(--txt-main);
+    text-transform: uppercase; letter-spacing: .3px; margin: 0;
+}
+
+.resp-widget {
+    display: flex; align-items: center; gap: 10px; margin-top: 14px;
+    padding: 10px 14px; background: var(--bg-soft); border: 1px solid var(--border-soft); border-radius: 10px;
+}
+.resp-widget-icon {
+    width: 26px; height: 26px; border-radius: 50%; background: var(--atilson-purple-soft);
+    color: var(--atilson-purple); display: flex; align-items: center; justify-content: center;
+    font-size: 12px; flex-shrink: 0;
+}
+.resp-widget-field { display: flex; flex-direction: column; gap: 2px; }
+.resp-widget-field label {
+    font-size: 8.5px; font-weight: 800; color: #9398a8; text-transform: uppercase; letter-spacing: .4px;
+}
+.resp-widget-field select {
+    border: 1px solid var(--border-soft); background: #fff; border-radius: 6px;
+    font-size: 11px; font-weight: 700; color: var(--txt-main); padding: 3px 8px; cursor: pointer;
+}
+.resp-widget-field:last-child select { color: #b91c1c; }
+.resp-widget-arrow { color: #cbd5e1; font-size: 13px; flex-shrink: 0; }
+
+/* ===== Banner de operación cerrada ("Vacío Devuelto") ===== */
+.cierre-banner {
+    display: flex; align-items: center; gap: 14px;
+    background: #ecfdf5; border: 1px solid #bbf7d0; border-radius: 12px;
+    padding: 14px 20px; margin-bottom: 18px;
+}
+.cierre-banner-icon {
+    width: 38px; height: 38px; border-radius: 50%; background: #16a34a; color: #fff;
+    display: flex; align-items: center; justify-content: center; font-size: 18px; flex-shrink: 0;
+}
+.cierre-banner-title { font-size: 13px; font-weight: 900; color: #15803d; text-transform: uppercase; letter-spacing: .4px; }
+.cierre-banner-sub { font-size: 11.5px; color: #16a34a; margin-top: 2px; }
+
+/* =========================================================================
+   VISTA RESUMEN (premium) — Marítimo / Transporte
+   Cuando una sección queda 100% completa, en vez del formulario plano (los
+   mismos campos pero en gris/readonly) se muestra este panel: reordena la
+   misma información como un resumen operativo (ruta + fechas + chips), no
+   como una planilla ya rellenada. "Editar" (único botón, en el título de
+   la sección) alterna entre .op-resumen y .op-form-core — ver
+   data-resumen-panel/data-core-panel en toggleEditMode/cancelEditMode
+   (operaciones-detalle.js). El formulario original (.op-form-core) sigue
+   intacto por debajo — nada de su lógica cambia.
+   ========================================================================= */
+.op-hero {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 16px; flex-wrap: wrap; margin-bottom: 18px;
+}
+.op-hero-main { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.op-hero-icon {
+    width: 38px; height: 38px; border-radius: 10px;
+    background: var(--atilson-purple-soft); color: var(--atilson-purple);
+    display: flex; align-items: center; justify-content: center; font-size: 16px; flex-shrink: 0;
+}
+/* Cuando se conoce la naviera, el ícono genérico se reemplaza por un monograma
+   con sus iniciales — usa el color corporativo cargado en Navieras (Admin) si
+   existe, igual que el swatch que ya se usa en esa pantalla, para que la
+   tarjeta se sienta "de esa naviera" en vez de un ícono neutro repetido. */
+.op-hero-icon--mono { font-size: 13px; font-weight: 800; letter-spacing: -.2px; }
+
+/* Aviso de tarifa pendiente — vive junto al título de cada sección (arriba),
+   no al final del formulario. Ya NO significa "pestaña bloqueada": la
+   edición sigue disponible, esto solo informa qué falta y dónde resolverlo,
+   por eso usa el tono ámbar (pendiente) en vez de rojo (error/bloqueo). */
+.op-tarifa-alert {
+    display: flex; align-items: flex-start; gap: 10px;
+    background: var(--warning-soft); border: 1px solid var(--warning-border); border-radius: 10px;
+    padding: 10px 14px; margin-bottom: 16px;
+}
+.op-tarifa-alert i { font-size: 14px; color: var(--warning-accent); flex-shrink: 0; margin-top: 1px; }
+.op-tarifa-alert span { font-size: 11.5px; line-height: 1.45; color: var(--warning); }
+.op-tarifa-alert strong { font-weight: 800; }
+/* Variante compacta — misma semántica (ámbar, no bloquea), para usarse pegada
+   a un campo puntual (ej. dentro de la tarjeta de un contenedor individual)
+   en vez de como banner de sección completa. */
+.op-tarifa-alert--compact {
+    display: flex; align-items: center; gap: 6px;
+    background: var(--warning-soft); border: 1px solid var(--warning-border); border-radius: 6px;
+    padding: 4px 8px; margin-top: 8px; font-size: 10px; font-weight: 700; color: var(--warning);
+}
+.op-tarifa-alert--compact i { color: var(--warning-accent); font-size: 11px; }
+.op-hero-eyebrow { font-size: 10px; font-weight: 800; letter-spacing: .4px; text-transform: uppercase; color: var(--txt-muted); }
+.op-hero-title { font-size: 17px; font-weight: 800; color: var(--atilson-dark); letter-spacing: -.2px; }
+.op-chips { display: flex; gap: 8px; flex-wrap: wrap; }
+.op-chip {
+    font-size: 10.5px; font-weight: 800; text-transform: uppercase; letter-spacing: .3px;
+    padding: 5px 12px; border-radius: 999px; background: var(--bg-soft); color: var(--txt-main);
+    border: 1px solid var(--border-soft); white-space: nowrap;
+}
+.op-chip--warning { background: #fffbeb; color: #d97706; border-color: #fde68a; }
+
+.op-route {
+    display: flex; align-items: stretch; gap: 14px;
+    padding: 20px 22px; background: var(--bg-soft); border: 1px solid var(--border-soft);
+    border-radius: 14px; margin-bottom: 14px;
+}
+.op-route-port { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.op-route-port--end { align-items: flex-end; text-align: right; }
+.op-route-eyebrow { font-size: 9px; font-weight: 800; letter-spacing: .5px; text-transform: uppercase; color: var(--txt-muted); }
+.op-route-nombre { font-size: 17px; font-weight: 800; color: var(--atilson-dark); letter-spacing: -.3px; line-height: 1.15; }
+.op-route-sub { font-size: 11px; color: var(--txt-muted); font-weight: 600; margin-bottom: 5px; min-height: 14px; }
+.op-route-date { display: flex; align-items: baseline; gap: 6px; font-size: 12px; line-height: 1.5; }
+.op-route-port--end .op-route-date { flex-direction: row-reverse; }
+.op-route-date-label { font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .3px; color: var(--txt-muted); display: inline-flex; align-items: center; gap: 3px; }
+.op-route-date-val { font-weight: 800; color: var(--txt-main); }
+.op-route-date--real .op-route-date-val, .op-route-date--real .op-route-date-label { color: #16a34a; }
+
+/* Línea, flecha y círculo se centran todos sobre el mismo eje: el 50% real
+   del alto de la tarjeta más alta de la fila (no una altura fija en px, que
+   se desalineaba apenas una parada tenía más contenido que otra — ver nota
+   de la vuelta anterior). El caption opcional (ej. "Directo") cuelga pegado
+   debajo del círculo vía calc(), sin desplazar el centrado del conjunto. */
+.op-route-connector {
+    flex: 0 0 90px; position: relative; align-self: stretch;
+}
+.op-route-connector-line {
+    position: absolute; top: 50%; left: 0; right: 7px; height: 0;
+    border-top: 2px solid var(--atilson-purple-border); transform: translateY(-50%);
+}
+.op-route-connector::after {
+    content: ""; position: absolute; top: 50%; right: 0; transform: translateY(-50%);
+    width: 0; height: 0; border-top: 5px solid transparent; border-bottom: 5px solid transparent;
+    border-left: 7px solid var(--atilson-purple-border); z-index: 1;
+}
+.op-route-marker {
+    position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    width: 30px; height: 30px; border-radius: 50%; background: #fff; border: 2px solid var(--atilson-purple);
+    color: var(--atilson-purple); display: flex; align-items: center; justify-content: center; font-size: 13px; z-index: 2;
+    box-shadow: 0 0 0 4px var(--bg-soft);
+}
+.op-route-connector-caption {
+    position: absolute; top: calc(50% + 19px); left: 50%; transform: translateX(-50%);
+    width: 110px; font-size: 9.5px; font-weight: 700; color: var(--txt-muted); text-align: center;
+    text-transform: uppercase; letter-spacing: .3px;
+}
+
+.op-route-nota {
+    font-size: 10.5px; color: var(--txt-muted); margin: -4px 0 14px; display: flex; align-items: center; gap: 5px;
+}
+.op-route-nota i { color: #d97706; }
+
+.op-timeline-strip {
+    display: flex; border: 1px solid var(--border-soft); border-radius: 12px; overflow: hidden;
+}
+.op-timeline-item {
+    flex: 1 1 0; display: flex; align-items: center; gap: 9px; padding: 12px 16px;
+    border-right: 1px solid var(--border-soft);
+}
+.op-timeline-item:last-child { border-right: none; }
+.op-timeline-item i { font-size: 15px; color: var(--txt-muted); flex-shrink: 0; }
+.op-timeline-item--danger i { color: #dc2626; }
+.op-timeline-item--warning i { color: #d97706; }
+.op-timeline-label { display: block; font-size: 9px; font-weight: 800; letter-spacing: .3px; text-transform: uppercase; color: var(--txt-muted); }
+.op-timeline-val { display: block; font-size: 12.5px; font-weight: 700; color: var(--txt-main); }
+
+@media (max-width: 768px) {
+    .op-route { flex-direction: column; }
+    .op-route-connector { width: 100%; min-height: 64px; }
+    .op-route-connector-line {
+        top: 0; bottom: 7px; left: 50%; right: auto; width: 0; height: auto;
+        border-top: none; border-left: 2px solid var(--atilson-purple-border); transform: none;
+    }
+    .op-route-connector::after {
+        top: auto; bottom: 0; right: auto; left: 50%; transform: translateX(-50%);
+        border-left: 5px solid transparent; border-right: 5px solid transparent; border-top: 7px solid var(--atilson-purple-border); border-bottom: none;
+    }
+    .op-route-connector-caption { top: 50px; width: 100%; }
+    .op-route-port--end { align-items: flex-start; text-align: left; }
+    .op-route-port--end .op-route-date { flex-direction: row; }
+    .op-timeline-strip { flex-direction: column; }
+    .op-timeline-item { border-right: none; border-bottom: 1px solid var(--border-soft); }
+    .op-timeline-item:last-child { border-bottom: none; }
+}
+
+/* =========================================================================
+   RUTA EDITABLE — mismo lenguaje visual que .op-route (vista) pero con los
+   campos reales adentro, para que "editar" y "ver" se sientan el mismo
+   objeto en vez de dos diseños distintos. Reemplaza los pares de
+   .form-subcard sueltos (Depósito/Puerto, POL/POD) que antes no tenían
+   relación visual entre sí. Los name=/id=/onchange= de cada input NO
+   cambian — solo el contenedor que los agrupa.
+   ========================================================================= */
+/* Fila dedicada para Modalidad de Tránsito: antes compartía renglón con otros
+   4 campos (3+3+2+2+4 = 14 columnas, se desbordaba de las 12 de Bootstrap y
+   terminaba empujada sin aire). Ahora vive sola, con margen propio arriba y
+   abajo, entre el bloque de datos de nave y el carril de ruta. */
+.op-transbordo-row {
+    margin-top: 2px;
+    padding-top: 14px;
+    padding-bottom: 4px;
+    margin-bottom: 14px;
+    border-top: 1px dashed var(--border-soft);
+}
+.op-route-edit {
+    display: flex; align-items: stretch; gap: 0;
+    background: var(--bg-soft); border: 1px solid var(--border-soft); border-radius: 14px;
+    padding: 5px; margin-bottom: 16px;
+}
+.op-route-edit-stop {
+    flex: 1 1 0; min-width: 0; background: var(--bg-main); border-radius: 11px;
+    padding: 16px 18px;
+}
+/* El input nativo type=file (y el input-group que lo envuelve) no deben poder
+   ensanchar la celda y empujar el campo vecino — su ancho intrínseco en
+   algunos navegadores supera la columna disponible dentro del carril. */
+.op-route-edit-stop .input-group,
+.op-route-edit-stop .edit-only-inline {
+    max-width: 100%;
+}
+.op-route-edit-stop .edit-only-file {
+    width: 100%; max-width: 100%; box-sizing: border-box;
+}
+.op-route-edit-eyebrow {
+    font-size: var(--text-micro); font-weight: 800; letter-spacing: .5px; text-transform: uppercase;
+    color: var(--atilson-purple); display: flex; align-items: center; gap: 6px; margin-bottom: 10px;
+}
+/* El conector ya no es solo un separador vertical: es una línea horizontal con
+   punta de flecha, a una altura fija (alineada con el renglón de cada "eyebrow"),
+   igual criterio que .op-route-connector en la vista — para que el carril
+   editable se lea como la misma ruta con dirección, no como una grilla neutra. */
+.op-route-edit-connector {
+    flex: 0 0 40px; position: relative; align-self: stretch;
+}
+.op-route-edit-connector::before {
+    content: ""; position: absolute; top: 21px; left: 0; right: 0; height: 0;
+    border-top: 2px solid var(--atilson-purple-border);
+}
+.op-route-edit-connector::after {
+    content: ""; position: absolute; top: 21px; right: 0; transform: translateY(-50%);
+    width: 0; height: 0; border-top: 5px solid transparent; border-bottom: 5px solid transparent;
+    border-left: 7px solid var(--atilson-purple-border); z-index: 1;
+}
+.op-route-edit-marker {
+    position: absolute; top: 21px; left: 50%; transform: translate(-50%, -50%);
+    width: 24px; height: 24px; border-radius: 50%; background: #fff; border: 2px solid var(--atilson-purple);
+    color: var(--atilson-purple); display: flex; align-items: center; justify-content: center; font-size: 10px;
+    z-index: 2; box-shadow: 0 0 0 4px var(--bg-soft);
+}
+.op-route-edit-sub { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 12px; margin-top: 10px; }
+.op-route-edit-sub--full { grid-template-columns: 1fr; }
+.op-route-edit .mod-label { font-size: var(--text-micro); color: #9398a8 !important; }
+/* Fecha real (ETD/ETA Real) — único acento semántico que se conserva: "ya ocurrió,
+   confirmado", igual que en la vista resumen (.op-route-date--real). */
+.op-route-edit-sub--real .mod-label { color: var(--success) !important; }
+.op-route-edit-sub--real input { color: var(--success); font-weight: 800; }
+@media (max-width: 992px) {
+    .op-route-edit { flex-direction: column; padding: 8px; gap: 2px; }
+    .op-route-edit-connector { flex: 0 0 32px; width: 100%; align-self: auto; }
+    .op-route-edit-connector::before { top: 0; bottom: 0; left: 50%; right: auto; height: auto; width: 0; border-top: none; border-left: 2px solid var(--atilson-purple-border); }
+    .op-route-edit-connector::after {
+        top: auto; bottom: 0; left: 50%; right: auto; transform: translateX(-50%);
+        border-top: 7px solid var(--atilson-purple-border); border-bottom: none;
+        border-left: 5px solid transparent; border-right: 5px solid transparent;
+    }
+    .op-route-edit-marker { top: 50%; left: 50%; transform: translate(-50%, -50%); }
+}
+
+/* --- Franja de ventanas críticas editable (Stacking / Late Arrival) — mismo
+   formato de 4 columnas que .op-timeline-strip, pero con inputs. --- */
+.op-window-strip {
+    display: flex; border: 1px solid var(--border-soft); border-radius: 12px; overflow: hidden; background: var(--bg-main);
+}
+.op-window-item {
+    flex: 1 1 0; min-width: 0; padding: 14px 16px; border-right: 1px solid var(--border-soft);
+}
+.op-window-item:last-child { border-right: none; }
+.op-window-item--danger .op-window-eyebrow i { color: var(--danger); }
+.op-window-item--warning .op-window-eyebrow i { color: var(--warning-accent); }
+.op-window-eyebrow {
+    font-size: var(--text-micro); font-weight: 800; letter-spacing: .4px; text-transform: uppercase;
+    color: var(--txt-muted); display: flex; align-items: center; gap: 5px; margin-bottom: 8px;
+}
+.op-window-eyebrow i { color: var(--atilson-purple); font-size: 11px; }
+@media (max-width: 768px) {
+    .op-window-strip { flex-direction: column; }
+    .op-window-item { border-right: none; border-bottom: 1px solid var(--border-soft); }
+    .op-window-item:last-child { border-bottom: none; }
+}
+
+/* =========================================================================
+   TOGGLE GENÉRICO — para secciones secundarias que no necesitan estar
+   siempre abiertas (Gestión de Matriz y B/L, Solicitud/Asignación de
+   Transporte). Mismo lenguaje visual que .ter-ruta-toggle (icono + label +
+   chevron) pero de uso general, con una zona de estado a la derecha del
+   título para no perder de vista si falta algo aunque esté colapsado.
+   Bootstrap maneja el collapse por su cuenta vía data-bs-toggle — no
+   necesita JS propio (a diferencia de Seguir Camión, que carga un mapa).
+   ========================================================================= */
+.op-toggle {
+    width: 100%; display: flex; align-items: center; gap: 12px;
+    background: var(--bg-soft); border: 1px solid var(--border-soft);
+    border-radius: var(--radius-md); padding: 12px 18px; text-align: left;
+    cursor: pointer; transition: all .16s ease;
+}
+.op-toggle:hover { border-color: var(--atilson-purple-border); background: var(--atilson-purple-soft); }
+.op-toggle__icon {
+    width: 32px; height: 32px; border-radius: 9px; flex-shrink: 0;
+    background: #fff; color: var(--atilson-purple); border: 1px solid var(--atilson-purple-border);
+    display: flex; align-items: center; justify-content: center; font-size: 14px;
+}
+.op-toggle__label { flex-grow: 1; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.op-toggle__label strong { font-size: 11.5px; font-weight: 800; color: var(--atilson-dark); letter-spacing: .2px; }
+.op-toggle__estado { font-size: 10px; font-weight: 700; color: var(--txt-muted); }
+.op-toggle__estado--ok { color: var(--success); }
+.op-toggle__estado--pend { color: var(--warning-accent); }
+.op-toggle__chevron { color: var(--atilson-purple); font-size: 12px; flex-shrink: 0; transition: transform .2s ease; }
+.op-toggle[aria-expanded="true"] .op-toggle__chevron { transform: rotate(180deg); }
+.op-toggle-body {
+    border: 1px solid var(--border-soft); border-top: none;
+    border-radius: 0 0 var(--radius-md) var(--radius-md);
+    background: var(--bg-main); padding: 22px 24px 20px;
+}
+
+
+/* Seguir camión (oct-2026): marcas por tipo de parada y lista con la precisión de cada una */
+.ter-ruta-pin span { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; color: #fff; font: 800 12px/1 system-ui, sans-serif; border: 3px solid #fff; box-shadow: 0 2px 6px rgba(0,0,0,.35); }
+.ter-ruta-paradas { list-style: none; margin: 0; padding: 10px 14px 4px; display: grid; gap: 8px; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+.ter-ruta-paradas li { display: flex; gap: 10px; align-items: flex-start; font-size: 12px; }
+.ter-ruta-paradas .pin { flex: none; display: grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; color: #fff; font-weight: 800; font-size: 11px; }
+.ter-ruta-paradas b { display: block; color: #1e1835; font-size: 12px; }
+.ter-ruta-paradas small { display: block; color: #047857; font-size: 11px; }
+.ter-ruta-paradas li.aprox small { color: #b45309; }
+.ter-ruta-paradas li.falta small { color: #b91c1c; }

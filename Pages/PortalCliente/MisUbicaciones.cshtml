@@ -1,0 +1,147 @@
+@page
+@model AtilsonCargoSpa.Pages.PortalCliente.MisUbicacionesModel
+@{
+        ViewData["Title"] = "Mis plantas";
+    Layout = "_LayoutCliente";
+    bool abrirPlanta = Model.FormularioAbierto == "planta";
+}
+
+<link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+<link rel="stylesheet" href="~/css/portal-forms.css" asp-append-version="true" />
+<style>
+    .ub-lista { display: grid; gap: 10px; margin-bottom: 14px; }
+    .ub-item { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; border: 1px solid #ece8f3; border-radius: 12px; padding: 12px 14px; background: #fff; }
+    .ub-item-main { flex: 1 1 280px; min-width: 0; }
+    .ub-item-main strong { display: block; font-size: 14.5px; color: #140c26; }
+    .ub-item-main span { display: block; font-size: 12.5px; color: #6b6880; overflow-wrap: anywhere; }
+    .ub-estado { font-size: 11px; font-weight: 800; border-radius: 999px; padding: 3px 10px; white-space: nowrap; }
+    .ub-estado.ok { background: #ecfdf5; color: #047857; border: 1px solid #a7f3d0; }
+    .ub-estado.rev { background: #fff7ed; color: #c2410c; border: 1px solid #fed7aa; }
+    .ub-acciones { display: flex; gap: 6px; }
+    .ub-acciones form { display: inline; }
+    .ub-btn { border: 1px solid #ece8f3; background: #fff; color: #2c1b4d; border-radius: 9px; font-size: 12.5px; font-weight: 700; padding: 7px 12px; text-decoration: none; display: inline-flex; gap: 6px; align-items: center; }
+    .ub-btn:hover { border-color: #6d2d9e; color: #6d2d9e; }
+    .ub-btn.peligro { color: #b91c1c; }
+    .ub-btn.peligro:hover { border-color: #fecaca; background: #fef2f2; }
+    .ub-vacio { font-size: 13.5px; color: #6b6880; padding: 14px; border: 1px dashed #d8d2e4; border-radius: 12px; text-align: center; margin-bottom: 14px; }
+    .ub-form { border-top: 1px dashed #ece8f3; padding-top: 16px; margin-top: 6px; }
+    .ub-form[hidden] { display: none; }
+    .ub-form-acciones { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; flex-wrap: wrap; }
+    .af-alert.validation-summary-valid { display: none; }
+    .ub-error { display: block; font-size: 12px; color: #b91c1c; font-weight: 600; margin-top: 4px; }
+</style>
+
+<div class="container py-4">
+    <div class="af-wrap">
+        <a asp-page="/PortalCliente/Index" class="af-back"><i class="bi bi-arrow-left"></i> Inicio</a>
+
+        <div class="af-head">
+                        <h1>Mis plantas</h1>
+            <p>Registra las plantas donde cargamos tus contenedores. Puedes elegirlas de inmediato en tus solicitudes; nuestro equipo revisa los datos de cada una.</p>
+        </div>
+
+        <!-- Plantas -->
+        <section class="af-section">
+            <div class="af-section-head">
+                <div class="af-section-ico"><i class="bi bi-buildings"></i></div>
+                <div>
+                    <h2>Mis plantas</h2>
+                    <p>Aparecen en «Transporte terrestre» al solicitar cotizaciones y servicios.</p>
+                </div>
+            </div>
+
+            @if (Model.Plantas.Any())
+            {
+                <div class="ub-lista">
+                    @foreach (var p in Model.Plantas)
+                    {
+                        <div class="ub-item">
+                            <div class="ub-item-main">
+                                <strong>@p.Nombre</strong>
+                                <span>@(Model.Ciudades.GetValueOrDefault(p.IdCiudad) ?? "Sin comuna") · @(p.Direccion ?? "Sin dirección")</span>
+                                @if (!string.IsNullOrWhiteSpace(p.UrlGoogleMaps) && p.UrlGoogleMaps.StartsWith("http", StringComparison.OrdinalIgnoreCase))
+                                {
+                                    <span><a href="@p.UrlGoogleMaps" target="_blank" rel="noopener"><i class="bi bi-geo-alt"></i> Ver en Google Maps</a></span>
+                                }
+                            </div>
+                            @if (p.Validada)
+                            {
+                                <span class="ub-estado ok" title="Revisada por Atilson">Validada</span>
+                            }
+                            else
+                            {
+                                <span class="ub-estado rev" title="Ya la puedes usar; Atilson está revisando sus datos">En revisión</span>
+                            }
+                            <div class="ub-acciones">
+                                @if (!p.Validada)
+                                {
+                                    <a class="ub-btn" href="?editarPlanta=@p.Id#formPlanta"><i class="bi bi-pencil"></i> Editar</a>
+                                }
+                                <form method="post" asp-page-handler="QuitarPlanta" asp-route-id="@p.Id" onsubmit="return confirm('¿Quitar la planta «@p.Nombre.Replace("'", "")»? Ya no aparecerá en tus solicitudes.');">
+                                    <button type="submit" class="ub-btn peligro"><i class="bi bi-trash3"></i> Quitar</button>
+                                </form>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+            else
+            {
+                <div class="ub-vacio">Aún no tienes plantas registradas.</div>
+            }
+
+            <button type="button" class="ub-btn" data-ub-abrir="formPlanta" hidden="@(abrirPlanta ? "hidden" : null)"><i class="bi bi-plus-lg"></i> Agregar planta</button>
+
+            <form method="post" asp-page-handler="GuardarPlanta" class="ub-form" id="formPlanta" novalidate hidden="@(abrirPlanta ? null : "hidden")">
+                <input type="hidden" asp-for="Planta.Id" />
+                <div asp-validation-summary="ModelOnly" class="af-alert" role="alert"></div>
+                <div class="af-grid af-grid--6">
+                    <div class="af-field af-col-3">
+                        <label class="af-label" asp-for="Planta.Nombre">Nombre de la planta <span class="af-req">*</span></label>
+                        <input asp-for="Planta.Nombre" class="af-input" maxlength="200" />
+                        <span asp-validation-for="Planta.Nombre" class="ub-error"></span>
+                    </div>
+                    <div class="af-field af-col-3">
+                        <label class="af-label" asp-for="Planta.IdCiudad">Zona (comuna) <span class="af-req">*</span></label>
+                        <select asp-for="Planta.IdCiudad" asp-items="Model.Zonas" class="af-select" data-buscador="si">
+                            <option value="">Escribe o elige la comuna</option>
+                        </select>
+                        <span asp-validation-for="Planta.IdCiudad" class="ub-error"></span>
+                    </div>
+                    <div class="af-field af-col-3">
+                        <label class="af-label" asp-for="Planta.Direccion">Dirección <span class="af-req">*</span></label>
+                        <input asp-for="Planta.Direccion" class="af-input" maxlength="500" />
+                        <span asp-validation-for="Planta.Direccion" class="ub-error"></span>
+                    </div>
+                    <div class="af-field af-col-3">
+                        <label class="af-label" asp-for="Planta.UrlGoogleMaps">Enlace de Google Maps <span class="af-req">*</span></label>
+                        <input asp-for="Planta.UrlGoogleMaps" type="url" class="af-input" maxlength="1000" placeholder="https://maps.app.goo.gl/…" />
+                        <span asp-validation-for="Planta.UrlGoogleMaps" class="ub-error"></span>
+                    </div>
+                </div>
+                <div class="ub-form-acciones">
+                    <a href="/PortalCliente/MisUbicaciones" class="ub-btn">Cancelar</a>
+                    <button type="submit" class="af-btn-primary" style="width:auto;">@(Model.Planta.Id > 0 ? "Guardar cambios" : "Agregar planta")</button>
+                </div>
+            </form>
+        </section>
+
+        
+    </div>
+</div>
+
+@section Scripts {
+    <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+    <script>
+        document.querySelectorAll('[data-ub-abrir]').forEach(function (b) {
+            b.addEventListener('click', function () {
+                var f = document.getElementById(b.getAttribute('data-ub-abrir'));
+                if (!f) return;
+                f.hidden = false;
+                b.hidden = true;
+                var primero = f.querySelector('input:not([type=hidden])');
+                if (primero) primero.focus();
+            });
+        });
+    </script>
+}

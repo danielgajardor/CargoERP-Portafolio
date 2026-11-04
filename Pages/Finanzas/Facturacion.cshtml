@@ -342,8 +342,9 @@
         justify-content: flex-end;
     }
 </style>
+<link rel="stylesheet" href="~/css/facturacion-premium.css" asp-append-version="true" />
 
-<div class="container-fluid py-4" style="padding-left: 30px; padding-right: 30px; max-width: 1650px;">
+<div class="container-fluid py-4 fac-premium" style="padding-left: 30px; padding-right: 30px; max-width: 1650px;">
 
     <div class="d-flex justify-content-between align-items-center mb-4 pb-2 border-bottom flex-wrap gap-3">
         <div>
@@ -352,11 +353,7 @@
         </div>
     </div>
 
-    <div class="workspace-nav">
-        <a asp-page="/Finanzas/Index" class="ws-btn"><i class="bi bi-graph-up-arrow"></i> Main Board</a>
-        <a asp-page="/Finanzas/OrdenesCompra" class="ws-btn"><i class="bi bi-receipt"></i> Órdenes de Compra (Costo)</a>
-        <a asp-page="/Finanzas/Facturacion" class="ws-btn active"><i class="bi bi-file-earmark-spreadsheet"></i> Facturación (Ingreso)</a>
-    </div>
+    <partial name="/Pages/Finanzas/_FinanzasNav.cshtml" model='"Facturacion"' />
 
     <div class="row row-cols-1 row-cols-sm-2 row-cols-xl-5 g-3 mb-4">
         <div class="col">

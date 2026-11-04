@@ -298,7 +298,12 @@ namespace AtilsonCargoSpa.Pages.Operaciones
                 // ========================================================================
                 // 4. DISPARO DEL MOTOR COMERCIAL ATILSON (INYECCIÓN DE PROVISIONES)
                 // ========================================================================
-                await InyectarProvisionesComercialesAsync(opDb, nombreUsuario);
+                // Desactivado (oct-2026): las ventas al cliente las aplica ahora
+                // FinanzasSyncService (Flete Marítimo, Terrestre, Gate, Courier), con el
+                // mismo nombre de concepto que el costo. Este puente antiguo creaba una
+                // segunda fila de Ingreso ("FLETE MARÍTIMO", grupo "Terrestre") que no se
+                // concilia con la del motor y duplicaba el cobro.
+                // await InyectarProvisionesComercialesAsync(opDb, nombreUsuario);
 
                 // Finalmente guardamos todo
                 await _context.SaveChangesAsync();
@@ -369,52 +374,115 @@ namespace AtilsonCargoSpa.Pages.Operaciones
 
             if (esMaritimo && op.IdNaviera != null)
             {
-                // A) Buscar Tarifa de Venta (Cliente Mandante - Usa DateTime)
-                var tarifaVentaMar = await _context.TarifasClientes 
-                    .Where(t => t.IdCliente == op.IdCliente && t.EsActiva && t.GrupoCobro == "Marítimo"
-                             && t.FechaInicioVigencia <= hoyDt && t.FechaFinVigencia >= hoyDt)
-                    .OrderByDescending(t => t.Id)
-                    .FirstOrDefaultAsync();
+                // Modalidad Collect / No Prepaid (instrucción de Cristian): el consignatario
+                // le paga el flete directo a la naviera, la naviera nos paga un REBATE a
+                // nosotros, y de ese rebate le devolvemos una parte al cliente. La diferencia
+                // (Rebate Naviera - Rebate Cliente) es nuestra comisión/profit. Se modela con
+                // el mismo GrupoCobro "Marítimo" (mismo tratamiento IVA-exento en
+                // ControlFinanciero/AcuerdosOperativos) pero Concepto "Rebate Marítimo (...)"
+                // en vez de "Flete Marítimo (...)", para no activar la UI de Venta+P/H que es
+                // propia del modelo Prepaid.
+                bool esCollect = op.CondicionPago == 3 || op.CondicionPago == 4; // Collect / Full Collect
 
-                if (tarifaVentaMar != null && !await _context.TransaccionesFinancieras.AnyAsync(t => t.IdOperacion == op.Id && t.GrupoCobro == "Marítimo" && t.TipoMovimiento == "INGRESO"))
+                if (esCollect)
                 {
-                    _context.TransaccionesFinancieras.Add(new TransaccionesFinanciera
+                    // A) Rebate que nos paga la naviera (INGRESO para Atilson)
+                    var tarifaCostoMarCollect = await _context.TarifasMaritimas
+                        .Where(t => t.IdNaviera == op.IdNaviera && t.FechaInicioVigencia <= hoyDate)
+                        .OrderByDescending(t => t.Id)
+                        .FirstOrDefaultAsync();
+
+                    if (tarifaCostoMarCollect != null && !await _context.TransaccionesFinancieras.AnyAsync(t => t.IdOperacion == op.Id && t.GrupoCobro == "Marítimo" && t.TipoMovimiento == "INGRESO"))
                     {
-                        IdOperacion = op.Id,
-                        TipoMovimiento = "INGRESO",
-                        GrupoCobro = "Marítimo",
-                        Concepto = tarifaVentaMar.Concepto,
-                        Moneda = tarifaVentaMar.Moneda,
-                        MontoNeto = tarifaVentaMar.EsServicioGratuito ? 0m : tarifaVentaMar.PrecioPactado,
-                        EstadoFila = "PROVISIÓN",
-                        ResponsablePago = "CLIENTE",
-                        FechaCreacion = hoyRegistro,
-                        UsuarioCreador = usuario
-                    });
+                        _context.TransaccionesFinancieras.Add(new TransaccionesFinanciera
+                        {
+                            IdOperacion = op.Id,
+                            IdProveedor = op.IdNaviera,
+                            TipoMovimiento = "INGRESO",
+                            GrupoCobro = "Marítimo",
+                            Concepto = "Rebate Marítimo (Naviera)",
+                            Moneda = "USD",
+                            MontoNeto = tarifaCostoMarCollect.RebateUsd ?? 0m,
+                            EstadoFila = (tarifaCostoMarCollect.RebateUsd ?? 0m) > 0 ? "PROVISIÓN" : "PENDIENTE VALORIZAR",
+                            ResponsablePago = "NAVIERA",
+                            FechaCreacion = hoyRegistro,
+                            UsuarioCreador = usuario
+                        });
+                    }
+
+                    // B) Rebate que le devolvemos al cliente (EGRESO para Atilson)
+                    var tarifaVentaMarCollect = await _context.TarifasClientes
+                        .Where(t => t.IdCliente == op.IdCliente && t.EsActiva && t.GrupoCobro == "Marítimo"
+                                 && t.FechaInicioVigencia <= hoyDt && t.FechaFinVigencia >= hoyDt)
+                        .OrderByDescending(t => t.Id)
+                        .FirstOrDefaultAsync();
+
+                    if (tarifaVentaMarCollect != null && !await _context.TransaccionesFinancieras.AnyAsync(t => t.IdOperacion == op.Id && t.GrupoCobro == "Marítimo" && t.TipoMovimiento == "EGRESO"))
+                    {
+                        _context.TransaccionesFinancieras.Add(new TransaccionesFinanciera
+                        {
+                            IdOperacion = op.Id,
+                            TipoMovimiento = "EGRESO",
+                            GrupoCobro = "Marítimo",
+                            Concepto = "Rebate Marítimo (Cliente)",
+                            Moneda = tarifaVentaMarCollect.Moneda ?? "USD",
+                            MontoNeto = tarifaVentaMarCollect.RebateUsd ?? 0m,
+                            EstadoFila = (tarifaVentaMarCollect.RebateUsd ?? 0m) > 0 ? "PROVISIÓN" : "PENDIENTE VALORIZAR",
+                            ResponsablePago = "ATILSON",
+                            FechaCreacion = hoyRegistro,
+                            UsuarioCreador = usuario
+                        });
+                    }
                 }
-
-                // B) Buscar Tarifa de Costo (Proveedor Naviera - Usa DateOnly)
-                var tarifaCostoMar = await _context.TarifasMaritimas
-                    .Where(t => t.IdNaviera == op.IdNaviera && t.FechaInicioVigencia <= hoyDate)
-                    .OrderByDescending(t => t.Id)
-                    .FirstOrDefaultAsync();
-
-                if (tarifaCostoMar != null && !await _context.TransaccionesFinancieras.AnyAsync(t => t.IdOperacion == op.Id && t.GrupoCobro == "Marítimo" && t.TipoMovimiento == "EGRESO"))
+                else
                 {
-                    _context.TransaccionesFinancieras.Add(new TransaccionesFinanciera
+                    // A) Buscar Tarifa de Venta (Cliente Mandante - Usa DateTime)
+                    var tarifaVentaMar = await _context.TarifasClientes
+                        .Where(t => t.IdCliente == op.IdCliente && t.EsActiva && t.GrupoCobro == "Marítimo"
+                                 && t.FechaInicioVigencia <= hoyDt && t.FechaFinVigencia >= hoyDt)
+                        .OrderByDescending(t => t.Id)
+                        .FirstOrDefaultAsync();
+
+                    if (tarifaVentaMar != null && !await _context.TransaccionesFinancieras.AnyAsync(t => t.IdOperacion == op.Id && t.GrupoCobro == "Marítimo" && t.TipoMovimiento == "INGRESO"))
                     {
-                        IdOperacion = op.Id,
-                        IdProveedor = op.IdNaviera,
-                        TipoMovimiento = "EGRESO",
-                        GrupoCobro = "Marítimo",
-                        Concepto = $"Flete Marítimo ({tarifaCostoMar.Equipamiento})",
-                        Moneda = "USD",
-                        MontoNeto = tarifaCostoMar.TarifaUsd,
-                        EstadoFila = "PROVISIÓN",
-                        ResponsablePago = "CLIENTE",
-                        FechaCreacion = hoyRegistro,
-                        UsuarioCreador = usuario
-                    });
+                        _context.TransaccionesFinancieras.Add(new TransaccionesFinanciera
+                        {
+                            IdOperacion = op.Id,
+                            TipoMovimiento = "INGRESO",
+                            GrupoCobro = "Marítimo",
+                            Concepto = tarifaVentaMar.Concepto,
+                            Moneda = tarifaVentaMar.Moneda,
+                            MontoNeto = tarifaVentaMar.EsServicioGratuito ? 0m : tarifaVentaMar.PrecioPactado,
+                            EstadoFila = "PROVISIÓN",
+                            ResponsablePago = "CLIENTE",
+                            FechaCreacion = hoyRegistro,
+                            UsuarioCreador = usuario
+                        });
+                    }
+
+                    // B) Buscar Tarifa de Costo (Proveedor Naviera - Usa DateOnly)
+                    var tarifaCostoMar = await _context.TarifasMaritimas
+                        .Where(t => t.IdNaviera == op.IdNaviera && t.FechaInicioVigencia <= hoyDate)
+                        .OrderByDescending(t => t.Id)
+                        .FirstOrDefaultAsync();
+
+                    if (tarifaCostoMar != null && !await _context.TransaccionesFinancieras.AnyAsync(t => t.IdOperacion == op.Id && t.GrupoCobro == "Marítimo" && t.TipoMovimiento == "EGRESO"))
+                    {
+                        _context.TransaccionesFinancieras.Add(new TransaccionesFinanciera
+                        {
+                            IdOperacion = op.Id,
+                            IdProveedor = op.IdNaviera,
+                            TipoMovimiento = "EGRESO",
+                            GrupoCobro = "Marítimo",
+                            Concepto = $"Flete Marítimo ({tarifaCostoMar.Equipamiento})",
+                            Moneda = "USD",
+                            MontoNeto = tarifaCostoMar.TarifaUsd,
+                            EstadoFila = "PROVISIÓN",
+                            ResponsablePago = "CLIENTE",
+                            FechaCreacion = hoyRegistro,
+                            UsuarioCreador = usuario
+                        });
+                    }
                 }
             }
 

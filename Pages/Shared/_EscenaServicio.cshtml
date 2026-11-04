@@ -1,0 +1,375 @@
+@model string
+@* Escena animada de cada servicio (nov-2026), en la misma línea que la vitrina del portal.
+   Se usa en /servicios/{slug} (model = slug). A la izquierda las etapas del servicio; a la
+   derecha una ilustración (SVG y HTML) que cambia según la etapa: avanza sola mientras está en
+   pantalla, se detiene al pasar el mouse o con el teclado. Los datos son ilustrativos.
+   Generado con Herramientas/generar_escena_servicio.py (no editar a mano); estilos en wwwroot/css/escena-servicio.css y comportamiento en
+   wwwroot/js/escena-servicio.js. *@
+@{
+    string slug = Model ?? "";
+}
+
+@if (slug == "maritimo")
+{
+<section class="es es--maritimo" aria-labelledby="esTitulo">
+    <div class="es-fondo" aria-hidden="true"></div>
+    <div class="contenedor">
+        <header class="es-cab">
+            <p class="es-lema"><i class="bi bi-play-circle" aria-hidden="true"></i> Así funciona</p>
+            <h2 class="titular" id="esTitulo">Del booking al arribo.</h2>
+            <p class="es-bajada">Así se mueve tu contenedor por mar. Pasa el mouse o toca cada etapa para recorrerla.</p>
+        </header>
+        <div class="es-grid">
+            <ol class="es-pasos" role="tablist" aria-label="Etapas del servicio">
+            <li><button type="button" class="es-paso" role="tab" data-paso="reserva" aria-selected="false" aria-controls="esEstado"><span class="es-num">1</span><span><b>Reserva</b>Confirmamos nave, viaje y fechas con la naviera.</span><span class="es-barra" aria-hidden="true"></span></button></li>
+            <li><button type="button" class="es-paso" role="tab" data-paso="retiro" aria-selected="false" aria-controls="esEstado"><span class="es-num">2</span><span><b>Retiro del vacío</b>El contenedor sale del depósito hacia tu planta.</span><span class="es-barra" aria-hidden="true"></span></button></li>
+            <li><button type="button" class="es-paso" role="tab" data-paso="stacking" aria-selected="false" aria-controls="esEstado"><span class="es-num">3</span><span><b>Stacking</b>Tu contenedor entra a puerto y se embarca.</span><span class="es-barra" aria-hidden="true"></span></button></li>
+            <li><button type="button" class="es-paso" role="tab" data-paso="zarpe" aria-selected="false" aria-controls="esEstado"><span class="es-num">4</span><span><b>Zarpe</b>La nave sale de San Antonio con tu carga.</span><span class="es-barra" aria-hidden="true"></span></button></li>
+            <li><button type="button" class="es-paso" role="tab" data-paso="transito" aria-selected="false" aria-controls="esEstado"><span class="es-num">5</span><span><b>Tránsito</b>Seguimos la nave y te avisamos de cualquier cambio.</span><span class="es-barra" aria-hidden="true"></span></button></li>
+            <li><button type="button" class="es-paso" role="tab" data-paso="arribo" aria-selected="false" aria-controls="esEstado"><span class="es-num">6</span><span><b>Arribo</b>Tu carga llega a su puerto de destino.</span><span class="es-barra" aria-hidden="true"></span></button></li>
+            </ol>
+            <div class="es-marco">
+                <div class="es-escena" data-paso="reserva" aria-hidden="true">
+
+<svg class="es-svg" viewBox="0 0 800 450" preserveAspectRatio="xMidYMid slice">
+  <defs>
+    <linearGradient id="mrCielo" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#120a2a"/><stop offset=".7" stop-color="#2c1f63"/><stop offset="1" stop-color="#4f3c9e"/></linearGradient>
+    <linearGradient id="mrMar" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2e2170"/><stop offset="1" stop-color="#0f0824"/></linearGradient>
+    <radialGradient id="mrHalo"><stop offset="0" stop-color="#d9d0ff" stop-opacity=".45"/><stop offset="1" stop-color="#d9d0ff" stop-opacity="0"/></radialGradient>
+    <clipPath id="mrClipCable"><rect x="-50" y="152" width="400" height="200"/></clipPath>
+  </defs>
+  <rect width="800" height="302" fill="url(#mrCielo)"/>
+  <g class="es-estrellas" fill="#fff"><circle cx="254" cy="25" r="1.2" style="--d:3.3s" /><circle cx="511" cy="229" r="1.2" style="--d:2.8s" /><circle cx="299" cy="160" r="0.8" style="--d:0.7s" /><circle cx="529" cy="112" r="1" style="--d:2.1s" /><circle cx="160" cy="130" r="1.6" style="--d:0.2s" /><circle cx="689" cy="24" r="1.2" style="--d:2.1s" /><circle cx="716" cy="94" r="1.6" style="--d:3.7s" /><circle cx="472" cy="22" r="0.8" style="--d:1.7s" /><circle cx="490" cy="183" r="0.8" style="--d:0.3s" /><circle cx="753" cy="184" r="1.2" style="--d:3.6s" /><circle cx="702" cy="215" r="1.6" style="--d:1.8s" /><circle cx="738" cy="103" r="1.2" style="--d:0.1s" /><circle cx="477" cy="95" r="1" style="--d:3.9s" /><circle cx="124" cy="131" r="0.8" style="--d:1.3s" /><circle cx="791" cy="78" r="1" style="--d:1.5s" /><circle cx="412" cy="105" r="1.6" style="--d:0.5s" /><circle cx="175" cy="119" r="1.6" style="--d:3.5s" /><circle cx="289" cy="231" r="1" style="--d:2.7s" /><circle cx="568" cy="76" r="1.6" style="--d:2.2s" /><circle cx="704" cy="231" r="1.6" style="--d:1.4s" /><circle cx="159" cy="26" r="1" style="--d:0.9s" /><circle cx="242" cy="173" r="1" style="--d:0.0s" /><circle cx="501" cy="217" r="1" style="--d:1.6s" /><circle cx="293" cy="6" r="1" style="--d:2.6s" /><circle cx="552" cy="99" r="1.2" style="--d:0.8s" /><circle cx="712" cy="224" r="0.8" style="--d:2.9s" /><circle cx="701" cy="209" r="1.6" style="--d:2.5s" /><circle cx="413" cy="105" r="0.8" style="--d:3.0s" /><circle cx="654" cy="107" r="0.8" style="--d:1.2s" /><circle cx="73" cy="58" r="1.6" style="--d:1.0s" /><circle cx="117" cy="92" r="0.8" style="--d:0.6s" /><circle cx="5" cy="150" r="1" style="--d:3.4s" /><circle cx="108" cy="98" r="0.8" style="--d:0.4s" /><circle cx="217" cy="162" r="1.6" style="--d:0.9s" /><circle cx="654" cy="69" r="1.2" style="--d:3.8s" /><circle cx="377" cy="126" r="0.8" style="--d:0.7s" /><circle cx="504" cy="124" r="1.6" style="--d:3.0s" /><circle cx="324" cy="26" r="1" style="--d:0.6s" /><circle cx="772" cy="92" r="1.2" style="--d:3.0s" /><circle cx="713" cy="46" r="0.8" style="--d:1.3s" /><circle cx="545" cy="97" r="1" style="--d:3.4s" /><circle cx="32" cy="199" r="1.2" style="--d:0.5s" /><circle cx="717" cy="221" r="1.2" style="--d:3.3s" /><circle cx="380" cy="237" r="1" style="--d:2.2s" /><circle cx="795" cy="62" r="1.2" style="--d:4.0s" /><circle cx="233" cy="161" r="1" style="--d:1.5s" /></g>
+  <circle cx="650" cy="72" r="70" fill="url(#mrHalo)"/><circle cx="650" cy="72" r="15" fill="#efeafe"/><circle cx="656" cy="68" r="13" fill="#2a1d60" opacity=".35"/>
+  <g class="mr-nubes" fill="#fff" opacity=".07">
+    <g class="es-nube" style="--v:70s"><ellipse cx="160" cy="190" rx="70" ry="12"/><ellipse cx="190" cy="182" rx="40" ry="10"/><ellipse cx="960" cy="200" rx="80" ry="12"/></g>
+    <g class="es-nube" style="--v:110s"><ellipse cx="480" cy="160" rx="90" ry="10"/><ellipse cx="1280" cy="170" rx="60" ry="9"/></g>
+  </g>
+  <g class="mr-ruta">
+    <path class="mr-ruta-base" d="M90 112 Q400 32 710 112"/>
+    <path class="mr-ruta-hecha" d="M90 112 Q400 32 710 112" pathLength="100"/>
+    <circle class="mr-ruta-fin" cx="90" cy="112" r="4.5"/><circle class="mr-ruta-fin" cx="710" cy="112" r="4.5"/>
+    <text x="90" y="134" text-anchor="middle">San Antonio</text><text x="710" y="134" text-anchor="middle">Rotterdam</text>
+    <g class="mr-ruta-punto"><circle r="11" class="halo"/><circle r="5.5"/></g>
+  </g>
+  <rect y="300" width="800" height="150" fill="url(#mrMar)"/>
+  <g class="mr-reflejo" fill="#efeafe" opacity=".18"><rect x="620" y="306" width="60" height="2" rx="1"/><rect x="632" y="316" width="36" height="2" rx="1"/><rect x="640" y="326" width="20" height="2" rx="1"/></g>
+  <g class="mr-ola mr-ola-1"><path d="M0 318 q22 -4 45 0 t45 0 q22 -4 45 0 t45 0 q22 -4 45 0 t45 0 q22 -4 45 0 t45 0 q22 -4 45 0 t45 0 q22 -4 45 0 t45 0 q22 -4 45 0 t45 0 q22 -4 45 0 t45 0 q22 -4 45 0 t45 0 q22 -4 45 0 t45 0 q22 -4 45 0 t45 0 q22 -4 45 0 t45 0 q22 -4 45 0 t45 0 q22 -4 45 0 t45 0 q22 -4 45 0 t45 0 q22 -4 45 0 t45 0 q22 -4 45 0 t45 0 q22 -4 45 0 t45 0 V518 H0 Z" fill="#3a2b85" opacity=".55"/></g>
+  <g class="mr-ola mr-ola-2"><path d="M0 345 q30 -5 60 0 t60 0 q30 -5 60 0 t60 0 q30 -5 60 0 t60 0 q30 -5 60 0 t60 0 q30 -5 60 0 t60 0 q30 -5 60 0 t60 0 q30 -5 60 0 t60 0 q30 -5 60 0 t60 0 q30 -5 60 0 t60 0 q30 -5 60 0 t60 0 q30 -5 60 0 t60 0 q30 -5 60 0 t60 0 q30 -5 60 0 t60 0 q30 -5 60 0 t60 0 V545 H0 Z" fill="#24185a" opacity=".7"/></g>
+
+  <g class="mr-origen">
+    <rect x="-40" y="290" width="190" height="160" fill="#231852"/><rect x="-40" y="288" width="190" height="5" fill="#3b2c7d"/>
+    <rect x="150" y="293" width="4" height="40" fill="#1a1140"/>
+    <rect x="-30" y="274" width="30" height="13" rx="1" fill="#c3b6f5" opacity=".9"/><rect x="1" y="274" width="30" height="13" rx="1" fill="#5b45b8" opacity=".9"/><rect x="32" y="274" width="30" height="13" rx="1" fill="#e7a86b" opacity=".9"/><rect x="-30" y="260" width="30" height="13" rx="1" fill="#e7a86b" opacity=".9"/><rect x="1" y="260" width="30" height="13" rx="1" fill="#6ad2b3" opacity=".9"/>
+    <g class="mr-camion"><rect x="0" y="270" width="34" height="14" rx="1" fill="#e7a86b"/><rect x="34" y="273" width="13" height="11" rx="2" fill="#efeafe"/><rect x="40" y="275" width="5" height="4" fill="#2c1f63"/><circle cx="8" cy="286" r="3" fill="#0d0820"/><circle cx="26" cy="286" r="3" fill="#0d0820"/><circle cx="41" cy="286" r="3" fill="#0d0820"/></g>
+    <g class="mr-grua">
+      <rect x="44" y="150" width="6" height="140" fill="#8f7fd6"/><rect x="102" y="150" width="6" height="140" fill="#8f7fd6"/>
+      <path d="M50 200 L102 240 M102 200 L50 240" stroke="#8f7fd6" stroke-width="2.5"/>
+      <rect x="38" y="128" width="76" height="20" rx="2" fill="#c3b6f5"/><rect x="46" y="133" width="10" height="6" fill="#2c1f63"/>
+      <rect x="-20" y="146" width="262" height="7" fill="#c3b6f5"/>
+      <path d="M76 128 L76 96 L242 146 M76 96 L-20 146" stroke="#c3b6f5" stroke-width="2"/>
+      <g clip-path="url(#mrClipCable)"><g class="mr-izaje"><rect x="-9" y="151" width="18" height="7" rx="1" fill="#efeafe"/><g class="mr-gancho"><path d="M-5 0 V160 M5 0 V160" stroke="#d9d3f2" stroke-width="1"/><rect x="-16" y="158" width="32" height="3" fill="#efeafe"/><g class="mr-carga"><rect x="-15" y="160" width="30" height="14" rx="1" fill="#e7a86b"/></g></g></g></g>
+    </g>
+  </g>
+
+  <g class="mr-destino">
+    <rect x="640" y="290" width="200" height="160" fill="#231852"/><rect x="640" y="288" width="200" height="5" fill="#3b2c7d"/>
+    <rect x="690" y="274" width="30" height="13" rx="1" fill="#6ad2b3" opacity=".9"/><rect x="721" y="274" width="30" height="13" rx="1" fill="#443094" opacity=".9"/><rect x="752" y="274" width="30" height="13" rx="1" fill="#d9d3f2" opacity=".9"/><rect x="690" y="260" width="30" height="13" rx="1" fill="#d9d3f2" opacity=".9"/><rect x="721" y="260" width="30" height="13" rx="1" fill="#7c6ad0" opacity=".9"/><rect x="752" y="260" width="30" height="13" rx="1" fill="#8f7fd6" opacity=".9"/><rect x="690" y="246" width="30" height="13" rx="1" fill="#8f7fd6" opacity=".9"/><rect x="721" y="246" width="30" height="13" rx="1" fill="#c3b6f5" opacity=".9"/><rect x="752" y="246" width="30" height="13" rx="1" fill="#5b45b8" opacity=".9"/>
+    <g class="mr-grua-d"><rect x="660" y="160" width="5" height="130" fill="#8f7fd6"/><rect x="700" y="160" width="5" height="130" fill="#8f7fd6"/><rect x="600" y="156" width="130" height="6" fill="#c3b6f5"/><rect x="655" y="140" width="56" height="16" rx="2" fill="#c3b6f5"/><circle class="mr-luz" cx="603" cy="159" r="2.5" fill="#fca5a5"/></g>
+    <g class="mr-faro"><path d="M772 288 L778 220 L786 220 L792 288 Z" fill="#efeafe"/><rect x="776" y="238" width="12" height="6" fill="#e86a6a"/><rect x="776" y="258" width="14" height="6" fill="#e86a6a"/><rect x="775" y="212" width="14" height="9" fill="#2c1f63"/><circle class="mr-faro-luz" cx="782" cy="216" r="4" fill="#fde68a"/></g>
+  </g>
+
+  <g class="mr-barco">
+    <g class="mr-flota">
+      <g class="mr-estela" stroke="#efeafe" stroke-linecap="round" fill="none"><path d="M10 40 H-60"/><path d="M4 34 H-40"/><path d="M14 46 H-90"/></g>
+      <g class="mr-humo" fill="#d9d3f2"><circle cx="29" cy="-84" r="5"/><circle cx="29" cy="-84" r="5"/><circle cx="29" cy="-84" r="5"/></g>
+      <g class="mr-cont" style="--i:0"><rect x="56" y="-22" width="23" height="21" rx="1.5" fill="#8f7fd6"/><path d="M62 -19v15M67.5 -19v15M73 -19v15" stroke="#000" stroke-opacity=".18"/></g><g class="mr-cont" style="--i:1"><rect x="80" y="-22" width="23" height="21" rx="1.5" fill="#e7a86b"/><path d="M86 -19v15M91.5 -19v15M97 -19v15" stroke="#000" stroke-opacity=".18"/></g><g class="mr-cont" style="--i:2"><rect x="104" y="-22" width="23" height="21" rx="1.5" fill="#d9d3f2"/><path d="M110 -19v15M115.5 -19v15M121 -19v15" stroke="#000" stroke-opacity=".18"/></g><g class="mr-cont" style="--i:3"><rect x="128" y="-22" width="23" height="21" rx="1.5" fill="#c3b6f5"/><path d="M134 -19v15M139.5 -19v15M145 -19v15" stroke="#000" stroke-opacity=".18"/></g><g class="mr-cont" style="--i:4"><rect x="152" y="-22" width="23" height="21" rx="1.5" fill="#6ad2b3"/><path d="M158 -19v15M163.5 -19v15M169 -19v15" stroke="#000" stroke-opacity=".18"/></g><g class="mr-cont" style="--i:5"><rect x="176" y="-22" width="23" height="21" rx="1.5" fill="#7c6ad0"/><path d="M182 -19v15M187.5 -19v15M193 -19v15" stroke="#000" stroke-opacity=".18"/></g><g class="mr-cont" style="--i:6"><rect x="200" y="-22" width="23" height="21" rx="1.5" fill="#5b45b8"/><path d="M206 -19v15M211.5 -19v15M217 -19v15" stroke="#000" stroke-opacity=".18"/></g><g class="mr-cont" style="--i:7"><rect x="224" y="-22" width="23" height="21" rx="1.5" fill="#443094"/><path d="M230 -19v15M235.5 -19v15M241 -19v15" stroke="#000" stroke-opacity=".18"/></g><g class="mr-cont" style="--i:8"><rect x="56" y="-44" width="23" height="21" rx="1.5" fill="#443094"/><path d="M62 -41v15M67.5 -41v15M73 -41v15" stroke="#000" stroke-opacity=".18"/></g><g class="mr-cont" style="--i:9"><rect x="80" y="-44" width="23" height="21" rx="1.5" fill="#8f7fd6"/><path d="M86 -41v15M91.5 -41v15M97 -41v15" stroke="#000" stroke-opacity=".18"/></g><g class="mr-cont" style="--i:10"><rect x="104" y="-44" width="23" height="21" rx="1.5" fill="#e7a86b"/><path d="M110 -41v15M115.5 -41v15M121 -41v15" stroke="#000" stroke-opacity=".18"/></g><g class="mr-cont" style="--i:11"><rect x="128" y="-44" width="23" height="21" rx="1.5" fill="#d9d3f2"/><path d="M134 -41v15M139.5 -41v15M145 -41v15" stroke="#000" stroke-opacity=".18"/></g><g class="mr-cont" style="--i:12"><rect x="152" y="-44" width="23" height="21" rx="1.5" fill="#c3b6f5"/><path d="M158 -41v15M163.5 -41v15M169 -41v15" stroke="#000" stroke-opacity=".18"/></g><g class="mr-cont" style="--i:13"><rect x="176" y="-44" width="23" height="21" rx="1.5" fill="#6ad2b3"/><path d="M182 -41v15M187.5 -41v15M193 -41v15" stroke="#000" stroke-opacity=".18"/></g><g class="mr-cont" style="--i:14"><rect x="200" y="-44" width="23" height="21" rx="1.5" fill="#7c6ad0"/><path d="M206 -41v15M211.5 -41v15M217 -41v15" stroke="#000" stroke-opacity=".18"/></g><g class="mr-cont" style="--i:15"><rect x="224" y="-44" width="23" height="21" rx="1.5" fill="#5b45b8"/><path d="M230 -41v15M235.5 -41v15M241 -41v15" stroke="#000" stroke-opacity=".18"/></g>
+      <path d="M0 0 H262 L284 -10 L262 44 H18 Z" fill="#1d1447"/>
+      <path d="M8 31 H268 L262 44 H18 Z" fill="#b84a5c"/>
+      <path d="M0 0 H262 L284 -10" stroke="#c3b6f5" stroke-width="1.5" fill="none" opacity=".6"/>
+      <text x="200" y="20" class="mr-nombre">ATILSON</text>
+      <rect x="12" y="-64" width="38" height="64" rx="2" fill="#efeafe"/>
+      <rect x="8" y="-68" width="46" height="6" rx="1" fill="#d9d3f2"/>
+      <g fill="#2c1f63"><rect x="17" y="-58" width="6" height="5"/><rect x="27" y="-58" width="6" height="5"/><rect x="37" y="-58" width="6" height="5"/><rect x="17" y="-46" width="6" height="5"/><rect x="27" y="-46" width="6" height="5"/><rect x="37" y="-46" width="6" height="5"/></g>
+      <g class="mr-ventanas" fill="#fde68a"><rect x="17" y="-58" width="6" height="5"/><rect x="37" y="-46" width="6" height="5"/></g>
+      <rect x="22" y="-82" width="14" height="16" fill="#443094"/><rect x="22" y="-78" width="14" height="4" fill="#c3b6f5"/>
+      <circle class="mr-luz-barco" cx="282" cy="-12" r="2.2" fill="#86efac"/>
+    </g>
+  </g>
+  <g class="mr-ola mr-ola-frente"><path d="M0 300 q18 -3 35 0 t35 0 q18 -3 35 0 t35 0 q18 -3 35 0 t35 0 q18 -3 35 0 t35 0 q18 -3 35 0 t35 0 q18 -3 35 0 t35 0 q18 -3 35 0 t35 0 q18 -3 35 0 t35 0 q18 -3 35 0 t35 0 q18 -3 35 0 t35 0 q18 -3 35 0 t35 0 q18 -3 35 0 t35 0 q18 -3 35 0 t35 0 q18 -3 35 0 t35 0 q18 -3 35 0 t35 0 q18 -3 35 0 t35 0 q18 -3 35 0 t35 0 q18 -3 35 0 t35 0 q18 -3 35 0 t35 0 q18 -3 35 0 t35 0 q18 -3 35 0 t35 0 q18 -3 35 0 t35 0 q18 -3 35 0 t35 0 V500 H0 Z" fill="#2a1e68" opacity=".95"/></g>
+  <g class="mr-ola mr-ola-3"><path d="M0 372 q38 -4 75 0 t75 0 q38 -4 75 0 t75 0 q38 -4 75 0 t75 0 q38 -4 75 0 t75 0 q38 -4 75 0 t75 0 q38 -4 75 0 t75 0 q38 -4 75 0 t75 0 q38 -4 75 0 t75 0 q38 -4 75 0 t75 0 q38 -4 75 0 t75 0 q38 -4 75 0 t75 0 V572 H0 Z" fill="#160d36" opacity=".9"/></g>
+</svg>
+<div class="es-capa es-tarjeta" data-ver="reserva" style="left:4%;bottom:7%">
+  <span class="es-t-ico"><i class="bi bi-bookmark-check"></i></span>
+  <div><b>Booking confirmado</b><small>Nave NV2 · zarpe domingo 8</small></div>
+</div>
+<div class="es-capa es-tarjeta" data-ver="retiro" style="left:4%;bottom:7%">
+  <span class="es-t-ico"><i class="bi bi-truck"></i></span>
+  <div><b>Contenedor 40' reefer retirado</b><small>Del depósito a tu planta</small></div>
+</div>
+<div class="es-capa es-tarjeta" data-ver="stacking" style="left:4%;bottom:7%">
+  <span class="es-t-ico"><i class="bi bi-box-seam"></i></span>
+  <div><b>Ingresó a puerto</b><small>Dentro del plazo de stacking</small></div>
+</div>
+<div class="es-capa es-chip" data-ver="zarpe" style="left:50%;bottom:7%"><i class="bi bi-water"></i> Zarpó de San Antonio</div>
+<div class="es-capa es-chip" data-ver="transito" style="left:50%;bottom:7%"><i class="bi bi-broadcast"></i> En tránsito · día 14 de 28</div>
+<div class="es-capa es-chip es-chip-ok" data-ver="arribo" style="left:50%;bottom:7%"><i class="bi bi-check2-circle"></i> Arribó a Rotterdam</div>
+
+                </div>
+                <p class="es-estado" id="esEstado" aria-live="polite"><span class="es-estado-n">Etapa 1 de 6</span><span class="es-estado-t">Confirmamos nave, viaje y fechas con la naviera.</span></p>
+            </div>
+        </div>
+    </div>
+</section>
+}
+
+@if (slug == "terrestre")
+{
+<section class="es es--terrestre" aria-labelledby="esTitulo">
+    <div class="es-fondo" aria-hidden="true"></div>
+    <div class="contenedor">
+        <header class="es-cab">
+            <p class="es-lema"><i class="bi bi-play-circle" aria-hidden="true"></i> Así funciona</p>
+            <h2 class="titular" id="esTitulo">De tu planta al puerto.</h2>
+            <p class="es-bajada">El recorrido del camión, etapa por etapa. Pasa el mouse o toca cada una para verla.</p>
+        </header>
+        <div class="es-grid">
+            <ol class="es-pasos" role="tablist" aria-label="Etapas del servicio">
+            <li><button type="button" class="es-paso" role="tab" data-paso="programacion" aria-selected="false" aria-controls="esEstado"><span class="es-num">1</span><span><b>Programación</b>Asignamos camión, conductor y hora de retiro.</span><span class="es-barra" aria-hidden="true"></span></button></li>
+            <li><button type="button" class="es-paso" role="tab" data-paso="retiro" aria-selected="false" aria-controls="esEstado"><span class="es-num">2</span><span><b>Retiro en depósito</b>El contenedor vacío se carga en el camión.</span><span class="es-barra" aria-hidden="true"></span></button></li>
+            <li><button type="button" class="es-paso" role="tab" data-paso="carga" aria-selected="false" aria-controls="esEstado"><span class="es-num">3</span><span><b>Carga en planta</b>Llenamos y sellamos el contenedor en tu planta.</span><span class="es-barra" aria-hidden="true"></span></button></li>
+            <li><button type="button" class="es-paso" role="tab" data-paso="ruta" aria-selected="false" aria-controls="esEstado"><span class="es-num">4</span><span><b>En ruta</b>Seguimos el camión en el mapa hasta el puerto.</span><span class="es-barra" aria-hidden="true"></span></button></li>
+            <li><button type="button" class="es-paso" role="tab" data-paso="puerto" aria-selected="false" aria-controls="esEstado"><span class="es-num">5</span><span><b>Entrega en puerto</b>Entra a puerto a tiempo para el stacking.</span><span class="es-barra" aria-hidden="true"></span></button></li>
+            </ol>
+            <div class="es-marco">
+                <div class="es-escena" data-paso="programacion" aria-hidden="true">
+
+<svg class="es-svg" viewBox="0 0 800 450" preserveAspectRatio="xMidYMid slice">
+  <defs>
+    <linearGradient id="trCielo" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#150d33"/><stop offset=".55" stop-color="#3a2a7e"/><stop offset="1" stop-color="#9b7fd9"/></linearGradient>
+    <radialGradient id="trSol"><stop offset="0" stop-color="#ffd9a8" stop-opacity=".9"/><stop offset=".35" stop-color="#ffb77a" stop-opacity=".35"/><stop offset="1" stop-color="#ffb77a" stop-opacity="0"/></radialGradient>
+    <linearGradient id="trFaro" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#fff4c2" stop-opacity=".55"/><stop offset="1" stop-color="#fff4c2" stop-opacity="0"/></linearGradient>
+  </defs>
+  <rect width="800" height="360" fill="url(#trCielo)"/>
+  <g class="es-estrellas" fill="#fff" opacity=".7"><circle cx="378" cy="25" r="1" style="--d:0.6s" /><circle cx="237" cy="125" r="1" style="--d:2.1s" /><circle cx="214" cy="128" r="0.8" style="--d:3.0s" /><circle cx="673" cy="93" r="0.8" style="--d:0.7s" /><circle cx="402" cy="56" r="1.6" style="--d:1.1s" /><circle cx="449" cy="90" r="0.8" style="--d:2.5s" /><circle cx="479" cy="107" r="0.8" style="--d:1.0s" /><circle cx="179" cy="37" r="0.8" style="--d:0.9s" /><circle cx="609" cy="124" r="1" style="--d:3.9s" /><circle cx="615" cy="126" r="1.2" style="--d:0.9s" /><circle cx="566" cy="38" r="0.8" style="--d:0.0s" /><circle cx="748" cy="31" r="1" style="--d:2.7s" /><circle cx="204" cy="59" r="0.8" style="--d:1.6s" /><circle cx="222" cy="79" r="1" style="--d:3.7s" /><circle cx="338" cy="71" r="1.6" style="--d:0.8s" /><circle cx="67" cy="95" r="1.6" style="--d:3.7s" /><circle cx="534" cy="112" r="1" style="--d:3.4s" /><circle cx="160" cy="139" r="0.8" style="--d:2.8s" /><circle cx="192" cy="6" r="1" style="--d:1.1s" /><circle cx="149" cy="126" r="0.8" style="--d:3.5s" /><circle cx="68" cy="88" r="1.6" style="--d:0.6s" /><circle cx="578" cy="19" r="1" style="--d:1.2s" /><circle cx="288" cy="15" r="0.8" style="--d:3.2s" /><circle cx="468" cy="12" r="0.8" style="--d:2.8s" /><circle cx="338" cy="134" r="1" style="--d:1.7s" /><circle cx="468" cy="135" r="1.6" style="--d:3.2s" /></g>
+  <circle cx="600" cy="262" r="120" fill="url(#trSol)"/><circle cx="600" cy="262" r="30" fill="#ffe2b8"/>
+  <g class="tr-capa tr-andes" style="--v:90s"><polygon points="0,300 60,169 115,260 158,159 222,243 285,224 318,269 390,177 422,242 489,203 523,247 568,220 625,241 701,165 745,260 825,224 858,258 935,200 968,247 1010,221 1048,249 1114,168 1178,243 1254,189 1319,266 1402,173 1438,258 1514,231 1556,251 1602,220 1636,258 1600,300" fill="#2b1f63"/><g fill="#efeafe" opacity=".85"><path d="M60 169 l-9 14 l5 -3 l4 5 l5 -6 l4 4 Z" /><path d="M158 159 l-9 14 l5 -3 l4 5 l5 -6 l4 4 Z" /><path d="M390 177 l-9 14 l5 -3 l4 5 l5 -6 l4 4 Z" /><path d="M701 165 l-9 14 l5 -3 l4 5 l5 -6 l4 4 Z" /><path d="M1114 168 l-9 14 l5 -3 l4 5 l5 -6 l4 4 Z" /><path d="M1254 189 l-9 14 l5 -3 l4 5 l5 -6 l4 4 Z" /><path d="M1402 173 l-9 14 l5 -3 l4 5 l5 -6 l4 4 Z" /></g><g transform="translate(1600 0)"><polygon points="0,300 60,169 115,260 158,159 222,243 285,224 318,269 390,177 422,242 489,203 523,247 568,220 625,241 701,165 745,260 825,224 858,258 935,200 968,247 1010,221 1048,249 1114,168 1178,243 1254,189 1319,266 1402,173 1438,258 1514,231 1556,251 1602,220 1636,258 1600,300" fill="#2b1f63"/><g fill="#efeafe" opacity=".85"><path d="M60 169 l-9 14 l5 -3 l4 5 l5 -6 l4 4 Z" /><path d="M158 159 l-9 14 l5 -3 l4 5 l5 -6 l4 4 Z" /><path d="M390 177 l-9 14 l5 -3 l4 5 l5 -6 l4 4 Z" /><path d="M701 165 l-9 14 l5 -3 l4 5 l5 -6 l4 4 Z" /><path d="M1114 168 l-9 14 l5 -3 l4 5 l5 -6 l4 4 Z" /><path d="M1254 189 l-9 14 l5 -3 l4 5 l5 -6 l4 4 Z" /><path d="M1402 173 l-9 14 l5 -3 l4 5 l5 -6 l4 4 Z" /></g></g></g>
+  <g class="tr-capa tr-lomas" style="--v:40s"><path d="M0 300 q50 -19 100 0 q50 -37 100 0 q50 -24 100 0 q50 -33 100 0 q50 -39 100 0 q50 -35 100 0 q50 -31 100 0 q50 -28 100 0 q50 -32 100 0 q50 -36 100 0 q50 -32 100 0 q50 -29 100 0 q50 -27 100 0 q50 -25 100 0 q50 -23 100 0 q50 -40 100 0 V360 H0 Z" fill="#21174f"/><path d="M0 300 q50 -19 100 0 q50 -37 100 0 q50 -24 100 0 q50 -33 100 0 q50 -39 100 0 q50 -35 100 0 q50 -31 100 0 q50 -28 100 0 q50 -32 100 0 q50 -36 100 0 q50 -32 100 0 q50 -29 100 0 q50 -27 100 0 q50 -25 100 0 q50 -23 100 0 q50 -40 100 0 V360 H0 Z" fill="#21174f" transform="translate(1600 0)"/></g>
+  <rect y="340" width="800" height="110" fill="#1a1140"/>
+
+  <g class="tr-estacion tr-deposito" data-etapa="retiro">
+    <rect x="10" y="336" width="32" height="15" rx="1" fill="#5b45b8" opacity=".9"/><rect x="43" y="336" width="32" height="15" rx="1" fill="#e7a86b" opacity=".9"/><rect x="76" y="336" width="32" height="15" rx="1" fill="#6ad2b3" opacity=".9"/><rect x="109" y="336" width="32" height="15" rx="1" fill="#443094" opacity=".9"/><rect x="142" y="336" width="32" height="15" rx="1" fill="#d9d3f2" opacity=".9"/><rect x="10" y="320" width="32" height="15" rx="1" fill="#6ad2b3" opacity=".9"/><rect x="43" y="320" width="32" height="15" rx="1" fill="#443094" opacity=".9"/><rect x="76" y="320" width="32" height="15" rx="1" fill="#d9d3f2" opacity=".9"/><rect x="109" y="320" width="32" height="15" rx="1" fill="#7c6ad0" opacity=".9"/><rect x="142" y="320" width="32" height="15" rx="1" fill="#8f7fd6" opacity=".9"/><rect x="10" y="304" width="32" height="15" rx="1" fill="#d9d3f2" opacity=".9"/><rect x="43" y="304" width="32" height="15" rx="1" fill="#7c6ad0" opacity=".9"/><rect x="76" y="304" width="32" height="15" rx="1" fill="#8f7fd6" opacity=".9"/><rect x="109" y="304" width="32" height="15" rx="1" fill="#c3b6f5" opacity=".9"/><rect x="142" y="304" width="32" height="15" rx="1" fill="#5b45b8" opacity=".9"/><rect x="10" y="288" width="32" height="15" rx="1" fill="#8f7fd6" opacity=".9"/><rect x="43" y="288" width="32" height="15" rx="1" fill="#c3b6f5" opacity=".9"/><rect x="76" y="288" width="32" height="15" rx="1" fill="#5b45b8" opacity=".9"/><rect x="109" y="288" width="32" height="15" rx="1" fill="#e7a86b" opacity=".9"/><rect x="142" y="288" width="32" height="15" rx="1" fill="#6ad2b3" opacity=".9"/><rect x="612" y="336" width="32" height="15" rx="1" fill="#443094" opacity=".9"/><rect x="645" y="336" width="32" height="15" rx="1" fill="#d9d3f2" opacity=".9"/><rect x="678" y="336" width="32" height="15" rx="1" fill="#7c6ad0" opacity=".9"/><rect x="711" y="336" width="32" height="15" rx="1" fill="#8f7fd6" opacity=".9"/><rect x="744" y="336" width="32" height="15" rx="1" fill="#c3b6f5" opacity=".9"/><rect x="612" y="320" width="32" height="15" rx="1" fill="#7c6ad0" opacity=".9"/><rect x="645" y="320" width="32" height="15" rx="1" fill="#8f7fd6" opacity=".9"/><rect x="678" y="320" width="32" height="15" rx="1" fill="#c3b6f5" opacity=".9"/><rect x="711" y="320" width="32" height="15" rx="1" fill="#5b45b8" opacity=".9"/><rect x="744" y="320" width="32" height="15" rx="1" fill="#e7a86b" opacity=".9"/><rect x="612" y="304" width="32" height="15" rx="1" fill="#c3b6f5" opacity=".9"/><rect x="645" y="304" width="32" height="15" rx="1" fill="#5b45b8" opacity=".9"/><rect x="678" y="304" width="32" height="15" rx="1" fill="#e7a86b" opacity=".9"/><rect x="711" y="304" width="32" height="15" rx="1" fill="#6ad2b3" opacity=".9"/><rect x="744" y="304" width="32" height="15" rx="1" fill="#443094" opacity=".9"/>
+    <rect x="236" y="138" width="10" height="214" fill="#e7a86b"/><rect x="574" y="138" width="10" height="214" fill="#e7a86b"/>
+    <rect x="226" y="128" width="368" height="14" rx="2" fill="#f0bd86"/><rect x="380" y="118" width="70" height="12" rx="2" fill="#f0bd86"/>
+    <path d="M246 170 L574 170" stroke="#e7a86b" stroke-width="3"/>
+    <text x="410" y="138" text-anchor="middle" class="tr-rotulo" fill="#3a2a7e">DEPÓSITO</text>
+  </g>
+  <g class="tr-estacion tr-planta" data-etapa="carga">
+    <rect x="0" y="206" width="222" height="146" fill="#efeafe"/><path d="M-6 210 L111 168 L228 210 Z" fill="#d9d3f2"/>
+    <rect x="18" y="226" width="120" height="26" rx="3" fill="#443094"/><text x="78" y="244" text-anchor="middle" class="tr-rotulo" fill="#fff">PLANTA</text>
+    <g fill="#8f7fd6" opacity=".5"><rect x="22" y="268" width="26" height="20"/><rect x="58" y="268" width="26" height="20"/><rect x="94" y="268" width="26" height="20"/></g>
+    <rect x="160" y="262" width="62" height="90" fill="#2c1f63"/><rect x="160" y="258" width="62" height="6" fill="#8f7fd6"/>
+    <rect x="200" y="330" width="44" height="6" fill="#8f7fd6"/>
+    <g class="tr-cajas">
+      <g class="tr-caja" style="--i:0"><rect x="170" y="306" width="22" height="22" rx="1.5" fill="#e7a86b"/><path d="M170 314h22" stroke="#b9773f"/></g>
+      <g class="tr-caja" style="--i:1"><rect x="170" y="306" width="22" height="22" rx="1.5" fill="#f0bd86"/><path d="M170 314h22" stroke="#b9773f"/></g>
+      <g class="tr-caja" style="--i:2"><rect x="170" y="306" width="22" height="22" rx="1.5" fill="#e7a86b"/><path d="M170 314h22" stroke="#b9773f"/></g>
+    </g>
+  </g>
+  <g class="tr-estacion tr-puerto" data-etapa="puerto">
+    <g opacity=".75"><rect x="470" y="120" width="8" height="232" fill="#6c5bc0"/><rect x="530" y="120" width="8" height="232" fill="#6c5bc0"/><rect x="420" y="112" width="210" height="9" fill="#8f7fd6"/><rect x="470" y="96" width="70" height="16" fill="#8f7fd6"/>
+    <rect x="650" y="150" width="7" height="202" fill="#6c5bc0"/><rect x="700" y="150" width="7" height="202" fill="#6c5bc0"/><rect x="610" y="143" width="190" height="8" fill="#8f7fd6"/></g>
+    <rect x="560" y="337" width="30" height="14" rx="1" fill="#e7a86b" opacity=".9"/><rect x="591" y="337" width="30" height="14" rx="1" fill="#6ad2b3" opacity=".9"/><rect x="622" y="337" width="30" height="14" rx="1" fill="#443094" opacity=".9"/><rect x="653" y="337" width="30" height="14" rx="1" fill="#d9d3f2" opacity=".9"/><rect x="591" y="322" width="30" height="14" rx="1" fill="#d9d3f2" opacity=".9"/><rect x="622" y="322" width="30" height="14" rx="1" fill="#7c6ad0" opacity=".9"/><rect x="653" y="322" width="30" height="14" rx="1" fill="#8f7fd6" opacity=".9"/>
+    <rect x="618" y="232" width="8" height="120" fill="#efeafe"/><rect x="772" y="232" width="8" height="120" fill="#efeafe"/>
+    <rect x="608" y="218" width="182" height="20" rx="3" fill="#443094"/><text x="699" y="232" text-anchor="middle" class="tr-rotulo" fill="#fff">GATE · PUERTO</text>
+    <rect x="740" y="300" width="28" height="52" fill="#d9d3f2"/><rect x="745" y="308" width="18" height="12" fill="#2c1f63"/>
+    <g class="tr-barrera"><rect x="626" y="322" width="112" height="7" rx="3" fill="#efeafe"/><g fill="#e86a6a"><rect x="640" y="322" width="12" height="7"/><rect x="664" y="322" width="12" height="7"/><rect x="688" y="322" width="12" height="7"/><rect x="712" y="322" width="12" height="7"/></g></g>
+    <circle cx="622" cy="326" r="7" fill="#d9d3f2"/>
+  </g>
+
+  <rect y="352" width="800" height="58" fill="#0f0a26"/><rect y="352" width="800" height="3" fill="#2c1f63"/><rect y="407" width="800" height="3" fill="#2c1f63"/>
+  <path class="tr-pista" d="M-60 382 H860" stroke="#c3b6f5" stroke-width="3" stroke-dasharray="28 24" opacity=".55"/>
+
+  <g class="tr-camion">
+    <g class="tr-rebote">
+      <path class="tr-luz" d="M376 330 L520 300 L520 372 Z" fill="url(#trFaro)"/>
+      <rect x="0" y="336" width="300" height="9" rx="2" fill="#0b0720"/>
+      <g class="tr-cables" stroke="#efeafe" stroke-width="1.4"><path d="M120 270 V142 M180 270 V142"/></g>
+      <g class="tr-cont">
+        <rect x="8" y="270" width="284" height="66" rx="2" fill="#5b45b8"/>
+        <g stroke="#000" stroke-opacity=".16"><path d="M51 273V333"/><path d="M62 273V333"/><path d="M73 273V333"/><path d="M84 273V333"/><path d="M95 273V333"/><path d="M106 273V333"/><path d="M117 273V333"/><path d="M128 273V333"/><path d="M139 273V333"/><path d="M150 273V333"/><path d="M161 273V333"/><path d="M172 273V333"/><path d="M183 273V333"/><path d="M194 273V333"/><path d="M205 273V333"/><path d="M216 273V333"/><path d="M227 273V333"/><path d="M238 273V333"/><path d="M249 273V333"/><path d="M260 273V333"/><path d="M271 273V333"/></g>
+        <rect x="270" y="276" width="20" height="54" rx="2" fill="#efeafe"/><g fill="#8f7fd6"><rect x="274" y="282" width="12" height="3"/><rect x="274" y="288" width="12" height="3"/><rect x="274" y="294" width="12" height="3"/></g>
+        <text x="156" y="309" text-anchor="middle" class="tr-marca">ATILSON</text>
+        <g class="tr-puerta"><rect x="8" y="270" width="16" height="66" fill="#6c56c9"/><path d="M12 276 V330 M20 276 V330" stroke="#c3b6f5" stroke-opacity=".6"/></g>
+        <g class="tr-puerta tr-puerta-2"><rect x="24" y="270" width="16" height="66" fill="#6c56c9"/><path d="M28 276 V330 M36 276 V330" stroke="#c3b6f5" stroke-opacity=".6"/></g>
+        <g class="tr-sello"><circle cx="24" cy="306" r="7" fill="#34d399"/><path d="M20.5 306 l2.5 2.5 l4.5 -5" stroke="#063" stroke-width="1.8" fill="none"/></g>
+      </g>
+      <path d="M300 300 H342 Q352 300 356 312 L372 318 Q378 320 378 328 V345 H300 Z" fill="#efeafe"/>
+      <path d="M318 306 H340 Q346 306 349 314 L351 320 H318 Z" fill="#2c1f63"/>
+      <rect x="300" y="296" width="6" height="49" fill="#d9d3f2"/><rect x="306" y="286" width="5" height="16" rx="1" fill="#8f7fd6"/>
+      <rect x="370" y="330" width="9" height="6" rx="1" fill="#fde68a"/><rect x="296" y="340" width="86" height="7" rx="2" fill="#2c1f63"/>
+      <g class="tr-rueda" style="transform-origin:46px 352px"><circle cx="46" cy="352" r="12" fill="#0b0720"/><circle cx="46" cy="352" r="5" fill="#8f7fd6"/><path d="M46 342 V362 M36 352 H56" stroke="#8f7fd6" stroke-width="1.5"/></g>
+      <g class="tr-rueda" style="transform-origin:76px 352px"><circle cx="76" cy="352" r="12" fill="#0b0720"/><circle cx="76" cy="352" r="5" fill="#8f7fd6"/><path d="M76 342 V362 M66 352 H86" stroke="#8f7fd6" stroke-width="1.5"/></g>
+      <g class="tr-rueda" style="transform-origin:250px 352px"><circle cx="250" cy="352" r="12" fill="#0b0720"/><circle cx="250" cy="352" r="5" fill="#8f7fd6"/><path d="M250 342 V362 M240 352 H260" stroke="#8f7fd6" stroke-width="1.5"/></g>
+      <g class="tr-rueda" style="transform-origin:318px 352px"><circle cx="318" cy="352" r="12" fill="#0b0720"/><circle cx="318" cy="352" r="5" fill="#8f7fd6"/><path d="M318 342 V362 M308 352 H328" stroke="#8f7fd6" stroke-width="1.5"/></g>
+      <g class="tr-rueda" style="transform-origin:360px 352px"><circle cx="360" cy="352" r="12" fill="#0b0720"/><circle cx="360" cy="352" r="5" fill="#8f7fd6"/><path d="M360 342 V362 M350 352 H370" stroke="#8f7fd6" stroke-width="1.5"/></g>
+      <g class="tr-gps"><circle cx="340" cy="268" r="16" class="tr-gps-onda"/><path d="M340 282 C332 272 328 266 328 260 A12 12 0 0 1 352 260 C352 266 348 272 340 282 Z" fill="#34d399"/><circle cx="340" cy="260" r="4.5" fill="#0b3d2c"/></g>
+    </g>
+  </g>
+</svg>
+<div class="es-capa es-tarjeta" data-ver="programacion" style="left:5%;top:7%">
+  <span class="es-t-ico"><i class="bi bi-calendar2-check"></i></span>
+  <div><b>Retiro programado · 08:00</b><small>Camión y conductor asignados</small></div>
+</div>
+<div class="es-capa es-chip" data-ver="retiro" style="left:50%;top:7%;--retraso:3s"><i class="bi bi-box-seam"></i> Contenedor vacío cargado</div>
+<div class="es-capa es-tarjeta" data-ver="carga" style="right:5%;top:7%;--retraso:5.4s">
+  <span class="es-t-ico"><i class="bi bi-thermometer-snow"></i></span>
+  <div><b>Cargado y sellado</b><small>Reefer a −0,5 °C</small></div>
+</div>
+<div class="es-capa es-chip" data-ver="ruta" style="left:50%;top:7%"><span class="es-vivo"></span> En ruta a San Antonio · llega 13:40</div>
+<div class="es-capa es-chip es-chip-ok" data-ver="puerto" style="left:50%;top:7%;--retraso:2.6s"><i class="bi bi-check2-circle"></i> Ingresó a puerto a tiempo</div>
+
+                </div>
+                <p class="es-estado" id="esEstado" aria-live="polite"><span class="es-estado-n">Etapa 1 de 5</span><span class="es-estado-t">Asignamos camión, conductor y hora de retiro.</span></p>
+            </div>
+        </div>
+    </div>
+</section>
+}
+
+@if (slug == "documental")
+{
+<section class="es es--documental" aria-labelledby="esTitulo">
+    <div class="es-fondo" aria-hidden="true"></div>
+    <div class="contenedor">
+        <header class="es-cab">
+            <p class="es-lema"><i class="bi bi-play-circle" aria-hidden="true"></i> Así funciona</p>
+            <h2 class="titular" id="esTitulo">Cada documento, a tiempo.</h2>
+            <p class="es-bajada">Del primer dato del BL hasta los originales en destino. Pasa el mouse o toca cada etapa.</p>
+        </header>
+        <div class="es-grid">
+            <ol class="es-pasos" role="tablist" aria-label="Etapas del servicio">
+            <li><button type="button" class="es-paso" role="tab" data-paso="matriz" aria-selected="false" aria-controls="esEstado"><span class="es-num">1</span><span><b>Matriz</b>Reunimos los datos del embarque para el BL.</span><span class="es-barra" aria-hidden="true"></span></button></li>
+            <li><button type="button" class="es-paso" role="tab" data-paso="borrador" aria-selected="false" aria-controls="esEstado"><span class="es-num">2</span><span><b>Borrador</b>Te enviamos el borrador del BL para revisarlo.</span><span class="es-barra" aria-hidden="true"></span></button></li>
+            <li><button type="button" class="es-paso" role="tab" data-paso="aprobacion" aria-selected="false" aria-controls="esEstado"><span class="es-num">3</span><span><b>Aprobación</b>Lo apruebas con un clic en el portal.</span><span class="es-barra" aria-hidden="true"></span></button></li>
+            <li><button type="button" class="es-paso" role="tab" data-paso="emision" aria-selected="false" aria-controls="esEstado"><span class="es-num">4</span><span><b>Emisión</b>La naviera emite el BL definitivo.</span><span class="es-barra" aria-hidden="true"></span></button></li>
+            <li><button type="button" class="es-paso" role="tab" data-paso="certificados" aria-selected="false" aria-controls="esEstado"><span class="es-num">5</span><span><b>Certificados</b>Fitosanitario y de origen, listos a tiempo.</span><span class="es-barra" aria-hidden="true"></span></button></li>
+            <li><button type="button" class="es-paso" role="tab" data-paso="envio" aria-selected="false" aria-controls="esEstado"><span class="es-num">6</span><span><b>Envío</b>Originales por courier o liberación electrónica.</span><span class="es-barra" aria-hidden="true"></span></button></li>
+            </ol>
+            <div class="es-marco">
+                <div class="es-escena" data-paso="matriz" aria-hidden="true">
+
+<div class="dc-mesa"></div>
+<div class="dc-cert dc-cert-1"><span class="dc-cert-ico"><i class="bi bi-flower1"></i></span><b>Certificado fitosanitario</b><i class="dc-linea" style="--w:80%"></i><i class="dc-linea" style="--w:62%"></i><i class="dc-linea" style="--w:72%"></i><span class="dc-cinta"></span></div>
+<div class="dc-cert dc-cert-2"><span class="dc-cert-ico"><i class="bi bi-award"></i></span><b>Certificado de origen</b><i class="dc-linea" style="--w:74%"></i><i class="dc-linea" style="--w:58%"></i><i class="dc-linea" style="--w:68%"></i><span class="dc-cinta"></span></div>
+<div class="dc-bl">
+  <div class="dc-bl-cab">
+    <span class="dc-bl-ico"><i class="bi bi-file-earmark-text"></i></span>
+    <div><b class="dc-bl-titulo"><span class="t-matriz">Matriz del BL</span><span class="t-borrador">Borrador de BL</span><span class="t-original">BL original</span></b><small>Booking 7731 · San Antonio → Rotterdam</small></div>
+  </div>
+  <dl class="dc-campos">
+    <div style="--i:0"><dt>Embarcador</dt><dd><i style="--w:78%"></i></dd></div>
+    <div style="--i:1"><dt>Consignatario</dt><dd><i style="--w:64%"></i></dd></div>
+    <div style="--i:2"><dt>Notify</dt><dd><i style="--w:52%"></i></dd></div>
+    <div style="--i:3"><dt>Nave / viaje</dt><dd><i style="--w:44%"></i></dd></div>
+    <div style="--i:4"><dt>Mercancía</dt><dd><i style="--w:86%"></i></dd></div>
+    <div style="--i:5"><dt>Contenedor</dt><dd><i style="--w:58%"></i></dd></div>
+  </dl>
+  <span class="dc-marca dc-marca-borrador">BORRADOR</span>
+  <span class="dc-aprobar">Aprobar BL</span>
+  <span class="dc-sello">APROBADO</span>
+  <span class="dc-sello-original"><i class="bi bi-patch-check-fill"></i> ORIGINAL</span>
+</div>
+<span class="dc-cursor"><svg viewBox="0 0 24 24"><path d="M4 2 L4 19 L8.5 15 L11.5 22 L14.5 20.7 L11.6 14 L18 14 Z" fill="#fff" stroke="#160e2f" stroke-width="1.5" stroke-linejoin="round"/></svg></span>
+<div class="dc-sobre"><div class="dc-sobre-cuerpo"></div><div class="dc-sobre-tapa"></div><i class="bi bi-airplane"></i></div>
+<svg class="dc-estela" viewBox="0 0 800 450" preserveAspectRatio="none"><path d="M560 300 C640 260 680 160 760 70" /></svg>
+<div class="es-capa es-chip" data-ver="matriz" style="left:50%;top:5%"><i class="bi bi-pencil-square"></i> Completando la matriz</div>
+<div class="es-capa es-chip" data-ver="borrador" style="left:50%;top:5%"><i class="bi bi-envelope-paper"></i> Borrador enviado al portal</div>
+<div class="es-capa es-chip es-chip-ok" data-ver="aprobacion" style="left:50%;top:5%;--retraso:1.8s"><i class="bi bi-hand-thumbs-up"></i> Aprobado por el cliente</div>
+<div class="es-capa es-chip" data-ver="emision" style="left:50%;top:5%"><i class="bi bi-patch-check"></i> BL emitido por la naviera</div>
+<div class="es-capa es-chip" data-ver="certificados" style="left:50%;top:5%"><i class="bi bi-files"></i> Certificados listos</div>
+<div class="es-capa es-chip es-chip-ok" data-ver="envio" style="left:50%;top:5%"><i class="bi bi-send-check"></i> Originales en camino</div>
+
+                </div>
+                <p class="es-estado" id="esEstado" aria-live="polite"><span class="es-estado-n">Etapa 1 de 6</span><span class="es-estado-t">Reunimos los datos del embarque para el BL.</span></p>
+            </div>
+        </div>
+    </div>
+</section>
+}
+
+@if (slug == "agencia-de-aduanas")
+{
+<section class="es es--agencia-de-aduanas" aria-labelledby="esTitulo">
+    <div class="es-fondo" aria-hidden="true"></div>
+    <div class="contenedor">
+        <header class="es-cab">
+            <p class="es-lema"><i class="bi bi-play-circle" aria-hidden="true"></i> Así funciona</p>
+            <h2 class="titular" id="esTitulo">Tu carga, lista para salir.</h2>
+            <p class="es-bajada">Así trabajamos la aduana de tu exportación. Pasa el mouse o toca cada etapa.</p>
+        </header>
+        <div class="es-grid">
+            <ol class="es-pasos" role="tablist" aria-label="Etapas del servicio">
+            <li><button type="button" class="es-paso" role="tab" data-paso="instrucciones" aria-selected="false" aria-controls="esEstado"><span class="es-num">1</span><span><b>Instrucciones</b>Recibimos los datos y documentos de tu embarque.</span><span class="es-barra" aria-hidden="true"></span></button></li>
+            <li><button type="button" class="es-paso" role="tab" data-paso="dus" aria-selected="false" aria-controls="esEstado"><span class="es-num">2</span><span><b>DUS</b>Tramitamos el Documento Único de Salida.</span><span class="es-barra" aria-hidden="true"></span></button></li>
+            <li><button type="button" class="es-paso" role="tab" data-paso="sag" aria-selected="false" aria-controls="esEstado"><span class="es-num">3</span><span><b>Inspección SAG</b>Coordinamos la inspección cuando corresponde.</span><span class="es-barra" aria-hidden="true"></span></button></li>
+            <li><button type="button" class="es-paso" role="tab" data-paso="aceptacion" aria-selected="false" aria-controls="esEstado"><span class="es-num">4</span><span><b>Aceptación</b>Aduana acepta la salida de tu carga.</span><span class="es-barra" aria-hidden="true"></span></button></li>
+            <li><button type="button" class="es-paso" role="tab" data-paso="seguro" aria-selected="false" aria-controls="esEstado"><span class="es-num">5</span><span><b>Seguro de carga</b>Tu mercancía viaja protegida.</span><span class="es-barra" aria-hidden="true"></span></button></li>
+            </ol>
+            <div class="es-marco">
+                <div class="es-escena" data-paso="instrucciones" aria-hidden="true">
+
+<svg class="es-svg" viewBox="0 0 800 450" preserveAspectRatio="xMidYMid slice">
+  <defs>
+    <linearGradient id="adFondo" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#150d33"/><stop offset="1" stop-color="#2a1d63"/></linearGradient>
+    <linearGradient id="adHaz" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#34d399" stop-opacity="0"/><stop offset=".5" stop-color="#34d399" stop-opacity=".55"/><stop offset="1" stop-color="#34d399" stop-opacity="0"/></linearGradient>
+    <radialGradient id="adEscudo" cx=".5" cy=".7" r=".7"><stop offset="0" stop-color="#c3b6f5" stop-opacity=".22"/><stop offset="1" stop-color="#c3b6f5" stop-opacity="0"/></radialGradient>
+    <clipPath id="adClipCont"><rect x="380" y="232" width="330" height="96" rx="3"/></clipPath>
+  </defs>
+  <rect width="800" height="450" fill="url(#adFondo)"/>
+  <g stroke="#c3b6f5" stroke-opacity=".06"><path d="M0 0 V450"/><path d="M40 0 V450"/><path d="M80 0 V450"/><path d="M120 0 V450"/><path d="M160 0 V450"/><path d="M200 0 V450"/><path d="M240 0 V450"/><path d="M280 0 V450"/><path d="M320 0 V450"/><path d="M360 0 V450"/><path d="M400 0 V450"/><path d="M440 0 V450"/><path d="M480 0 V450"/><path d="M520 0 V450"/><path d="M560 0 V450"/><path d="M600 0 V450"/><path d="M640 0 V450"/><path d="M680 0 V450"/><path d="M720 0 V450"/><path d="M760 0 V450"/><path d="M0 0 H800"/><path d="M0 40 H800"/><path d="M0 80 H800"/><path d="M0 120 H800"/><path d="M0 160 H800"/><path d="M0 200 H800"/><path d="M0 240 H800"/><path d="M0 280 H800"/><path d="M0 320 H800"/><path d="M0 360 H800"/><path d="M0 400 H800"/><path d="M0 440 H800"/></g>
+  <g opacity=".55"><rect x="470" y="70" width="8" height="266" fill="#4b3a9c"/><rect x="540" y="70" width="8" height="266" fill="#4b3a9c"/><rect x="420" y="62" width="250" height="9" fill="#5b45b8"/><rect x="474" y="46" width="74" height="16" fill="#5b45b8"/>
+    <rect x="690" y="110" width="7" height="226" fill="#4b3a9c"/><rect x="745" y="110" width="7" height="226" fill="#4b3a9c"/><rect x="650" y="103" width="160" height="8" fill="#5b45b8"/></g>
+  <rect x="340" y="336" width="440" height="16" rx="3" fill="#3a2b85"/><rect x="300" y="352" width="500" height="98" fill="#1d1447"/>
+  <g class="ad-escudo"><path d="M545 96 C615 96 690 140 712 210 L712 300 Q712 336 676 336 H414 Q378 336 378 300 L378 210 C400 140 475 96 545 96 Z" fill="url(#adEscudo)" stroke="#c3b6f5" stroke-width="2" stroke-dasharray="6 6"/></g>
+  <g class="ad-cont">
+    <rect x="380" y="232" width="330" height="96" rx="3" fill="#443094"/>
+    <g stroke="#000" stroke-opacity=".18"><path d="M402 235V325"/><path d="M414 235V325"/><path d="M426 235V325"/><path d="M438 235V325"/><path d="M450 235V325"/><path d="M462 235V325"/><path d="M474 235V325"/><path d="M486 235V325"/><path d="M498 235V325"/><path d="M510 235V325"/><path d="M522 235V325"/><path d="M534 235V325"/><path d="M546 235V325"/><path d="M558 235V325"/><path d="M570 235V325"/><path d="M582 235V325"/><path d="M594 235V325"/><path d="M606 235V325"/><path d="M618 235V325"/><path d="M630 235V325"/><path d="M642 235V325"/><path d="M654 235V325"/><path d="M666 235V325"/><path d="M678 235V325"/><path d="M690 235V325"/></g>
+    <rect x="380" y="232" width="330" height="6" fill="#5b45b8"/>
+    <text x="545" y="290" text-anchor="middle" class="tr-marca">ATILSON</text>
+    <g clip-path="url(#adClipCont)"><rect class="ad-haz" x="330" y="225" width="70" height="110" fill="url(#adHaz)"/></g>
+  </g>
+  <g class="ad-arco"><rect x="352" y="196" width="12" height="140" rx="2" fill="#8f7fd6"/><rect x="726" y="196" width="12" height="140" rx="2" fill="#8f7fd6"/><rect x="346" y="184" width="398" height="18" rx="3" fill="#c3b6f5"/>
+    <text x="545" y="197" text-anchor="middle" class="tr-rotulo" fill="#2c1f63">CONTROL ADUANERO</text><circle class="ad-semaforo" cx="358" cy="214" r="4" fill="#fbbf24"/><circle class="ad-semaforo-ok" cx="358" cy="214" r="4" fill="#34d399"/></g>
+  <g class="ad-ok"><circle cx="706" cy="232" r="16" fill="#34d399"/><path d="M698 232 l6 6 l10 -11" stroke="#063" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/></g>
+</svg>
+<div class="ad-dus">
+  <div class="ad-dus-cab"><span class="dc-bl-ico"><i class="bi bi-file-earmark-ruled"></i></span><div><b>DUS</b><small>Exportación · Aduana de San Antonio</small></div><span class="ad-estado"><span class="e-borrador">Borrador</span><span class="e-tramite">En trámite</span><span class="e-aceptado">Aceptado</span></span></div>
+  <dl class="dc-campos ad-campos">
+    <div style="--i:0"><dt>Exportador</dt><dd><i style="--w:72%"></i></dd></div>
+    <div style="--i:1"><dt>Mercancía</dt><dd><i style="--w:84%"></i></dd></div>
+    <div style="--i:2"><dt>Código arancelario</dt><dd><i style="--w:46%"></i></dd></div>
+    <div style="--i:3"><dt>Valor FOB</dt><dd><i style="--w:38%"></i></dd></div>
+    <div style="--i:4"><dt>Destino</dt><dd><i style="--w:54%"></i></dd></div>
+  </dl>
+  <span class="dc-sello ad-sello">ACEPTADO</span>
+</div>
+<ul class="ad-lista es-capa" data-ver="instrucciones">
+  <li style="--i:0"><i class="bi bi-check2"></i> Factura comercial</li>
+  <li style="--i:1"><i class="bi bi-check2"></i> Lista de empaque</li>
+  <li style="--i:2"><i class="bi bi-check2"></i> Instrucciones de embarque</li>
+</ul>
+<div class="ad-lupa"><i class="bi bi-search"></i><span><i class="bi bi-flower1"></i></span></div>
+<div class="es-capa es-chip" data-ver="instrucciones" style="left:66%;top:6%"><i class="bi bi-inbox"></i> Documentos recibidos</div>
+<div class="es-capa es-chip" data-ver="dus" style="left:66%;top:6%"><i class="bi bi-send"></i> DUS enviado a Aduana</div>
+<div class="es-capa es-chip" data-ver="sag" style="left:66%;top:6%;--retraso:2.2s"><i class="bi bi-flower1"></i> Inspección SAG sin observaciones</div>
+<div class="es-capa es-chip es-chip-ok" data-ver="aceptacion" style="left:66%;top:6%;--retraso:1.1s"><i class="bi bi-check2-circle"></i> Salida autorizada</div>
+<div class="es-capa es-chip" data-ver="seguro" style="left:66%;top:6%"><i class="bi bi-shield-check"></i> Seguro de carga activo</div>
+
+                </div>
+                <p class="es-estado" id="esEstado" aria-live="polite"><span class="es-estado-n">Etapa 1 de 5</span><span class="es-estado-t">Recibimos los datos y documentos de tu embarque.</span></p>
+            </div>
+        </div>
+    </div>
+</section>
+}

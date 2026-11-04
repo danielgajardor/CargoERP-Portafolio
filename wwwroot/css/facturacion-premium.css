@@ -1,0 +1,90 @@
+/* =========================================================================
+   FACTURACIÓN Y RECAUDACIÓN (AR) — CAPA PREMIUM
+   Mismo lenguaje visual que el resto de la familia premium de Finanzas:
+   gradiente morado/violeta, Plus Jakarta Sans, sombras "glow", radios
+   grandes. Solo propiedades visuales — ningún handler (MarcarPagoTransaccion,
+   abrirModalCobro/Disputa/Archivo) ni la lógica de columnas del Kanban
+   (ABIERTAS/PARCIALES/ATRASADAS/PAGADAS/DISPUTADAS) fue tocada. Los colores
+   semánticos por estado (--color-venta/-parcial/-costo/-profit/-warn, los
+   gradientes de cada tarjeta KPI y los .col-badge) se conservan intactos:
+   son información, no decoración.
+
+   Por qué va en un archivo aparte y todo acotado a .fac-premium: esta vista
+   comparte nombres de clase (.workspace-nav, .ws-btn, .fin-table-wrapper...)
+   con Main Board y Órdenes de Compra — acotando todo a .fac-premium esas
+   vistas no cambian.
+   ========================================================================= */
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600&display=swap');
+
+/* ---------- 0. Tokens ---------- */
+.fac-premium {
+    --fac-brand: #6d2d9e;
+    --fac-brand-2: #8b5cf6;
+    --fac-ink: #140c26;
+    --fac-muted: #6b6880;
+    --fac-line: #ece8f3;
+    --fac-soft: #f8f7fc;
+    --fac-tint: #f4eefb;
+    --fac-shadow: 0 1px 2px rgba(20,12,38,.04), 0 18px 40px -26px rgba(44,27,77,.28);
+
+    /* Alias local de esta vista (--atilson-dark, --txt-main/-muted,
+       --bg-main/-soft, --border-soft), realineado al sistema premium. Los
+       --color-* semánticos del Kanban NO se tocan. */
+    --atilson-dark: #140c26;
+    --txt-main: #140c26;
+    --txt-muted: #6b6880;
+    --border-soft: #ece8f3;
+    --bg-soft: #f8f7fc;
+
+    font-family: 'Plus Jakarta Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+    padding-bottom: 48px;
+}
+.fac-premium .monto-tecnico, .fac-premium .font-monospace {
+    font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Consolas, monospace !important;
+}
+
+body:has(.fac-premium) {
+    background:
+        radial-gradient(1100px 460px at 100% -10%, rgba(139,92,246,.06), transparent 60%),
+        #f5f4f9;
+}
+
+/* ---------- 1. Workspace nav ---------- */
+.fac-premium .workspace-nav {
+    border-color: var(--fac-line) !important; box-shadow: var(--fac-shadow) !important;
+    border-radius: 14px !important;
+}
+.fac-premium .ws-btn { border-radius: 10px !important; }
+.fac-premium .ws-btn:hover { background: var(--fac-tint) !important; color: var(--fac-brand) !important; }
+.fac-premium .ws-btn.active {
+    background: linear-gradient(135deg, #2c1b4d, #5b2a8a) !important; color: #fff !important;
+}
+
+/* ---------- 2. Tarjetas KPI del Kanban ----------
+   Los gradientes de color por tarjeta (azul/violeta/rojo/verde/naranja) son
+   el código de color del tablero — se conservan; solo se homologa el radio
+   y se suaviza la sombra al lenguaje premium. */
+.fac-premium .kpi-card { border-radius: 16px !important; box-shadow: 0 14px 32px -18px rgba(20,12,38,.35) !important; }
+.fac-premium .kpi-card:hover { box-shadow: 0 20px 40px -18px rgba(20,12,38,.45) !important; }
+
+/* ---------- 3. Pestañas del Kanban ---------- */
+.fac-premium .kanban-btn.active { border-radius: 10px 10px 0 0 !important; }
+.fac-premium .kanban-btn:hover { border-radius: 10px 10px 0 0; }
+
+/* ---------- 4. Tabla principal ---------- */
+.fac-premium .fin-table-wrapper { border-color: var(--fac-line) !important; border-radius: 18px !important; box-shadow: var(--fac-shadow) !important; }
+.fac-premium .table-exec th { border-bottom-color: var(--fac-ink) !important; letter-spacing: .6px !important; }
+.fac-premium .table-exec tbody tr.row-main:hover td { background-color: var(--fac-tint) !important; }
+.fac-premium .btn-toggle-row { border-radius: 7px !important; }
+.fac-premium .btn-toggle-row:hover { color: var(--fac-brand) !important; }
+
+/* ---------- 5. Badges de estado ---------- */
+.fac-premium .status-badge { border-radius: 999px !important; }
+
+/* ---------- 6. Botones y controles ---------- */
+.fac-premium .btn { border-radius: 9px !important; transition: all .18s ease !important; }
+.fac-premium .btn:hover:not(:disabled) { transform: translateY(-1px); }
+.fac-premium .form-control:focus, .fac-premium .form-select:focus {
+    border-color: var(--fac-brand-2) !important; box-shadow: 0 0 0 4px rgba(139,92,246,.12) !important;
+}
+.fac-premium .btn-action-dot:hover { color: var(--fac-brand) !important; }

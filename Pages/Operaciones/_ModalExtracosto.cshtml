@@ -1,0 +1,209 @@
+@model AtilsonCargoSpa.Helpers.ExtracostoFormulario.ModalVista
+@using AtilsonCargoSpa.Helpers
+@using AtilsonCargoSpa.Models
+@*
+    Ventana "Reportar extracosto" (oct-2026), compartida por el tablero (sufijo "") y el
+    Detalle (sufijo "Det"). Mantiene los id que ya usan los scripts existentes
+    (extracostoTipoSelect…, extracostoOpId…, extracostoJustificacionTxt…). La lógica nueva
+    (servicio, concepto nuevo, vista previa) está en wwwroot/js/extracosto-modal.js.
+*@
+@{
+    string s = Model.Sufijo;
+    var maritimo = ViewData["TarifasMaritimo"] as IEnumerable<TarifasMaestra> ?? Enumerable.Empty<TarifasMaestra>();
+    var terrestre = ViewData["TarifasTerrestre"] as IEnumerable<TarifasMaestra> ?? Enumerable.Empty<TarifasMaestra>();
+    var documental = ViewData["TarifasDocumental"] as IEnumerable<TarifasMaestra> ?? Enumerable.Empty<TarifasMaestra>();
+    var proveedores = ViewData["ExtracostoProveedores"] as List<(int Id, string Nombre)> ?? new List<(int Id, string Nombre)>();
+    var agregados = ViewData["ExtracostoAgregados"] as List<(string Concepto, string Servicio)> ?? new List<(string Concepto, string Servicio)>();
+    IEnumerable<string> Agregados(string servicio) => agregados.Where(a => a.Servicio == servicio).Select(a => a.Concepto);
+}
+<div class="modal fade ext-modal" id="modalAddCostoGlobal@(s)" aria-hidden="true" data-bs-backdrop="static" data-extracosto-modal="@s">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content border-0">
+            <div class="modal-header ext-modal__cab">
+                <div>
+                    <span class="ext-modal__eyebrow">Finanzas</span>
+                    <h5 class="modal-title"><i class="bi bi-receipt-cutoff"></i> Reportar extracosto</h5>
+                    <p class="mb-0">Booking <strong id="extracostoBookingTitle@(s)"></strong></p>
+                </div>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <form method="post" action="@Model.Accion" enctype="multipart/form-data" id="@(Model.FormId ?? "form-extracosto" + s)" novalidate>
+                @Html.AntiForgeryToken()
+                <input type="hidden" class="anti-forgery-token-input" value="" />
+                <input type="hidden" name="id" id="extracostoOpId@(s)" value="" />
+                <input type="hidden" name="NuevoCosto.Motivo" id="extracostoMotivoFinal@(s)" />
+                <input type="hidden" name="NuevoCosto.GrupoOperativo" id="extracostoGrupoOperativoFinal@(s)" />
+
+                <div class="modal-body ext-modal__cuerpo">
+                    <div class="ext-paso">
+                        <div class="ext-paso__num">1</div>
+                        <div class="ext-paso__cont">
+                            <label class="ext-label">Servicio</label>
+                            <div class="ext-servicios" role="radiogroup" aria-label="Servicio del extracosto">
+                                <button type="button" class="ext-servicio" data-servicio="Marítimo" role="radio" aria-checked="false"><i class="bi bi-water"></i> Marítimo</button>
+                                <button type="button" class="ext-servicio" data-servicio="Transporte" role="radio" aria-checked="false"><i class="bi bi-truck"></i> Transporte</button>
+                                <button type="button" class="ext-servicio" data-servicio="Documental" role="radio" aria-checked="false"><i class="bi bi-file-earmark-text"></i> Documental</button>
+                                <button type="button" class="ext-servicio" data-servicio="Otros" role="radio" aria-checked="false"><i class="bi bi-three-dots"></i> Otros</button>
+                            </div>
+                            <small class="ext-ayuda">Define en qué bloque de Control Financiero queda el concepto.</small>
+                        </div>
+                    </div>
+
+                    <div class="ext-paso">
+                        <div class="ext-paso__num">2</div>
+                        <div class="ext-paso__cont">
+                            <div class="row g-2">
+                                <div class="col-md-7">
+                                    <label class="ext-label" for="extracostoTipoSelect@(s)">Concepto</label>
+                                    <select name="NuevoCosto.TipoCosto" id="extracostoTipoSelect@(s)" class="form-select erp-input fw-bold" data-buscador="si"
+                                            onchange="@(Model.AreaDinamica ? "configurarCamposDinamicosExtracosto();" : null)">
+                                        <option value="">Elige el concepto…</option>
+                                        <option value="@ExtracostoFormulario.ValorConceptoNuevo" data-nuevo="1">➕ Agregar concepto nuevo…</option>
+                                        <optgroup label="⚓ Marítimo (naviera)" id="optgroupCostosMaritimos@(s)" data-grupo="Marítimo">
+                                            <option value="Late Arrival (LAR)" data-grupo="Marítimo">Late Arrival (LAR)</option>
+                                            <option value="Extra Late Arrival (ELAR)" data-grupo="Marítimo">Extra Late Arrival (ELAR)</option>
+                                            <option value="Corrector B/L" data-grupo="Marítimo">Corrector B/L</option>
+                                            <option value="Plug (Reefer)" data-grupo="Marítimo">Plug (Reefer)</option>
+                                            <option value="Demurrage" data-grupo="Marítimo">Demurrage</option>
+                                            <option value="Matriz fuera de plazo" data-grupo="Marítimo">Matriz fuera de plazo</option>
+                                            <option value="Demora / Penalidad Transbordo" data-grupo="Marítimo">Demora / Penalidad Transbordo</option>
+                                            @foreach (var item in maritimo)
+                                            {
+                                                <option value="@item.Concepto" data-grupo="Marítimo" data-naviera="@(item.IdNaviera?.ToString() ?? "")" data-valor="@item.ValorNeto.ToString(System.Globalization.CultureInfo.InvariantCulture)" data-moneda="@item.Moneda">@item.Concepto</option>
+                                            }
+                                            @foreach (var c in Agregados("Marítimo"))
+                                            {
+                                                <option value="@c" data-grupo="Marítimo" data-agregado="1">@c · agregado</option>
+                                            }
+                                        </optgroup>
+                                        <optgroup label="🚚 Transporte" data-grupo="Transporte">
+                                            <option value="Falso Flete Planta" data-grupo="Transporte">Falso Flete Planta</option>
+                                            <option value="Falso Flete en Ruta" data-grupo="Transporte">Falso Flete en Ruta</option>
+                                            <option value="Falso Flete Depósito" data-grupo="Transporte">Falso Flete Depósito</option>
+                                            <option value="Porteo" data-grupo="Transporte">Porteo</option>
+                                            <option value="Interplanta" data-grupo="Transporte">Interplanta</option>
+                                            <option value="Sobreestadía Planta" data-grupo="Transporte">Sobreestadía Planta</option>
+                                            <option value="Sobreestadía Puerto" data-grupo="Transporte">Sobreestadía Puerto</option>
+                                            <option value="Almacenamiento por aforo u otro motivo" data-grupo="Transporte">Almacenamiento por aforo u otro motivo</option>
+                                            @foreach (var item in terrestre)
+                                            {
+                                                <option value="@item.Concepto" data-grupo="Transporte" data-valor="@item.ValorNeto.ToString(System.Globalization.CultureInfo.InvariantCulture)" data-moneda="@item.Moneda">@item.Concepto</option>
+                                            }
+                                            @foreach (var c in Agregados("Transporte"))
+                                            {
+                                                <option value="@c" data-grupo="Transporte" data-agregado="1">@c · agregado</option>
+                                            }
+                                        </optgroup>
+                                        <optgroup label="🏢 Documental (aduana / eventos)" data-grupo="Documental">
+                                            <option value="Scanner" data-grupo="Documental">Escáner de Aduana</option>
+                                            <option value="Costo de Terminal Aforo fisico o retiro contenedor" data-grupo="Documental">Aforo Físico / Retiro Contenedor</option>
+                                            <option value="Gestion Providencia Aduanera" data-grupo="Documental">Gestión Providencia Aduanera</option>
+                                            <option value="Gestion retiro sello naviera" data-grupo="Documental">Gestión Retiro Sello Naviera</option>
+                                            @foreach (var item in documental)
+                                            {
+                                                <option value="@item.Concepto" data-grupo="Documental" data-valor="@item.ValorNeto.ToString(System.Globalization.CultureInfo.InvariantCulture)" data-moneda="@item.Moneda">@item.Concepto</option>
+                                            }
+                                            @foreach (var c in Agregados("Documental"))
+                                            {
+                                                <option value="@c" data-grupo="Documental" data-agregado="1">@c · agregado</option>
+                                            }
+                                        </optgroup>
+                                        @if (Agregados("Otros").Any())
+                                        {
+                                            <optgroup label="📦 Otros" data-grupo="Otros">
+                                                @foreach (var c in Agregados("Otros"))
+                                                {
+                                                    <option value="@c" data-grupo="Otros" data-agregado="1">@c · agregado</option>
+                                                }
+                                            </optgroup>
+                                        }
+                                    </select>
+                                </div>
+                                <div class="col-md-5">
+                                    <label class="ext-label" for="extracostoProveedor@(s)">Proveedor <span class="ext-opcional">(opcional)</span></label>
+                                    <select name="NuevoCosto.IdProveedor" id="extracostoProveedor@(s)" class="form-select erp-input" data-buscador="si">
+                                        <option value="">Por asignar</option>
+                                        @foreach (var p in proveedores)
+                                        {
+                                            <option value="@p.Id">@p.Nombre</option>
+                                        }
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="ext-nuevo d-none" id="extracostoNuevoWrap@(s)">
+                                <label class="ext-label" for="extracostoConceptoNuevo@(s)">Nombre del concepto nuevo</label>
+                                <input type="text" name="NuevoCosto.ConceptoNuevo" id="extracostoConceptoNuevo@(s)" class="form-control erp-input fw-bold" maxlength="120" placeholder="Ej: Cambio de sello, Movimiento extra en terminal…" autocomplete="off" />
+                                <small class="ext-ayuda">Queda disponible en la lista para las próximas veces, dentro del servicio elegido.</small>
+                            </div>
+                            <div id="extracostoDynamicArea@(s)" class="ext-dinamica d-none"></div>
+                        </div>
+                    </div>
+
+                    <div class="ext-paso">
+                        <div class="ext-paso__num">3</div>
+                        <div class="ext-paso__cont">
+                            <div class="row g-2">
+                                <div class="col-md-4">
+                                    <label class="ext-label" for="extracostoValorInput@(s)">Valor neto <span class="ext-opcional">(sin IVA)</span></label>
+                                    <div class="input-group">
+                                        <input type="number" step="0.01" min="0" name="NuevoCosto.Monto" id="extracostoValorInput@(s)" class="form-control erp-input fw-bold" placeholder="0" inputmode="decimal" />
+                                        <select name="NuevoCosto.Moneda" id="extracostoMonedaSelect@(s)" class="form-select erp-input fw-bold ext-moneda" data-buscador="no" aria-label="Moneda">
+                                            <option value="CLP">CLP</option>
+                                            <option value="USD">USD</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="ext-label" for="extracostoPaga@(s)">¿Quién paga?</label>
+                                    <select name="NuevoCosto.ResponsableGestion" id="extracostoPaga@(s)" class="form-select erp-input fw-bold" data-buscador="no">
+                                        <option value="">Elige…</option>
+                                        <option value="Atilson">Atilson</option>
+                                        <option value="Cliente">Cliente</option>
+                                        <option value="Proveedor">Proveedor</option>
+                                        <option value="Agencia">Agencia</option>
+                                    </select>
+                                    <small class="ext-ayuda">Quién desembolsa el pago («Pagado por»).</small>
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="ext-label" for="extracostoResponsable@(s)">Responsable</label>
+                                    <select name="NuevoCosto.Responsable" id="extracostoResponsable@(s)" class="form-select erp-input fw-bold" data-buscador="no">
+                                        <option value="">Elige…</option>
+                                        <option value="Cliente">Cliente · se le cobra</option>
+                                        <option value="Atilson">Atilson · lo absorbe</option>
+                                        <option value="Proveedor">Proveedor · se le descuenta</option>
+                                        <option value="Agencia">Agencia · se le descuenta</option>
+                                    </select>
+                                    <small class="ext-ayuda">Quién asume el costo al final.</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="ext-paso">
+                        <div class="ext-paso__num">4</div>
+                        <div class="ext-paso__cont">
+                            <div class="row g-2">
+                                <div class="col-md-7">
+                                    <label class="ext-label" for="extracostoJustificacionTxt@(s)">Justificación</label>
+                                    <textarea id="extracostoJustificacionTxt@(s)" class="form-control erp-input" rows="2" maxlength="450" placeholder="Qué pasó y por qué se cobra o se absorbe…"></textarea>
+                                </div>
+                                <div class="col-md-5">
+                                    <label class="ext-label" for="extracostoEvidencia@(s)">Evidencia</label>
+                                    <input type="file" name="NuevoCosto.Evidencia" id="extracostoEvidencia@(s)" class="form-control erp-input" accept=".pdf,.jpg,.jpeg,.png,.webp,.xlsx,.xls,.docx,.msg,.eml" />
+                                    <small class="ext-ayuda">PDF, imagen, Excel, Word o correo · hasta 15 MB.</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="ext-previa" id="extracostoPrevia@(s)" aria-live="polite"></div>
+                    <div class="ext-error d-none" id="extracostoError@(s)" role="alert"></div>
+                </div>
+                <div class="modal-footer ext-modal__pie">
+                    <button type="button" class="btn btn-light border btn-sm fw-bold" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="button" class="btn btn-danger btn-sm fw-bold px-4" onclick="@Model.OnclickGuardar"><i class="bi bi-send-fill me-1"></i> Enviar a Finanzas</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>

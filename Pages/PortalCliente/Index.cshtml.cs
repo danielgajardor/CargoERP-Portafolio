@@ -34,8 +34,8 @@ namespace AtilsonCargoSpa.Pages.PortalCliente
         public bool OperacionCerradaPorRetiro(Operacione op)
         {
             if (op.Unidadestecnicas != null && op.Unidadestecnicas.Any())
-                return op.FechaRetiroDestino.HasValue && op.Unidadestecnicas.All(u => u.FechaRetiroDestino.HasValue);
-            return op.FechaRetiroDestino.HasValue;
+                return op.FechaDevolucionVacio.HasValue && op.Unidadestecnicas.All(u => u.FechaDevolucionVacio.HasValue);
+            return op.FechaDevolucionVacio.HasValue;
         }
 
         public bool PendienteGestionRetiro(Operacione op)
@@ -114,7 +114,12 @@ namespace AtilsonCargoSpa.Pages.PortalCliente
             }
 
             // Construimos la consulta trayendo solo lo que le pertenece a ESTE cliente en sesión
+            // AsNoTracking: esta página solo lee y muestra datos, nunca los modifica, así que no
+            // hace falta que EF Core arme el change-tracker para estas entidades (más memoria y
+            // CPU por nada en un listado que puede tener bastantes operaciones + sus relaciones).
             var query = _context.Operaciones
+.AsNoTracking()
+.AsSplitQuery()
 .Include(o => o.IdNavieraNavigation)
 .Include(o => o.IdPuertoOrigenNavigation)
 .Include(o => o.IdPuertoDestinoNavigation)
@@ -131,6 +136,7 @@ namespace AtilsonCargoSpa.Pages.PortalCliente
             {
                 query = query.Where(o =>
                     (o.NumeroBooking != null && o.NumeroBooking.Contains(SearchString)) ||
+                    (o.NumeroContenedor != null && o.NumeroContenedor.Contains(SearchString)) ||
                     (o.NumeroSello != null && o.NumeroSello.Contains(SearchString))
                 );
             }

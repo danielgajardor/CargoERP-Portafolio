@@ -1,0 +1,213 @@
+@page
+@model AtilsonCargoSpa.Pages.App.Equipo.IndexModel
+@using AtilsonCargoSpa.Helpers
+@using AtilsonCargoSpa.Models
+@using AtilsonCargoSpa.Services
+@{
+    ViewData["Title"] = "Equipo Atilson";
+}
+<link rel="stylesheet" href="~/css/maestros.css" asp-append-version="true" />
+<style>
+    .eq-lista { display: grid; gap: 14px; }
+    .eq-card { background: #fff; border: 1px solid var(--mx-line); border-radius: 12px; box-shadow: var(--mx-shadow); }
+    .eq-cab { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 14px 18px; border-bottom: 1px solid var(--mx-line); }
+    .eq-cab h2 { font-size: 16px; font-weight: 800; margin: 0; color: var(--mx-brand-dark); }
+    .eq-cab small { color: var(--mx-muted); font-size: 12px; }
+    .eq-cuerpo { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px 20px; padding: 16px 18px; }
+    @@media (max-width: 900px) { .eq-cuerpo { grid-template-columns: 1fr 1fr; } }
+    .eq-dato strong { display: block; font-size: 10.5px; font-weight: 800; text-transform: uppercase; letter-spacing: .5px; color: var(--mx-muted); margin-bottom: 2px; }
+    .eq-dato span { font-size: 13.5px; color: var(--mx-ink); overflow-wrap: anywhere; }
+    .eq-acciones { display: flex; justify-content: space-between; align-items: flex-end; gap: 12px; flex-wrap: wrap; padding: 12px 18px 16px; border-top: 1px dashed var(--mx-line); }
+    .eq-rechazo { display: flex; gap: 8px; flex: 1 1 340px; }
+    .eq-aprobar { display: flex; gap: 8px; align-items: flex-end; }
+    .eq-acciones input, .eq-acciones select, .eq-rol select { height: 36px; border: 1px solid #cbd5e1; border-radius: 8px; padding: 0 10px; font-size: 13px; background: #fff; }
+    .eq-rechazo input { flex: 1; min-width: 0; }
+    .eq-aprobar label { display: block; font-size: 10.5px; font-weight: 800; text-transform: uppercase; letter-spacing: .5px; color: var(--mx-muted); margin-bottom: 3px; }
+    .eq-rol { display: flex; gap: 6px; align-items: center; }
+    .eq-rol select { height: 32px; font-size: 12.5px; }
+    .eq-tu { font-size: 10px; font-weight: 800; color: #6d2d9e; background: #f3e8ff; border-radius: 999px; padding: 1px 8px; margin-left: 6px; }
+    .mx-tabla tr.eq-inactivo td { color: #94a3b8; }
+</style>
+
+<div class="container-fluid py-4 mx">
+    <header class="mx-cabecera">
+        <div>
+            <div class="mx-miga">Maestros</div>
+            <h1 class="mx-titulo">Equipo Atilson</h1>
+            <p class="mx-subtitulo">Valida las cuentas que pide el equipo en <a href="/RegistroEquipo" target="_blank">/RegistroEquipo</a>, asígnales el rol y administra los usuarios internos.</p>
+        </div>
+    </header>
+
+    @if (Model.FaltaScript)
+    {
+        <div class="alert alert-warning" style="font-size:13px;"><i class="bi bi-exclamation-triangle-fill"></i> Falta correr <code>Sql/2026-10_registro_equipo.sql</code> en la base: sin esa tabla no se pueden recibir solicitudes del equipo.</div>
+    }
+
+    <div class="mx-barra">
+        <nav class="mx-segmentos" aria-label="Vista">
+            <a asp-route-vista="solicitudes" class="@(Model.Vista == "solicitudes" ? "activo" : "")">Por validar<span class="mx-cuenta">@Model.Pendientes</span></a>
+            <a asp-route-vista="usuarios" class="@(Model.Vista == "usuarios" ? "activo" : "")">Usuarios del equipo<span class="mx-cuenta">@Model.Usuarios.Count(u => u.Usuario.Activo == 1)</span></a>
+            <a asp-route-vista="revisadas" class="@(Model.Vista == "revisadas" ? "activo" : "")">Solicitudes revisadas</a>
+        </nav>
+        @if (Model.Vista == "usuarios")
+        {
+            <div class="mx-buscar">
+                <i class="bi bi-search" aria-hidden="true"></i>
+                <input type="search" data-mx-filtro placeholder="Buscar por nombre, correo o rol…" aria-label="Buscar usuario" autocomplete="off" />
+            </div>
+            <span class="mx-total" data-mx-total>@Model.Usuarios.Count usuarios</span>
+        }
+    </div>
+
+    @if (Model.Vista == "usuarios")
+    {
+        <div class="mx-tabla-wrap">
+            <table class="mx-tabla" data-mx-tabla>
+                <thead>
+                    <tr>
+                        <th>Nombre</th>
+                        <th>Correo</th>
+                        <th>RUT</th>
+                        <th>Teléfono</th>
+                        <th>Rol</th>
+                        <th>Estado</th>
+                        <th>Último acceso</th>
+                        <th class="mx-col-acciones"><span class="visually-hidden">Acciones</span></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var f in Model.Usuarios)
+                    {
+                        var u = f.Usuario;
+                        bool activo = u.Activo == 1;
+                        <tr data-mx-texto="@u.NombreCompleto @u.Correo @u.Rol" class="@(activo ? "" : "eq-inactivo")">
+                            <td><span class="mx-nombre">@u.NombreCompleto</span>@if (f.EsUnoMismo) { <span class="eq-tu">Tú</span> }</td>
+                            <td>@u.Correo</td>
+                            <td>@(f.Rut ?? "—")</td>
+                            <td>@(f.Telefono ?? "—")</td>
+                            <td>
+                                <form method="post" asp-page-handler="Rol" asp-route-id="@u.Id" class="eq-rol">
+                                    <select name="rol" aria-label="Rol de @u.NombreCompleto" data-buscador="no" onchange="this.form.querySelector('button').hidden = false">
+                                        @if (PermisosEquipo.NormalizarRol(u.Rol) == null)
+                                        {
+                                            <option value="" selected>@(string.IsNullOrWhiteSpace(u.Rol) ? "Sin rol" : u.Rol)</option>
+                                        }
+                                        @foreach (var r in PermisosEquipo.RolesAsignables)
+                                        {
+                                            <option value="@r" selected="@(string.Equals(u.Rol, r, StringComparison.OrdinalIgnoreCase))">@r</option>
+                                        }
+                                    </select>
+                                    <button type="submit" class="mx-btn mx-btn-primario mx-btn-sm" hidden><i class="bi bi-check2"></i> Guardar</button>
+                                </form>
+                            </td>
+                            <td>
+                                @if (activo)
+                                {
+                                    <span class="mx-pill mx-pill-ok">Activo</span>
+                                }
+                                else
+                                {
+                                    <span class="mx-pill mx-pill-off">Inactivo</span>
+                                }
+                            </td>
+                            <td>@(f.UltimoAcceso.HasValue ? MaestrosAuditoria.FormatoFecha(f.UltimoAcceso) : "—")</td>
+                            <td class="mx-col-acciones">
+                                @if (!f.EsUnoMismo)
+                                {
+                                    <form method="post" asp-page-handler="Estado" asp-route-id="@u.Id" asp-route-activar="@(!activo)"
+                                          data-mx-confirmar="@(activo ? $"¿Desactivar a {u.NombreCompleto}? Ya no podrá entrar al ERP." : $"¿Reactivar a {u.NombreCompleto}?")">
+                                        <button type="submit" class="mx-btn mx-btn-sm @(activo ? "mx-btn-peligro" : "mx-btn-ok")">@(activo ? "Desactivar" : "Reactivar")</button>
+                                    </form>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+        <p class="mx-subtitulo mt-2" style="font-size:12px;"><i class="bi bi-info-circle"></i> El rol nuevo se aplica la próxima vez que la persona inicie sesión. Administrador: valida cuentas, asigna roles y ve Finanzas y Comercial.</p>
+    }
+    else
+    {
+        @if (!Model.Solicitudes.Any())
+        {
+            <div class="mx-tabla-wrap"><div class="mx-vacio"><i class="bi bi-inbox"></i>@(Model.Vista == "solicitudes" ? "No hay cuentas por validar." : "Aún no hay solicitudes revisadas.")</div></div>
+        }
+        <div class="eq-lista">
+            @foreach (var s in Model.Solicitudes)
+            {
+                bool pendiente = s.Estado == SolicitudRegistroEquipo.EstadoPendiente;
+                string rolSugerido = s.AreaSolicitada switch
+                {
+                    "Operaciones" => "Operaciones",
+                    "Ventas / Comercial" => "Ventas",
+                    "Finanzas" => "Finanzas",
+                    "Informática" => "Informático",
+                    _ => ""
+                };
+                <article class="eq-card" id="sol-@s.Id">
+                    <div class="eq-cab">
+                        <div>
+                            <h2>@s.NombreCompleto</h2>
+                            <small>Solicitada el @MaestrosAuditoria.FormatoFecha(s.FechaSolicitud)</small>
+                        </div>
+                        <div class="text-end">
+                            @if (pendiente)
+                            {
+                                <span class="mx-pill mx-pill-warn">Por validar</span>
+                            }
+                            else if (s.Estado == SolicitudRegistroEquipo.EstadoAprobada)
+                            {
+                                <span class="mx-pill mx-pill-ok">Validada · @s.RolAsignado</span>
+                                <small class="d-block mt-1">@s.UsuarioRevision · @MaestrosAuditoria.FormatoFecha(s.FechaRevision)</small>
+                            }
+                            else
+                            {
+                                <span class="mx-pill mx-pill-off">Rechazada</span>
+                                <small class="d-block mt-1">@s.UsuarioRevision · @MaestrosAuditoria.FormatoFecha(s.FechaRevision)</small>
+                            }
+                        </div>
+                    </div>
+                    <div class="eq-cuerpo">
+                        <div class="eq-dato"><strong>RUT</strong><span>@s.Rut</span></div>
+                        <div class="eq-dato"><strong>Teléfono</strong><span>@s.Telefono</span></div>
+                        <div class="eq-dato"><strong>Correo (usuario)</strong><span>@s.Correo</span></div>
+                        <div class="eq-dato"><strong>Área indicada</strong><span>@(s.AreaSolicitada ?? "—")</span></div>
+                        @if (!string.IsNullOrWhiteSpace(s.MotivoRechazo))
+                        {
+                            <div class="eq-dato" style="grid-column: 1 / -1;"><strong>Motivo del rechazo</strong><span>@s.MotivoRechazo</span></div>
+                        }
+                    </div>
+                    @if (pendiente)
+                    {
+                        <div class="eq-acciones">
+                            <form method="post" asp-page-handler="Rechazar" asp-route-id="@s.Id" class="eq-rechazo"
+                                  data-mx-confirmar="@($"¿Rechazar la cuenta de {s.NombreCompleto}? Se le enviará el motivo por correo.")">
+                                <input type="text" name="motivo" maxlength="500" placeholder="Motivo del rechazo" aria-label="Motivo del rechazo" required />
+                                <button type="submit" class="mx-btn mx-btn-peligro"><i class="bi bi-x-lg"></i> Rechazar</button>
+                            </form>
+                            <form method="post" asp-page-handler="Aprobar" asp-route-id="@s.Id" class="eq-aprobar"
+                                  data-mx-confirmar="@($"¿Validar la cuenta de {s.NombreCompleto} con el rol elegido?")">
+                                <div>
+                                    <label for="rol-@s.Id">Rol</label>
+                                    <select id="rol-@s.Id" name="rol" required data-buscador="no">
+                                        <option value="">Elige el rol…</option>
+                                        @foreach (var r in PermisosEquipo.RolesAsignables)
+                                        {
+                                            <option value="@r" selected="@(r == rolSugerido)">@r</option>
+                                        }
+                                    </select>
+                                </div>
+                                <button type="submit" class="mx-btn mx-btn-primario"><i class="bi bi-person-check"></i> Validar cuenta</button>
+                            </form>
+                        </div>
+                    }
+                </article>
+            }
+        </div>
+    }
+</div>
+
+@section Scripts {
+    <script src="~/js/maestros.js" asp-append-version="true"></script>
+}

@@ -1,0 +1,865 @@
+/* Estilos compartidos de los formularios del Portal Cliente (Solicitar
+   Reserva, Solicitar Cotización). Extraído de SolicitarReserva.cshtml (oct-2026)
+   para no duplicarlo; '@@' de Razor pasó a '@' al ser un archivo estático. */
+    .af-wrap {
+        max-width: 1040px;
+        margin: 0 auto;
+    }
+
+    .af-back {
+        display: inline-flex;
+        align-items: center;
+        gap: .4rem;
+        font-size: .85rem;
+        font-weight: 600;
+        color: #64748b;
+        text-decoration: none;
+        margin-bottom: 1rem;
+    }
+
+        .af-back:hover {
+            color: var(--atilson-accent);
+        }
+
+    .af-head h1 {
+        font-size: 1.6rem;
+        font-weight: 800;
+        color: var(--atilson-dark);
+        letter-spacing: -0.01em;
+        margin-bottom: .3rem;
+    }
+
+    .af-head p {
+        font-size: .88rem;
+        color: #64748b;
+        margin: 0 0 1.1rem;
+    }
+
+    .af-alert {
+        display: flex;
+        gap: .75rem;
+        background: rgba(239,68,68,.06);
+        border: 1px solid rgba(239,68,68,.18);
+        border-left: 3px solid #ef4444;
+        border-radius: 12px;
+        padding: .9rem 1.1rem;
+        margin-bottom: 1.25rem;
+    }
+
+        .af-alert i {
+            color: #ef4444;
+            font-size: 1.1rem;
+            margin-top: .1rem;
+        }
+
+        .af-alert strong {
+            display: block;
+            color: #991b1b;
+            font-size: .88rem;
+            margin-bottom: .2rem;
+        }
+
+        .af-alert ul {
+            margin: 0;
+            padding-left: 1.1rem;
+            color: #991b1b;
+            font-size: .83rem;
+        }
+
+    .af-panel {
+        background: #fff;
+        border: 1px solid rgba(30,27,75,.07);
+        border-radius: 20px;
+        padding: 1.9rem 2.1rem;
+        box-shadow: 0 30px 60px -30px rgba(30,27,75,.26), 0 2px 8px rgba(30,27,75,.04);
+    }
+
+    .af-label {
+        display: block;
+        font-size: .8rem;
+        font-weight: 600;
+        color: #334155;
+        margin-bottom: .5rem;
+    }
+
+    .af-req {
+        color: var(--atilson-accent-light);
+    }
+
+    /* ---------- Encabezados de sección (mismo idioma visual que el resto
+       de la plataforma: chip de ícono + título + bajada opcional) ---------- */
+    .af-section {
+        padding-top: 1.75rem;
+        border-top: 1px solid rgba(30,27,75,.07);
+        margin-top: 1.75rem;
+    }
+
+        .af-section:first-of-type {
+            padding-top: 0;
+            border-top: 0;
+            margin-top: 0;
+        }
+
+        .af-section.af-conditional {
+            padding-top: 0;
+            border-top: 0;
+            margin-top: 0;
+            max-height: 0;
+            overflow: hidden;
+            opacity: 0;
+            transition: opacity .18s ease;
+        }
+
+        .af-section.af-conditional.is-open {
+            padding-top: 1.75rem;
+            border-top: 1px solid rgba(30,27,75,.07);
+            margin-top: 1.75rem;
+            max-height: none;
+            overflow: visible;
+            opacity: 1;
+            animation: afFadeIn .22s ease;
+        }
+
+    .af-section-head {
+        display: flex;
+        align-items: center;
+        gap: .7rem;
+        margin-bottom: 1.1rem;
+    }
+
+    .af-section-ico {
+        width: 32px;
+        height: 32px;
+        border-radius: 10px;
+        background: rgba(139,92,246,.12);
+        color: var(--atilson-accent);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1rem;
+        flex-shrink: 0;
+    }
+
+    .af-section-head h2 {
+        font-size: .96rem;
+        font-weight: 800;
+        color: var(--atilson-dark);
+        letter-spacing: -.01em;
+        margin: 0;
+    }
+
+    .af-section-head p {
+        font-size: .78rem;
+        color: #64748b;
+        margin: .1rem 0 0;
+    }
+
+    /* Selector de servicio: checkboxes simples, sin marco de botón */
+    .svc-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 1.1rem;
+        margin-bottom: .6rem;
+    }
+
+        .svc-row + .svc-row {
+            margin-top: .1rem;
+        }
+
+    .svc-check {
+        position: relative;
+        display: flex;
+        align-items: center;
+    }
+
+        .svc-check input {
+            position: absolute;
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .svc-check label {
+            display: inline-flex;
+            align-items: center;
+            gap: .55rem;
+            font-size: .88rem;
+            font-weight: 600;
+            color: #475569;
+            cursor: pointer;
+            user-select: none;
+        }
+
+    .svc-check-box {
+        width: 18px;
+        height: 18px;
+        border-radius: 5px;
+        flex-shrink: 0;
+        border: 1.5px solid rgba(30,27,75,.3);
+        position: relative;
+        transition: all .15s;
+    }
+
+        .svc-check-box::after {
+            content: "\2713";
+            position: absolute;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 11px;
+            color: #fff;
+            opacity: 0;
+            transition: opacity .15s;
+        }
+
+    .svc-check input:checked + label .svc-check-box {
+        background: var(--atilson-accent);
+        border-color: var(--atilson-accent);
+    }
+
+        .svc-check input:checked + label .svc-check-box::after {
+            opacity: 1;
+        }
+
+    .svc-check input:checked + label {
+        color: var(--atilson-dark);
+    }
+
+    .svc-check-icon {
+        font-size: .95rem;
+        color: #94a3b8;
+    }
+
+    .svc-check input:checked + label .svc-check-icon {
+        color: var(--atilson-accent);
+    }
+
+    .svc-hint {
+        font-size: .8rem;
+        color: #64748b;
+        margin: .35rem 0 0;
+    }
+
+        .svc-hint.text-danger {
+            color: #dc2626;
+            font-weight: 600;
+        }
+
+    /* Grilla de campos */
+    .af-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+        gap: 1rem 1.25rem;
+    }
+
+    .af-field-full {
+        grid-column: 1 / -1;
+    }
+
+    .af-conditional {
+        display: none;
+    }
+
+        .af-conditional.is-open {
+            display: block;
+            animation: afFadeIn .2s ease;
+        }
+
+    @keyframes afFadeIn {
+        from {
+            opacity: 0;
+            transform: translateY(-3px);
+        }
+
+        to {
+            opacity: 1;
+            transform: none;
+        }
+    }
+
+    .af-input, .af-select, textarea.af-input {
+        width: 100%;
+        border: 1.5px solid rgba(30,27,75,.12);
+        border-radius: 10px;
+        padding: .6rem .8rem;
+        font-size: .9rem;
+        color: var(--dark-text);
+        background: #fff;
+        font-family: inherit;
+        transition: border-color .15s, box-shadow .15s;
+    }
+
+        .af-input:focus, .af-select:focus, textarea.af-input:focus {
+            outline: none;
+            border-color: var(--atilson-accent);
+            box-shadow: 0 0 0 3.5px rgba(139,92,246,.14);
+        }
+
+    .af-select {
+        appearance: none;
+        background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23475569' stroke-width='2'><path d='M6 9l6 6 6-6'/></svg>");
+        background-repeat: no-repeat;
+        background-position: right .75rem center;
+        background-size: 15px;
+        padding-right: 2.1rem;
+    }
+
+    textarea.af-input {
+        resize: vertical;
+        min-height: 60px;
+    }
+
+    /* SELECT2 — búsqueda predictiva (mismo motor que Operaciones/Create),
+       con la estética af-* de este formulario en vez del look interno. */
+    .select2-container--default .select2-selection--single {
+        height: 44px !important;
+        border: 1.5px solid rgba(30,27,75,.12) !important;
+        border-radius: 10px !important;
+        background: #fff !important;
+        padding: 3px 4px;
+        transition: border-color .15s, box-shadow .15s;
+    }
+
+        .select2-container--default .select2-selection--single .select2-selection__rendered {
+            line-height: 36px !important;
+            font-size: .9rem;
+            font-weight: 500;
+            color: var(--dark-text);
+            padding-left: 10px !important;
+        }
+
+        .select2-container--default .select2-selection--single .select2-selection__arrow {
+            height: 42px !important;
+            right: 6px;
+        }
+
+    .select2-container--default.select2-container--open .select2-selection--single,
+    .select2-container--default.select2-container--focus .select2-selection--single {
+        border-color: var(--atilson-accent) !important;
+        box-shadow: 0 0 0 3.5px rgba(139,92,246,.14) !important;
+    }
+
+    .select2-dropdown {
+        border: 1.5px solid var(--atilson-accent) !important;
+        border-radius: 10px !important;
+        box-shadow: 0 10px 25px rgba(0,0,0,.1);
+        overflow: hidden;
+    }
+
+    .select2-search--dropdown {
+        padding: 8px;
+        background: #fff;
+    }
+
+    .select2-search__field {
+        border: 1.5px solid rgba(30,27,75,.12) !important;
+        border-radius: 8px !important;
+        padding: 8px 10px !important;
+        font-size: .85rem;
+        outline: none;
+    }
+
+        .select2-search__field:focus {
+            border-color: var(--atilson-accent) !important;
+        }
+
+    .select2-results__option--highlighted {
+        background-color: var(--atilson-accent) !important;
+    }
+
+    .select2-container {
+        width: 100% !important;
+    }
+
+    .af-toggle-row {
+        display: flex;
+        gap: .5rem;
+    }
+
+    .af-toggle {
+        position: relative;
+    }
+
+        .af-toggle input {
+            position: absolute;
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .af-toggle label {
+            display: flex;
+            align-items: center;
+            gap: .45rem;
+            border: 1.5px solid rgba(30,27,75,.12);
+            border-radius: 10px;
+            padding: .55rem .75rem;
+            font-size: .82rem;
+            font-weight: 600;
+            color: #475569;
+            cursor: pointer;
+            transition: all .15s;
+        }
+
+        .af-toggle input:checked + label {
+            border-color: var(--atilson-accent);
+            background: rgba(139,92,246,.08);
+            color: var(--atilson-dark);
+        }
+
+    .af-toggle-dot {
+        width: 15px;
+        height: 15px;
+        border-radius: 5px;
+        flex-shrink: 0;
+        border: 1.5px solid rgba(30,27,75,.25);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 9px;
+        color: transparent;
+        transition: all .15s;
+    }
+
+    .af-toggle input:checked + label .af-toggle-dot {
+        background: var(--atilson-accent);
+        border-color: var(--atilson-accent);
+        color: #fff;
+    }
+
+    /* ---------- Sub-panel Reefer: se abre dentro de Contenedores y Carga
+       cuando el tipo de unidad elegido es refrigerado ---------- */
+    .af-reefer-panel {
+        grid-column: 1 / -1;
+        background: linear-gradient(135deg, rgba(139,92,246,.06), rgba(139,92,246,.015));
+        border: 1px solid rgba(139,92,246,.18);
+        border-radius: 14px;
+        padding: 1.1rem 1.25rem;
+        margin-top: .25rem;
+        display: none;
+    }
+
+        .af-reefer-panel.is-open {
+            display: block;
+            animation: afFadeIn .2s ease;
+        }
+
+    .af-reefer-head {
+        display: flex;
+        align-items: center;
+        gap: .5rem;
+        font-size: .78rem;
+        font-weight: 800;
+        color: var(--atilson-accent);
+        text-transform: uppercase;
+        letter-spacing: .04em;
+        margin-bottom: .9rem;
+    }
+
+    .af-submit-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+        flex-wrap: wrap;
+        margin-top: 1.5rem;
+    }
+
+    .af-submit-hint {
+        font-size: .8rem;
+        color: #64748b;
+        margin: 0;
+    }
+
+    .af-btn-primary {
+        background: linear-gradient(135deg, var(--atilson-accent) 0%, #312e81 100%);
+        border: none;
+        color: #fff;
+        font-weight: 700;
+        font-size: .92rem;
+        padding: .75rem 1.6rem;
+        border-radius: 12px;
+        box-shadow: 0 10px 24px -8px rgba(139,92,246,.45);
+        transition: transform .15s, box-shadow .15s;
+    }
+
+        .af-btn-primary:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 14px 28px -8px rgba(139,92,246,.55);
+        }
+
+        .af-btn-primary:disabled {
+            opacity: .7;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .af-btn-primary:focus-visible, .af-input:focus-visible, .af-select:focus-visible, .svc-check label:focus-visible {
+            outline: 2px solid var(--atilson-accent);
+            outline-offset: 2px;
+        }
+
+    @media (max-width: 576px) {
+        .af-panel {
+            padding: 1.4rem 1.25rem;
+            border-radius: 16px;
+        }
+
+        .af-submit-row {
+            flex-direction: column-reverse;
+            align-items: stretch;
+        }
+
+        .af-btn-primary {
+            width: 100%;
+            text-align: center;
+        }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        .af-conditional.is-open, .af-reefer-panel.is-open {
+            animation: none;
+        }
+
+        .af-btn-primary, .af-input, .af-select, .af-toggle label {
+            transition: none;
+        }
+    }
+
+/* ---------- Selector de flujo: Cotización vs. Reserva (oct-2026) ----------
+   Aparece arriba de ambos formularios para que el cliente entienda cuál
+   corresponde: cotizar = todavía no tengo precio; reservar = ya tengo tarifa. */
+.af-flow {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: .75rem;
+    margin-bottom: 1.25rem;
+}
+
+.af-flow-card {
+    display: flex;
+    align-items: flex-start;
+    gap: .75rem;
+    padding: .9rem 1rem;
+    border: 1.5px solid rgba(30,27,75,.1);
+    border-radius: 14px;
+    background: #fff;
+    text-decoration: none;
+    color: #475569;
+    transition: border-color .15s, box-shadow .15s, transform .15s;
+}
+
+    .af-flow-card:hover {
+        border-color: rgba(139,92,246,.45);
+        color: var(--atilson-dark);
+        transform: translateY(-1px);
+    }
+
+    .af-flow-card.is-active {
+        border-color: var(--atilson-accent);
+        background: linear-gradient(135deg, rgba(139,92,246,.09), rgba(139,92,246,.02));
+        box-shadow: 0 10px 24px -14px rgba(139,92,246,.6);
+        color: var(--atilson-dark);
+        pointer-events: none;
+    }
+
+.af-flow-ico {
+    width: 34px;
+    height: 34px;
+    border-radius: 10px;
+    background: rgba(30,27,75,.05);
+    color: #64748b;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.05rem;
+    flex-shrink: 0;
+}
+
+.af-flow-card.is-active .af-flow-ico {
+    background: var(--atilson-accent);
+    color: #fff;
+}
+
+.af-flow-card strong {
+    display: block;
+    font-size: .9rem;
+    font-weight: 800;
+    letter-spacing: -.01em;
+}
+
+.af-flow-card span {
+    display: block;
+    font-size: .78rem;
+    margin-top: .1rem;
+}
+
+/* Opciones tipo chip (radio) — tipo de carga documental */
+.af-chip-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .5rem;
+}
+
+.af-chip {
+    position: relative;
+}
+
+    .af-chip input {
+        position: absolute;
+        opacity: 0;
+        width: 0;
+        height: 0;
+    }
+
+    .af-chip label {
+        display: inline-flex;
+        align-items: center;
+        gap: .45rem;
+        border: 1.5px solid rgba(30,27,75,.12);
+        border-radius: 999px;
+        padding: .5rem .95rem;
+        font-size: .84rem;
+        font-weight: 600;
+        color: #475569;
+        cursor: pointer;
+        transition: all .15s;
+    }
+
+        .af-chip label i {
+            color: #94a3b8;
+        }
+
+    .af-chip input:checked + label {
+        border-color: var(--atilson-accent);
+        background: rgba(139,92,246,.08);
+        color: var(--atilson-dark);
+    }
+
+        .af-chip input:checked + label i {
+            color: var(--atilson-accent);
+        }
+
+    .af-chip input:focus-visible + label {
+        outline: 2px solid var(--atilson-accent);
+        outline-offset: 2px;
+    }
+
+.af-field-hint {
+    font-size: .76rem;
+    color: #94a3b8;
+    margin: .35rem 0 0;
+}
+
+@media (max-width: 576px) {
+    .af-flow {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* ---------- Solicitar Reserva completa (oct-2026) ---------- */
+.af-optional {
+    font-weight: 500;
+    color: #94a3b8;
+}
+
+/* Banner: reserva hecha desde una cotización respondida */
+.af-origin {
+    display: flex;
+    align-items: flex-start;
+    gap: .8rem;
+    background: linear-gradient(135deg, rgba(139,92,246,.1), rgba(139,92,246,.03));
+    border: 1px solid rgba(139,92,246,.25);
+    border-radius: 14px;
+    padding: .9rem 1.1rem;
+    margin-bottom: 1.25rem;
+}
+
+.af-origin__ico {
+    width: 34px;
+    height: 34px;
+    border-radius: 10px;
+    background: var(--atilson-accent);
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.af-origin strong {
+    display: block;
+    font-size: .9rem;
+    color: var(--atilson-dark);
+}
+
+.af-origin__chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .35rem .9rem;
+    margin-top: .25rem;
+    font-size: .82rem;
+    font-weight: 700;
+    color: #334155;
+}
+
+    .af-origin__chips i {
+        color: var(--atilson-accent);
+        margin-right: .2rem;
+    }
+
+.af-origin__valid {
+    font-weight: 600;
+    color: #64748b;
+}
+
+/* Nota informativa dentro de una sección */
+.af-note {
+    display: flex;
+    align-items: flex-start;
+    gap: .6rem;
+    background: rgba(22,163,74,.06);
+    border: 1px solid rgba(22,163,74,.2);
+    border-radius: 12px;
+    padding: .75rem .95rem;
+    margin-bottom: 1rem;
+    font-size: .85rem;
+    color: #166534;
+}
+
+    .af-note i {
+        font-size: 1.05rem;
+        margin-top: .05rem;
+    }
+
+/* Valor calculado (no editable), ej. puerto terrestre tomado del marítimo */
+.af-auto-value {
+    margin: 0;
+    padding: .62rem .8rem;
+    border-radius: 10px;
+    background: rgba(30,27,75,.04);
+    border: 1.5px dashed rgba(30,27,75,.12);
+    font-size: .9rem;
+    font-weight: 700;
+    color: var(--atilson-dark);
+}
+
+/* =========================================================================
+   Alineación de campos (oct-2026)
+   - Todos los controles de una línea miden lo mismo (44px, igual que select2).
+   - .af-grid--6 / --4: columnas explícitas en vez de auto-fill, para que
+     cada sección tenga un orden fijo (2 o 3 campos por fila).
+   - Con subgrid, cada campo ocupa 3 filas (label / control / ayuda) que se
+     comparten con sus vecinos: si un label usa 2 líneas o un campo tiene
+     texto de ayuda, los controles de esa fila igual quedan alineados.
+   ========================================================================= */
+.af-input:not(textarea), .af-select {
+    height: 44px;
+}
+
+.af-auto-value {
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+    line-height: 1.25;
+    padding-top: .4rem;
+    padding-bottom: .4rem;
+}
+
+.af-grid.af-grid--6 {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+
+.af-grid.af-grid--4 {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.af-grid--6 > .af-field {
+    grid-column: span 2;
+}
+
+.af-grid--4 > .af-field {
+    grid-column: span 1;
+}
+
+.af-grid > .af-col-3 {
+    grid-column: span 3;
+}
+
+.af-grid > .af-col-full,
+.af-grid > .af-reefer-panel {
+    grid-column: 1 / -1;
+}
+
+.af-field-hint:empty {
+    display: none;
+}
+
+@supports (grid-template-rows: subgrid) {
+    .af-grid.af-grid--6,
+    .af-grid.af-grid--4 {
+        row-gap: 0;
+    }
+
+        .af-grid--6 > .af-field,
+        .af-grid--4 > .af-field {
+            display: grid;
+            grid-row: span 3;
+            grid-template-rows: subgrid;
+            row-gap: 0;
+            padding-bottom: 1.05rem;
+            align-content: start;
+        }
+
+            .af-grid--6 > .af-field > .af-label,
+            .af-grid--4 > .af-field > .af-label {
+                align-self: end;
+            }
+
+        .af-grid--6 > .af-reefer-panel {
+            margin-top: 0;
+            margin-bottom: 1.05rem;
+        }
+}
+
+@media (max-width: 767.98px) {
+    .af-grid.af-grid--6,
+    .af-grid.af-grid--4 {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .af-grid--6 > .af-field,
+    .af-grid--4 > .af-field,
+    .af-grid > .af-col-3 {
+        grid-column: span 1;
+    }
+}
+
+@media (max-width: 575.98px) {
+    .af-grid.af-grid--6,
+    .af-grid.af-grid--4 {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}
+
+/* Flecha de select2 igual a la de los <select> nativos (.af-select), para que
+   no convivan dos estilos de flecha en la misma fila. */
+.select2-container--default .select2-selection--single .select2-selection__arrow b {
+    display: none;
+}
+
+.select2-container--default .select2-selection--single .select2-selection__arrow {
+    width: 2.1rem;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23475569' stroke-width='2'><path d='M6 9l6 6 6-6'/></svg>");
+    background-repeat: no-repeat;
+    background-position: center;
+    background-size: 15px;
+}
+
+/* Dentro del panel reefer los campos no necesitan el espacio inferior extra. */
+@supports (grid-template-rows: subgrid) {
+    .af-reefer-panel .af-grid--4 > .af-field {
+        padding-bottom: .15rem;
+    }
+}

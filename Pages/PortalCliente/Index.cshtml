@@ -1,1172 +1,523 @@
 ﻿@page
 @model AtilsonCargoSpa.Pages.PortalCliente.IndexModel
+@using AtilsonCargoSpa.Models
+@using System.Globalization
+@functions {
+    // Normaliza fechas (soporta DateTime? y DateOnly? según cómo esté scaffoldeado el modelo)
+    private static DateTime? AFecha(DateTime? d) => d;
+    private static DateTime? AFecha(DateOnly? d) => d?.ToDateTime(TimeOnly.MinValue);
+
+    // % de avance del viaje marítimo entre ETD y ETA
+    private static int ProgresoViaje(DateTime? etd, DateTime? eta, DateTime ahora)
+    {
+        if (!etd.HasValue || !eta.HasValue) return 0;
+        if (ahora <= etd.Value) return 0;
+        if (ahora >= eta.Value) return 100;
+        var total = (eta.Value - etd.Value).TotalHours;
+        if (total <= 0) return 100;
+        return (int)Math.Round((ahora - etd.Value).TotalHours / total * 100);
+    }
+
+    private static bool BlPorAprobar(Operacione op) =>
+        op.OperacionesDocumentales != null && op.OperacionesDocumentales.Any(d => d.EstadoDocumental == "BORRADOR ENVIADO");
+
+    // Mismo criterio que AccionesRequeridas del PageModel
+    private static bool RequiereAccion(Operacione op) =>
+        op.OperacionesDocumentales != null && op.OperacionesDocumentales.Any(d =>
+            d.EstadoDocumental == "BORRADOR ENVIADO" ||
+            (d.LogSanitario != null && d.LogSanitario.Contains("ENVÍO A CLIENTE") && !d.LogSanitario.Contains("RESPUESTA")));
+
+    // Tokens para el filtro client-side: curso | finalizada | cancelada (+ accion)
+    private string Tokens(Operacione op)
+    {
+        var t = new List<string>();
+        bool fin = Model.OperacionCerradaPorRetiro(op) || op.EstadoWorkflow == "Cerrado" || op.EstadoWorkflow == "Finalizado";
+        if (fin) t.Add("finalizada");
+        else if (op.EstadoWorkflow == "Cancelado") t.Add("cancelada");
+        else t.Add("curso");
+        if (RequiereAccion(op)) t.Add("accion");
+        return string.Join(" ", t);
+    }
+}
 @{
-    ViewData["Title"] = "Mi Portal Logístico";
+    ViewData["Title"] = "Inicio";
     Layout = "_LayoutCliente";
+
+    var ahora = DateTime.Now;
+    var es = new CultureInfo("es-CL");
+    var ops = Model.OperacionesCliente ?? new List<Operacione>();
+
+    string nombreCliente = User.Identity?.Name ?? "Cliente";
+    if (nombreCliente.Contains("@")) { nombreCliente = nombreCliente.Split('@')[0]; }
+
+    string saludo = ahora.Hour < 12 ? "Buenos días" : (ahora.Hour < 20 ? "Buenas tardes" : "Buenas noches");
+    string fechaHoy = ahora.ToString("dddd d 'de' MMMM", es);
+    fechaHoy = char.ToUpper(fechaHoy[0]) + fechaHoy.Substring(1);
+
+    var tokens = ops.ToDictionary(o => o.Id, o => Tokens(o));
+    int nTodas = ops.Count;
+    int nCurso = tokens.Values.Count(v => v.Contains("curso"));
+    int nAccion = tokens.Values.Count(v => v.Contains("accion"));
+    int nFin = tokens.Values.Count(v => v.Contains("finalizada"));
+
+    var proximo = ops
+        .Where(o => tokens[o.Id].Contains("curso"))
+        .Select(o => new { Op = o, Etd = AFecha(o.EtdPol), Eta = AFecha(o.EtaPod) })
+        .Where(x => x.Eta.HasValue && x.Eta.Value >= ahora.Date)
+        .OrderBy(x => x.Eta)
+        .FirstOrDefault();
+
+    string resumen = nTodas == 0
+        ? "Comienza tu primera operación solicitando una cotización. Nosotros nos encargamos del resto."
+        : $"Tienes {nCurso} {(nCurso == 1 ? "embarque en curso" : "embarques en curso")}"
+          + (nAccion > 0 ? $" y {nAccion} {(nAccion == 1 ? "acción que requiere" : "acciones que requieren")} tu revisión." : ". Todo está al día.");
+
+    int pctActivos = nTodas == 0 ? 0 : (int)Math.Round(nCurso * 100.0 / nTodas);
+    int pctFin = nTodas == 0 ? 0 : (int)Math.Round(nFin * 100.0 / nTodas);
+
+    string shipSvg = "<svg viewBox=\"0 0 24 24\" width=\"1em\" height=\"1em\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M3 14h18l-2.2 4.4a2 2 0 0 1-1.8 1.1H7a2 2 0 0 1-1.8-1.1z\"/><path d=\"M6 14V9h4v5\"/><path d=\"M10 14v-3h4v3\"/><path d=\"M14 14V7h4v7\"/></svg>";
 }
 
-<style>
-    /* =========================================================
-               1. HERO BANNER
-            ========================================================= */
-    .dashboard-hero {
-        position: relative;
-        height: 380px;
-        border-radius: 20px;
-        overflow: hidden;
-        margin-bottom: 2rem;
-        box-shadow: 0 15px 35px rgba(15, 23, 42, 0.1);
-    }
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
 
-    .hero-carousel, .carousel-inner, .carousel-item {
-        height: 100%;
-        width: 100%;
-        position: absolute;
-        top: 0;
-        left: 0;
-    }
+<link rel="stylesheet" href="~/css/portal-cliente.css" asp-append-version="true" />
 
-    .carousel-image {
-        width: 100%;
-        height: 100%;
-        object-fit: cover;
-    }
-
-    .carousel-overlay {
-        position: absolute;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        background: linear-gradient(90deg, rgba(15,23,42,0.9) 0%, rgba(109, 45, 158, 0.4) 100%);
-        z-index: 1;
-    }
-
-    .carousel-caption-custom {
-        position: absolute;
-        top: 50%;
-        transform: translateY(-50%);
-        left: 6%;
-        z-index: 2;
-        text-align: left;
-        max-width: 650px;
-    }
-
-    .hero-tag {
-        background: rgba(255,255,255,0.1);
-        backdrop-filter: blur(10px);
-        border: 1px solid rgba(255,255,255,0.2);
-        color: #ffffff;
-        padding: 6px 16px;
-        border-radius: 50px;
-        font-size: 10px;
-        font-weight: 800;
-        letter-spacing: 1.5px;
-        text-transform: uppercase;
-        display: inline-block;
-        margin-bottom: 15px;
-    }
-
-    .hero-title {
-        font-size: 40px;
-        font-weight: 900;
-        line-height: 1.1;
-        letter-spacing: -1px;
-        margin-bottom: 12px;
-        color: #ffffff;
-        text-shadow: 0 4px 15px rgba(0,0,0,0.5);
-    }
-
-        .hero-title span {
-            background: linear-gradient(135deg, #a78bfa, #60a5fa);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-        }
-
-    .hero-subtitle {
-        font-size: 15px;
-        font-weight: 400;
-        color: #e2e8f0;
-        line-height: 1.6;
-        margin-bottom: 0;
-        text-shadow: 0 2px 10px rgba(0,0,0,0.8);
-    }
-
-    /* =========================================================
-               2. KPIs & TABLA DE OPERACIONES
-            ========================================================= */
-    .kpi-card {
-        border-radius: 16px;
-        padding: 25px;
-        background: #ffffff;
-        border: 1px solid var(--border-soft);
-        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.02);
-        transition: all 0.3s ease;
-        position: relative;
-        overflow: hidden;
-        height: 100%;
-    }
-
-        .kpi-card:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 20px 40px rgba(109, 45, 158, 0.08);
-            border-color: var(--kpi-accent);
-        }
-
-        .kpi-card::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            height: 4px;
-            background: var(--kpi-accent);
-            transform: scaleX(0);
-            transform-origin: left;
-            transition: transform 0.4s ease;
-        }
-
-        .kpi-card:hover::before {
-            transform: scaleX(1);
-        }
-
-    .kpi-title {
-        font-size: 11px;
-        font-weight: 800;
-        color: var(--text-muted);
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-    }
-
-    .kpi-value {
-        font-size: 32px;
-        font-weight: 900;
-        color: var(--atilson-dark);
-        letter-spacing: -1px;
-        margin-top: 5px;
-        line-height: 1.1;
-    }
-
-    .kpi-icon {
-        position: absolute;
-        right: 20px;
-        bottom: 20px;
-        font-size: 3.5rem;
-        opacity: 0.05;
-        transition: transform 0.3s ease;
-    }
-
-    .kpi-card:hover .kpi-icon {
-        transform: scale(1.1);
-        opacity: 0.1;
-    }
-
-    .client-filters {
-        background: #ffffff;
-        border-radius: 12px;
-        border: 1px solid var(--border-soft);
-        padding: 15px 25px;
-        display: flex;
-        gap: 15px;
-        align-items: center;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.02);
-        flex-wrap: wrap;
-    }
-
-    .filter-input-group {
-        display: flex;
-        align-items: center;
-        background: var(--bg-soft);
-        border: 1px solid var(--border-soft);
-        border-radius: 8px;
-        padding: 8px 15px;
-        flex-grow: 1;
-        transition: border 0.3s;
-    }
-
-        .filter-input-group:focus-within {
-            border-color: var(--atilson-purple);
-            background: #fff;
-        }
-
-        .filter-input-group i {
-            color: var(--text-muted);
-            margin-right: 10px;
-        }
-
-        .filter-input-group input, .filter-input-group select {
-            border: none;
-            background: transparent;
-            outline: none;
-            font-size: 13px;
-            font-weight: 600;
-            color: var(--text-dark);
-            width: 100%;
-        }
-
-    .table-client th {
-        background-color: var(--bg-soft);
-        color: var(--text-muted);
-        font-size: 10px;
-        font-weight: 800;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-        padding: 18px 20px;
-        border-bottom: 1px solid var(--border-soft);
-        white-space: nowrap;
-    }
-
-    .table-client td {
-        padding: 18px 20px;
-        vertical-align: middle;
-        font-size: 13px;
-        font-weight: 600;
-        color: var(--text-dark);
-        border-bottom: 1px solid #f1f5f9;
-        cursor: pointer;
-        transition: background 0.2s;
-    }
-
-    .table-client tbody tr:hover td {
-        background-color: var(--bg-soft);
-    }
-
-    .estado-badge {
-        font-size: 10px;
-        font-weight: 800;
-        padding: 6px 12px;
-        border-radius: 50px;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        min-width: 120px;
-    }
-
-    .badge-confirmado {
-        background-color: #ecfdf5;
-        color: #059669;
-        border: 1px solid #a7f3d0;
-    }
-
-    .badge-proceso {
-        background-color: #f3e8ff;
-        color: #7e22ce;
-        border: 1px solid #e9d5ff;
-    }
-
-    /* Acordeón y Stepper */
-    .row-detail {
-        background-color: #fafbfd;
-        box-shadow: inset 0 3px 6px rgba(0,0,0,0.02);
-    }
-
-    .detail-card {
-        background: #fff;
-        border: 1px solid var(--border-soft);
-        border-radius: 12px;
-        padding: 25px;
-        height: 100%;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.02);
-    }
-
-    /* =========================================================
-               3. NUEVO CARRUSEL FOTOGRÁFICO (Rutas y Servicios)
-            ========================================================= */
-    .visual-slider-section {
-        background-color: var(--atilson-dark);
-        border-radius: 20px;
-        padding: 40px;
-        margin-top: 3rem;
-        position: relative;
-        overflow: hidden;
-    }
-
-        .visual-slider-section::after {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: url('https://upload.wikimedia.org/wikipedia/commons/8/80/World_map_-_low_resolution.svg') no-repeat center center;
-            opacity: 0.05;
-            filter: invert(1);
-            z-index: 0;
-            pointer-events: none;
-        }
-
-    .section-tag-light {
-        color: #cbd5e1;
-        font-size: 11px;
-        font-weight: 800;
-        text-transform: uppercase;
-        letter-spacing: 2px;
-        display: block;
-        margin-bottom: 5px;
-        position: relative;
-        z-index: 1;
-    }
-
-    .section-title-light {
-        font-size: 28px;
-        font-weight: 900;
-        letter-spacing: -0.5px;
-        margin-bottom: 25px;
-        color: #ffffff;
-        position: relative;
-        z-index: 1;
-    }
-
-    .visual-slider-wrapper {
-        position: relative;
-        width: 100%;
-        padding: 10px 0;
-        overflow-x: auto;
-        scroll-snap-type: x mandatory;
-        scrollbar-width: none;
-        z-index: 1;
-    }
-
-        .visual-slider-wrapper::-webkit-scrollbar {
-            display: none;
-        }
-
-    .visual-slider-track {
-        display: flex;
-        gap: 20px;
-        width: max-content;
-    }
-
-    .visual-card {
-        min-width: 280px;
-        height: 350px;
-        border-radius: 16px;
-        overflow: hidden;
-        position: relative;
-        scroll-snap-align: start;
-        cursor: pointer;
-        box-shadow: 0 10px 20px rgba(0,0,0,0.3);
-        transition: transform 0.4s ease;
-    }
-
-        .visual-card:hover {
-            transform: translateY(-10px);
-        }
-
-    .visual-card-img {
-        width: 100%;
-        height: 100%;
-        object-fit: cover;
-        transition: transform 0.8s ease;
-    }
-
-    .visual-card:hover .visual-card-img {
-        transform: scale(1.1);
-    }
-
-    .visual-card-overlay {
-        position: absolute;
-        bottom: 0;
-        left: 0;
-        width: 100%;
-        height: 70%;
-        background: linear-gradient(to top, rgba(15,23,42,0.95) 0%, rgba(15,23,42,0) 100%);
-        display: flex;
-        flex-direction: column;
-        justify-content: flex-end;
-        padding: 25px;
-    }
-
-    .vc-badge {
-        background: var(--atilson-purple);
-        color: white;
-        font-size: 9px;
-        font-weight: 800;
-        padding: 4px 10px;
-        border-radius: 50px;
-        text-transform: uppercase;
-        letter-spacing: 1px;
-        width: fit-content;
-        margin-bottom: 10px;
-    }
-
-    .vc-title {
-        color: white;
-        font-size: 20px;
-        font-weight: 800;
-        line-height: 1.2;
-        margin-bottom: 5px;
-    }
-
-    .vc-desc {
-        color: #cbd5e1;
-        font-size: 12px;
-        margin-bottom: 0;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-    }
-
-    .vc-icon {
-        opacity: 0;
-        transform: translateX(-10px);
-        transition: all 0.3s;
-        color: var(--atilson-accent);
-        font-size: 18px;
-    }
-
-    .visual-card:hover .vc-icon {
-        opacity: 1;
-        transform: translateX(0);
-    }
-
-    /* =========================================================
-               4. SECCIÓN CONTACTO Y ACCESOS RÁPIDOS
-            ========================================================= */
-    .dashboard-contact {
-        margin-top: 3rem;
-    }
-
-    .contact-card, .quick-card {
-        background: #ffffff;
-        border-radius: 16px;
-        padding: 35px;
-        border: 1px solid var(--border-soft);
-        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.02);
-        height: 100%;
-    }
-
-    .form-control-custom {
-        background: var(--bg-soft);
-        border: 1px solid var(--border-soft);
-        color: var(--text-dark);
-        padding: 12px 15px;
-        border-radius: 8px;
-        font-weight: 500;
-        font-size: 13px;
-        transition: all 0.3s;
-    }
-
-        .form-control-custom:focus {
-            border-color: var(--atilson-purple);
-            box-shadow: 0 0 0 3px rgba(109, 45, 158, 0.15);
-            background: #ffffff;
-            outline: none;
-        }
-
-    .btn-submit {
-        background: var(--atilson-dark);
-        color: white;
-        border: none;
-        border-radius: 8px;
-        font-weight: 800;
-        padding: 12px;
-        width: 100%;
-        transition: all 0.3s;
-        text-transform: uppercase;
-        letter-spacing: 1px;
-        font-size: 12px;
-    }
-
-        .btn-submit:hover {
-            background: var(--atilson-purple);
-            transform: translateY(-2px);
-            box-shadow: 0 10px 20px rgba(109, 45, 158, 0.3);
-        }
-
-    /* Accesos Rapidos List */
-    .quick-list {
-        list-style: none;
-        padding: 0;
-        margin: 0;
-    }
-
-    .quick-item {
-        display: flex;
-        align-items: center;
-        padding: 15px 0;
-        border-bottom: 1px solid var(--border-soft);
-        transition: all 0.2s;
-        cursor: pointer;
-        text-decoration: none;
-        color: var(--text-dark);
-    }
-
-        .quick-item:last-child {
-            border-bottom: none;
-        }
-
-        .quick-item:hover {
-            transform: translateX(5px);
-            color: var(--atilson-purple);
-        }
-
-    .quick-icon {
-        font-size: 24px;
-        color: var(--text-muted);
-        margin-right: 15px;
-        transition: color 0.2s;
-    }
-
-    .quick-item:hover .quick-icon {
-        color: var(--atilson-purple);
-    }
-
-    .quick-text-main {
-        font-weight: 700;
-        font-size: 14px;
-        display: block;
-    }
-
-    .quick-text-sub {
-        font-size: 11px;
-        color: var(--text-muted);
-    }
-
-        /* ===== Transbordo, retiro pendiente y cierre ("Vacío Devuelto") ===== */
-    .badge-transbordo {
-        font-size: 9px; font-weight: 800; padding: 4px 10px; border-radius: 50px;
-        text-transform: uppercase; letter-spacing: .4px; display: inline-flex; align-items: center; gap: 5px;
-        margin-top: 4px;
-    }
-    .badge-transbordo.critico { background: #fff7ed; color: #ea580c; border: 1px solid #fed7aa; }
-    .badge-transbordo.vencido { background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; }
-    .badge-transbordo.pendiente { background: #f0f9ff; color: #0284c7; border: 1px solid #bae6fd; }
-    .badge-transbordo.resuelto { background: #ecfdf5; color: #16a34a; border: 1px solid #bbf7d0; }
-
-    .badge-retiro-pendiente {
-        font-size: 9px; font-weight: 800; padding: 4px 10px; border-radius: 50px;
-        text-transform: uppercase; letter-spacing: .4px; display: inline-flex; align-items: center; gap: 5px;
-        background: #ecfdf5; color: #16a34a; border: 1px solid #bbf7d0; margin-top: 4px;
-    }
-
-    tr.row-closed-cliente { position: relative; }
-    tr.row-closed-cliente td {
-        background-color: #ecfdf5 !important;
-        opacity: 0.6;
-        pointer-events: none;
-        cursor: default !important;
-    }
-    tr.row-closed-cliente td.td-overlay-cliente { opacity: 1; background: transparent !important; padding: 0 !important; }
-    .vacio-devuelto-cliente {
-        position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
-        pointer-events: none; z-index: 5;
-    }
-    .vacio-devuelto-cliente span {
-        background: #ffffff; border: 1.5px solid #16a34a; color: #16a34a;
-        font-weight: 900; font-size: 11px; letter-spacing: 1px; text-transform: uppercase;
-        padding: 6px 18px; border-radius: 20px; box-shadow: 0 2px 10px rgba(22,163,74,.18); white-space: nowrap;
-    }
-
-    /* Animaciones */
-    .reveal {
-        opacity: 0;
-        transform: translateY(30px);
-        transition: all 0.8s ease-out;
-    }
-
-        .reveal.active {
-            opacity: 1;
-            transform: translateY(0);
-        }
-</style>
-
-<!-- 1. HERO BANNER -->
-<section class="dashboard-hero reveal">
-    <div id="heroCarousel" class="carousel slide carousel-fade hero-carousel" data-bs-ride="carousel" data-bs-pause="false">
-        <div class="carousel-inner h-100">
-            <!-- Slide 1: Buque -->
-            <div class="carousel-item active h-100" data-bs-interval="6000">
-                <img src="https://images.unsplash.com/photo-1586528116311-ad8ed7c83a50?ixlib=rb-4.0.3&auto=format&fit=crop&w=1920&q=80" class="carousel-image" alt="Buque Carguero">
-                <div class="carousel-overlay"></div>
-                <div class="carousel-caption-custom">
-                    <span class="hero-tag"><i class="bi bi-globe-americas me-1"></i> Cobertura Global</span>
-                    <h1 class="hero-title">Tu cadena de suministro, <span>sin límites.</span></h1>
-                    <p class="hero-subtitle">Conectamos tu negocio con el mundo. Control total de tus embarques marítimos, aduanas y transporte en una sola bóveda digital.</p>
-                </div>
-            </div>
-            <!-- Slide 2: Puerto Noche -->
-            <div class="carousel-item h-100" data-bs-interval="6000">
-                <img src="https://images.unsplash.com/photo-1577705998148-ebad79550ee6?ixlib=rb-4.0.3&auto=format&fit=crop&w=1920&q=80" class="carousel-image" alt="Puerto Inteligente">
-                <div class="carousel-overlay"></div>
-                <div class="carousel-caption-custom">
-                    <span class="hero-tag"><i class="bi bi-shield-check me-1"></i> Operativa 24/7</span>
-                    <h1 class="hero-title">Trazabilidad desde el <span>primer instante.</span></h1>
-                    <p class="hero-subtitle">Nuestros sistemas se integran con terminales y navieras para brindarte visibilidad en tiempo real de cada movimiento portuario.</p>
-                </div>
-            </div>
-            <!-- Slide 3: Terrestre -->
-            <div class="carousel-item h-100" data-bs-interval="6000">
-                <img src="https://images.unsplash.com/photo-1519003722824-194d4455a60c?ixlib=rb-4.0.3&auto=format&fit=crop&w=1920&q=80" class="carousel-image" alt="Transporte Terrestre">
-                <div class="carousel-overlay"></div>
-                <div class="carousel-caption-custom">
-                    <span class="hero-tag"><i class="bi bi-truck me-1"></i> Logística Integrada</span>
-                    <h1 class="hero-title">Del puerto a tu planta, <span>sin escalas.</span></h1>
-                    <p class="hero-subtitle">Flotas terrestres certificadas. Coordinación exacta de retiros, stackings y entregas directas a tus instalaciones.</p>
-                </div>
-            </div>
-        </div>
-    </div>
-</section>
-
-<div class="container-fluid py-4" style="max-width: 1200px;">
-    <div class="d-flex justify-content-between align-items-center mb-4 pb-2 border-bottom">
-        <div>
-            <h1 style="font-size: 24px; font-weight: 900; color: #1e293b; margin: 0; letter-spacing: -0.5px;">MIS OPERACIONES</h1>
-            <p class="text-muted small m-0 fw-medium mt-1">Bienvenido a tu portal de seguimiento.</p>
-        </div>
-        <a asp-page="./SolicitarReserva" class="btn btn-primary fw-bold shadow-sm px-4" style="border-radius: 8px; font-size: 13px;">
-            <i class="bi bi-plus-lg me-1"></i> SOLICITAR COTIZACIÓN
-        </a>
-    </div>
-</div>
 
 <form id="antiForgeryFormCliente">@Html.AntiForgeryToken()</form>
 
-<!-- 2. KPIs -->
-<div class="row g-4 mb-4 reveal px-3">
-    <div class="col-md-3">
-        <div class="kpi-card" style="--kpi-accent: #3b82f6;">
-            <i class="bi bi-ship kpi-icon text-primary"></i>
-            <span class="kpi-title">Embarques Activos</span>
-            <div class="kpi-value">@Model.CargasActivas</div>
-            <div class="mt-3 text-muted" style="font-size: 11px; font-weight: 600;"><i class="bi bi-graph-up-arrow text-primary me-1"></i> En tránsito hacia destino</div>
-        </div>
-    </div>
-    <div class="col-md-3">
-        <div class="kpi-card" style="--kpi-accent: #10b981;">
-            <i class="bi bi-box-seam kpi-icon text-success"></i>
-            <span class="kpi-title">Completados (Histórico)</span>
-            <div class="kpi-value">@Model.EmbarquesFinalizados</div>
-            <div class="mt-3 text-muted" style="font-size: 11px; font-weight: 600;">Entregas finalizadas con éxito</div>
-        </div>
-    </div>
-    <div class="col-md-3">
-        <div class="kpi-card" style="--kpi-accent: #f59e0b;">
-            <i class="bi bi-file-earmark-check kpi-icon text-warning"></i>
-            <span class="kpi-title">Acción Requerida</span>
-            <div class="kpi-value">@Model.AccionesRequeridas</div>
-            @if (Model.AccionesRequeridas > 0)
-            {
-                <div class="mt-3 text-warning fw-bold" style="font-size: 11px;"><i class="bi bi-exclamation-circle me-1"></i> Requiere su aprobación</div>
-            }
-            else
-            {
-                <div class="mt-3 text-muted fw-bold" style="font-size: 11px;"><i class="bi bi-check2-circle me-1"></i> Todo al día</div>
-            }
-        </div>
-    </div>
-    <div class="col-md-3">
-        <div class="kpi-card" style="--kpi-accent: var(--atilson-purple);">
-            <i class="bi bi-cash-stack kpi-icon" style="color: var(--atilson-purple);"></i>
-            <span class="kpi-title">Saldo Pendiente</span>
-            <div class="kpi-value">$@Model.SaldoPendienteTotal.ToString("N0") <span class="text-muted" style="font-size: 14px;">USD</span></div>
-            <a href="/PortalCliente/Facturas" style="color: var(--atilson-purple); text-decoration: none;">Ver estado de cuenta <i class="bi bi-arrow-right"></i></a><div class="mt-3 text-muted" style="font-size: 11px; font-weight: 600;"><a href="#" style="color: var(--atilson-purple); text-decoration: none;">Ver estado de cuenta <i class="bi bi-arrow-right"></i></a></div>
-        </div>
-    </div>
-</div>
+<div class="pc">
 
-<form method="get" class="client-filters mb-4 reveal mx-3">
-    <div class="fw-bold text-dark me-2" style="font-size: 13px;">Búsqueda Rápida:</div>
-    <div class="filter-input-group" style="max-width: 300px;">
-        <i class="bi bi-search"></i>
-        <input type="text" asp-for="SearchString" placeholder="N.º de reserva (BKG) o Contenedor...">
-    </div>
-    <button type="submit" class="btn btn-dark fw-bold px-4" style="background: var(--atilson-dark); border-radius: 8px; font-size: 12px;">Buscar</button>
-    <a href="/PortalCliente/Index" class="text-muted fw-bold ms-2" style="font-size: 12px; text-decoration: none;"><i class="bi bi-eraser-fill"></i> Limpiar</a>
-</form>
+    <!-- =====================================================
+         1. HERO
+         ===================================================== -->
+    <section class="pc-hero pc-reveal">
+        <div id="pcHeroCarousel" class="carousel slide carousel-fade" data-bs-ride="carousel" data-bs-pause="false" data-bs-interval="6000" aria-hidden="true">
+            <div class="carousel-inner">
+                <div class="carousel-item active">
+                    <img src="https://images.unsplash.com/photo-1494412651409-8963ce7935a7?auto=format&fit=crop&w=1920&q=80" class="pc-hero-img" alt="">
+                </div>
+                <div class="carousel-item">
+                    <img src="https://images.unsplash.com/photo-1601584115197-04ecc0da31d7?auto=format&fit=crop&w=1920&q=80" class="pc-hero-img" alt="">
+                </div>
+                <div class="carousel-item">
+                    <img src="https://images.unsplash.com/photo-1616156027751-fc9a850fdc9b?auto=format&fit=crop&w=1920&q=80" class="pc-hero-img" alt="">
+                </div>
+            </div>
+        </div>
 
-<div class="bg-white border rounded-4 shadow-sm overflow-hidden reveal mb-5 mx-3">
-    <div class="table-responsive">
-        <table class="table table-client w-100 mb-0">
-            <thead>
-                <tr>
-                    <th class="ps-4">Booking No.</th>
-                    <th>Estado de Carga</th>
-                    <th>Equipo Asignado</th>
-                    <th>Ruta Operativa</th>
-                    <th>Zarpe (ETD)</th>
-                    <th>Arribo (ETA)</th>
-                    <th>Nave / Naviera</th>
-                    <th class="pe-4"></th>
-                </tr>
-            </thead>
-                        <tbody>
-                @if (Model.OperacionesCliente != null && Model.OperacionesCliente.Any())
+        <div class="pc-hero-body">
+            <div>
+                <span class="pc-live"><span class="pc-live-dot"></span> Portal en línea · @fechaHoy</span>
+                <h1 class="pc-hero-title">@saludo,<br><span>@nombreCliente.</span></h1>
+                <p class="pc-hero-sub">@resumen</p>
+                <div class="pc-hero-ctas">
+                    <a asp-page="./SolicitarCotizacion" class="pc-btn pc-btn-light"><i class="bi bi-calculator"></i> Solicitar cotización</a>
+                    <a asp-page="./SolicitarReserva" class="pc-btn pc-btn-glass"><i class="bi bi-calendar-check"></i> Solicitar servicio</a>
+                    <a asp-page="./Itinerarios" class="pc-btn pc-btn-glass"><i class="bi bi-calendar2-week"></i> Itinerarios</a>
+                </div>
+            </div>
+
+            <div class="pc-glass">
+                @if (proximo != null)
                 {
-                    @foreach (var op in Model.OperacionesCliente)
-                    {
-                        var t = op.OperacionesTerrestres?.FirstOrDefault();
-                        var d = op.OperacionesDocumentales?.FirstOrDefault();
-                        bool cerradaPorRetiro = Model.OperacionCerradaPorRetiro(op);
-                        bool pendienteRetiro = Model.PendienteGestionRetiro(op);
-                        string estadoTransbordoCliente = !string.IsNullOrWhiteSpace(op.Transbordo)
-                            ? AtilsonCargoSpa.Helpers.TransbordoHelpers.EstadoTransbordo(op.GestionTransbordo)
-                            : "";
-
-                        <tr class="@(cerradaPorRetiro ? "row-closed-cliente" : "")" data-bs-toggle="@(cerradaPorRetiro ? null : "collapse")" data-bs-target="@(cerradaPorRetiro ? null : $"#detail-{op.Id}")">
-                            <td class="ps-4">
-                                <span class="fw-bolder" style="color: var(--atilson-purple); font-size: 14px;"><i class="bi bi-ship me-2"></i>@(op.NumeroBooking ?? "S/N")</span>
-                            </td>
-                            <td>
-                                <span class="estado-badge @(op.EstadoWorkflow == "Cerrado" || op.EstadoWorkflow == "Finalizado" || cerradaPorRetiro ? "badge-confirmado" : "badge-proceso")">
-                                    <i class="bi bi-circle-fill me-2" style="font-size: 6px;"></i> @(cerradaPorRetiro ? "Finalizado" : (op.EstadoWorkflow ?? "En Proceso"))
-                                </span>
-                                @if (pendienteRetiro)
-                                {
-                                    <span class="badge-retiro-pendiente d-block" style="width: fit-content;"><i class="bi bi-box-seam"></i> Retiro de contenedor pendiente</span>
-                                }
-                            </td>
-                            <td>
-                                <span class="fw-bold d-block text-dark">@(op.NumeroContenedor ?? "Por Asignar")</span>
-                                <span class="text-muted font-monospace" style="font-size: 10px;">Sello: @(op.NumeroSello ?? "Pte")</span>
-                            </td>
-                            <td>
-                                <span class="fw-bold">@(op.IdPuertoOrigenNavigation?.NombrePuerto ?? "S/N")</span>
-                                <br><span class="text-muted" style="font-size: 11px;"><i class="bi bi-arrow-return-right me-1"></i> @(op.IdPuertoDestinoNavigation?.NombrePuerto ?? "S/N")</span>
-                            </td>
-                            <td class="font-monospace text-muted">@(op.EtdPol?.ToString("yyyy-MM-dd") ?? "Pte")</td>
-                            <td class="font-monospace text-muted">@(op.EtaPod?.ToString("yyyy-MM-dd") ?? "Pte")</td>
-                            <td>
-                                <span class="fw-bold text-dark">@(op.Nave ?? "TBA")</span>
-                                <br><span class="badge bg-secondary bg-opacity-10 text-secondary mt-1">@(op.IdNavieraNavigation?.NombreNaviera ?? "TBA")</span>
-                                @if (!string.IsNullOrWhiteSpace(op.Transbordo))
-                                {
-                                    string clsTrans = estadoTransbordoCliente switch { "RESUELTO" => "resuelto", "VENCIDO" => "vencido", "CRITICO" => "critico", _ => "pendiente" };
-                                    string txtTrans = estadoTransbordoCliente == "RESUELTO"
-                                        ? $"Nueva nave: {op.GestionTransbordo?.NuevaNaveConfirmada ?? "-"}"
-                                        : $"En tránsito vía {op.Transbordo}";
-                                    <span class="badge-transbordo @clsTrans d-block" style="width: fit-content;"><i class="bi bi-arrow-left-right"></i> @txtTrans</span>
-                                }
-                            </td>
-                            <td class="text-end pe-4" onclick="event.stopPropagation();">
-                                @{ bool tieneRoleoPendiente = op.RoleosCancelaciones != null && op.RoleosCancelaciones.Any(r => r.SolicitadoPorCliente && !r.Atendido); }
-                                @if (tieneRoleoPendiente)
-                                {
-                                    <span class="badge bg-warning bg-opacity-10 text-warning border border-warning me-2" style="font-size:9px;" title="Tu solicitud está siendo revisada por nuestro equipo">
-                                        <i class="bi bi-hourglass-split me-1"></i> EN REVISIÓN
-                                    </span>
-                                }
-                                else if (!cerradaPorRetiro && op.EstadoWorkflow != "Cerrado" && op.EstadoWorkflow != "Finalizado" && op.EstadoWorkflow != "Cancelado")
-                                {
-                                    <button type="button" class="btn btn-sm btn-outline-warning fw-bold me-2" style="font-size:10px; border-radius:6px;" title="Solicitar Roleo o Cancelación" onclick="solicitarRoleoCliente(@op.Id, '@(op.NumeroBooking ?? "S/N")')">
-                                        <i class="bi bi-arrow-repeat"></i>
-                                    </button>
-                                }
-                                @if (!cerradaPorRetiro)
-                                {
-                                    <i class="bi bi-chevron-down text-muted transition-all" data-bs-toggle="collapse" data-bs-target="#detail-@op.Id" style="cursor:pointer;"></i>
-                                }
-                                else
-                                {
-                                    <span class="badge bg-success bg-opacity-10 text-success border border-success fw-bold" style="font-size: 10px; pointer-events: auto;"><i class="bi bi-check-circle-fill me-1"></i> VACÍO DEVUELTO</span>
-                                }
-                            </td>
-                        </tr>
-
-                        <tr class="collapse row-detail" id="detail-@op.Id">
-                            <td colspan="8" class="p-0 border-0">
-                                <div class="p-4 border-top" style="background-color: #fafbfc;">
-                                    <div class="row g-4">
-                                        <!-- Logística Terrestre -->
-                                        <div class="col-md-4">
-                                            <div class="detail-card">
-                                                <h6 class="fw-bolder mb-3 text-uppercase" style="font-size: 11px; color: var(--text-muted); letter-spacing: 1px;"><i class="bi bi-truck text-success me-2" style="font-size: 14px;"></i> Logística Terrestre</h6>
-                                                <div class="d-flex mb-3 align-items-center">
-                                                    <div class="bg-light rounded p-2 me-3 text-muted text-center" style="width: 35px;"><i class="bi bi-building"></i></div>
-                                                    <div>
-                                                        <span class="d-block text-muted" style="font-size: 9px; font-weight: 800; text-transform: uppercase;">Planta Carga</span>
-                                                        <span class="fw-bold text-dark fs-6">@(t?.PlantaCarga ?? "Sin registro")</span>
-                                                    </div>
-                                                </div>
-                                                <div class="d-flex mb-3 align-items-center">
-                                                    <div class="bg-light rounded p-2 me-3 text-muted text-center" style="width: 35px;"><i class="bi bi-calendar-check"></i></div>
-                                                    <div>
-                                                        <span class="d-block text-muted" style="font-size: 9px; font-weight: 800; text-transform: uppercase;">Presentación</span>
-                                                        <span class="fw-bold text-dark fs-6 font-monospace">@(t?.FechaCarga?.ToString("dd/MM/yyyy HH:mm") ?? "Pendiente")</span>
-                                                    </div>
-                                                </div>
-                                                <div class="d-flex align-items-center">
-                                                    <div class="bg-light rounded p-2 me-3 text-muted text-center" style="width: 35px;"><i class="bi bi-person-vcard"></i></div>
-                                                    <div>
-                                                        <span class="d-block text-muted" style="font-size: 9px; font-weight: 800; text-transform: uppercase;">Conductor / Patente</span>
-                                                        <span class="fw-bold text-dark fs-6">@(t?.NombreConductor ?? "Por Asignar")</span>
-                                                        <span class="d-block text-muted" style="font-size: 10px;">Pt: @(t?.Patente ?? "-")</span>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        <!-- Bóveda Documental -->
-                                        <div class="col-md-4">
-                                            <div class="detail-card">
-                                                <h6 class="fw-bolder mb-3 text-uppercase" style="font-size: 11px; color: var(--text-muted); letter-spacing: 1px;"><i class="bi bi-folder-check text-primary me-2" style="font-size: 14px;"></i> Bóveda Documental</h6>
-                                                <div class="d-flex flex-column gap-2">
-                                                    <div class="p-2 border rounded d-flex justify-content-between align-items-center" style="background: var(--bg-soft);">
-                                                        <div class="d-flex align-items-center">
-                                                            <i class="bi bi-file-earmark-pdf-fill text-danger fs-4 me-3"></i>
-                                                            <div>
-                                                                <span class="d-block fw-bold text-dark" style="font-size: 12px;">Bill of Lading (MBL)</span>
-                                                                @if (d?.EstadoDocumental == "BORRADOR ENVIADO")
-                                                                {
-                                                                    <span class="badge bg-warning text-dark" style="font-size: 9px;">REQUIERE REVISIÓN</span>
-                                                                }
-                                                                else if (d?.EstadoDocumental == "B/L APROBADO")
-                                                                {
-                                                                    <span class="badge bg-success text-white" style="font-size: 9px;">APROBADO</span>
-                                                                }
-                                                                else
-                                                                {
-                                                                    <span class="text-muted" style="font-size: 9px; font-weight: bold;">EN TRÁMITE</span>
-                                                                }
-                                                            </div>
-                                                        </div>
-                                                        @if (d?.EstadoDocumental == "BORRADOR ENVIADO")
-                                                        {
-                                                            <a href="/PortalCliente/AprobarBL/@op.Id" class="btn btn-sm btn-primary fw-bold" style="font-size: 10px;">REVISAR</a>
-                                                        }
-                                                    </div>
-                                                    @if (!string.IsNullOrEmpty(d?.RutaFullSet))
-                                                    {
-                                                        <div class="p-2 border rounded d-flex justify-content-between align-items-center" style="background: #fff;">
-                                                            <div class="d-flex align-items-center">
-                                                                <i class="bi bi-file-earmark-medical-fill text-success fs-4 me-3"></i>
-                                                                <div>
-                                                                    <span class="d-block fw-bold text-dark" style="font-size: 12px;">Full Set Documental</span>
-                                                                    <span class="text-muted fw-bold" style="font-size: 9px;">Listo para descarga</span>
-                                                                </div>
-                                                            </div>
-                                                            <a href="@d.RutaFullSet" target="_blank" class="btn btn-sm btn-light border"><i class="bi bi-download text-muted"></i></a>
-                                                        </div>
-                                                    }
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        <!-- Estado de Cuenta -->
-                                        <div class="col-md-4">
-                                            <div class="detail-card d-flex flex-column">
-                                                <h6 class="fw-bolder mb-3 text-uppercase" style="font-size: 11px; color: var(--text-muted); letter-spacing: 1px;"><i class="bi bi-receipt text-warning me-2" style="font-size: 14px;"></i> Estado de Cuenta</h6>
-                                                <div class="text-center my-auto">
-                                                    @{
-                                                        var facturas = op.TransaccionesFinancieras?.Where(tx => tx.TipoMovimiento == "INGRESO" && tx.EstadoFila == "FACTURADO" && tx.IdCliente == op.IdCliente).ToList();
-                                                    }
-                                                    @if (facturas != null && facturas.Any())
-                                                    {
-                                                        <i class="bi bi-check-circle-fill text-success" style="font-size: 2.5rem;"></i>
-                                                        <p class="text-dark fw-bold mt-2 mb-1" style="font-size: 13px;">Tiene @facturas.Count factura(s) emitida(s)</p>
-                                                        <p class="text-muted px-2" style="font-size: 11px;">Por un total de USD $@facturas.Where(tx => tx.Moneda == "USD").Sum(tx => tx.MontoNeto).ToString("N2")</p>
-                                                        <a href="/PortalCliente/Facturas" class="btn btn-dark w-100 fw-bold mt-3" style="font-size: 11px;"><i class="bi bi-receipt-cutoff me-2"></i> Ir al Módulo de Pagos</a>
-                                                    }
-                                                    else
-                                                    {
-                                                        <i class="bi bi-shield-lock-fill text-muted opacity-25" style="font-size: 2.5rem;"></i>
-                                                        <p class="text-muted fw-bold mt-2 mb-1" style="font-size: 13px;">Cobros Protegidos</p>
-                                                        <p class="text-muted px-2" style="font-size: 11px;">La liquidación financiera y facturas se emitirán automáticamente al cierre de la operación.</p>
-                                                    }
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </td>
-                        </tr>
-                    }
+                    int dias = (int)Math.Ceiling((proximo.Eta!.Value - ahora).TotalDays);
+                    int pctProx = ProgresoViaje(proximo.Etd, proximo.Eta, ahora);
+                    <div class="pc-glass-head">
+                        <span class="pc-eyebrow">Próximo arribo</span>
+                        <span class="pc-glass-bkg mono">@(proximo.Op.NumeroBooking ?? "S/N")</span>
+                    </div>
+                    <div class="pc-countdown">
+                        @if (dias <= 0)
+                        {
+                            <b>Hoy</b>
+                        }
+                        else
+                        {
+                            <b>@dias</b><span>@(dias == 1 ? "día restante" : "días restantes")</span>
+                        }
+                    </div>
+                    <div class="pc-glass-route">
+                        <span class="t" title="@(proximo.Op.IdPuertoOrigenNavigation?.NombrePuerto)">@(proximo.Op.IdPuertoOrigenNavigation?.NombrePuerto ?? "Origen")</span>
+                        <i class="bi bi-arrow-right"></i>
+                        <span class="t" title="@(proximo.Op.IdPuertoDestinoNavigation?.NombrePuerto)">@(proximo.Op.IdPuertoDestinoNavigation?.NombrePuerto ?? "Destino")</span>
+                    </div>
+                    <div class="pc-glass-bar"><div style="width: @pctProx%"></div></div>
+                    <div class="pc-glass-foot">
+                        <span>@(proximo.Op.Nave ?? "Nave por confirmar")</span>
+                        <span class="mono">ETA @proximo.Eta.Value.ToString("dd MMM yyyy", es)</span>
+                    </div>
                 }
                 else
                 {
-                    <tr>
-                        <td colspan="8" class="text-center py-5">
-                            <i class="bi bi-inbox text-muted opacity-25" style="font-size: 3rem;"></i>
-                            <h6 class="mt-3 fw-bold text-muted">Aún no tienes operaciones activas</h6>
-                            <p class="text-muted small">Haz clic en "Solicitar Cotización" para empezar a importar o exportar.</p>
-                        </td>
-                    </tr>
+                    <div class="pc-glass-empty">
+                        <i class="bi bi-compass"></i>
+                        Sin arribos programados por ahora.<br>
+                        <span style="font-size:12px; color:#a99fc4;">Cuando tengas embarques en tránsito verás aquí su cuenta regresiva.</span>
+                    </div>
                 }
-            </tbody>
-        </table>
-    </div>
-</div>
-
-<!-- 4. NUEVO CARRUSEL VISUAL: RUTAS Y SERVICIOS -->
-<section class="visual-slider-section reveal">
-    <div class="d-flex justify-content-between align-items-end mb-3">
-        <div>
-            <span class="section-tag-light">Explora</span>
-            <h3 class="section-title-light mb-0">Rutas Destacadas & Servicios</h3>
-        </div>
-        <div class="d-none d-md-block">
-            <a href="/PortalCliente/SolicitarReserva" class="btn btn-outline-light btn-sm rounded-pill px-4 py-2" style="font-size: 11px; font-weight: 800; letter-spacing: 1px;">COTIZAR NUEVA RUTA <i class="bi bi-arrow-right ms-1"></i></a>
-        </div>
-    </div>
-
-    <div class="visual-slider-wrapper">
-        <div class="visual-slider-track">
-            <div class="visual-card">
-                <img src="https://images.unsplash.com/photo-1541628951107-a5585090ce84?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80" alt="Asia" class="visual-card-img">
-                <div class="visual-card-overlay">
-                    <span class="vc-badge">Importación</span>
-                    <h4 class="vc-title">Ruta Asia Pacífico</h4>
-                    <p class="vc-desc">Desde Shanghai, Ningbo, Yantian. <i class="bi bi-arrow-right-circle-fill vc-icon"></i></p>
-                </div>
-            </div>
-            <div class="visual-card">
-                <img src="https://images.unsplash.com/photo-1605810230434-7631ac76ec81?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80" alt="Europa" class="visual-card-img">
-                <div class="visual-card-overlay">
-                    <span class="vc-badge bg-info text-dark">Exportación</span>
-                    <h4 class="vc-title">Conexión Europea</h4>
-                    <p class="vc-desc">Rotterdam, Amberes, Hamburgo. <i class="bi bi-arrow-right-circle-fill vc-icon"></i></p>
-                </div>
-            </div>
-            <div class="visual-card">
-                <img src="https://images.unsplash.com/photo-1494412519320-ce328188c002?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80" alt="Reefer" class="visual-card-img">
-                <div class="visual-card-overlay">
-                    <span class="vc-badge bg-success">Servicio Especial</span>
-                    <h4 class="vc-title">Carga Refrigerada</h4>
-                    <p class="vc-desc">Control térmico para perecederos. <i class="bi bi-arrow-right-circle-fill vc-icon"></i></p>
-                </div>
-            </div>
-            <div class="visual-card">
-                <img src="https://images.unsplash.com/photo-1454165804606-c3d57bc86b40?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80" alt="Aduanas" class="visual-card-img">
-                <div class="visual-card-overlay">
-                    <span class="vc-badge bg-danger">Servicio Especial</span>
-                    <h4 class="vc-title">Gestión Aduanera</h4>
-                    <p class="vc-desc">Tramitación ágil y sin demoras. <i class="bi bi-arrow-right-circle-fill vc-icon"></i></p>
-                </div>
             </div>
         </div>
-    </div>
-</section>
+    </section>
 
-<!-- 5. ACCESOS RÁPIDOS Y CONTACTO -->
-<section class="dashboard-contact reveal px-3 pb-5">
-    <div class="row g-4">
-        <!-- Accesos Rápidos -->
-        <div class="col-lg-5">
-            <div class="quick-card">
-                <h5 class="fw-bolder text-dark mb-4"><i class="bi bi-lightning-charge-fill text-warning me-2"></i> Accesos Rápidos</h5>
-                <ul class="quick-list">
-                    <li>
-                        <a href="/PortalCliente/Documentos" class="quick-item">
-                            <i class="bi bi-file-earmark-arrow-down-fill quick-icon"></i>
-                            <div>
-                                <span class="quick-text-main">Descargar Matriz en Blanco</span>
-                                <span class="quick-text-sub">Formato Excel para llenado masivo</span>
-                            </div>
-                        </a>
-                    </li>
-                    <li>
-                        <a href="/PortalCliente/Facturas" class="quick-item">
-                            <i class="bi bi-receipt-cutoff quick-icon"></i>
-                            <div>
-                                <span class="quick-text-main">Últimas Facturas Emitidas</span>
-                                <span class="quick-text-sub">Revise sus saldos del mes actual</span>
-                            </div>
-                        </a>
-                    </li>
-                    <li>
-                        <!-- AQUI ESTÁ LA MAGIA: Al hacer clic, levanta el Modal de Itinerarios -->
-                        <a href="#" class="quick-item" data-bs-toggle="modal" data-bs-target="#modalItinerarios">
-                            <i class="bi bi-calendar2-check-fill quick-icon"></i>
-                            <div>
-                                <span class="quick-text-main">Itinerarios Semanales</span>
-                                <span class="quick-text-sub">Consulte fechas de corte y salidas en tiempo real</span>
-                            </div>
-                        </a>
-                    </li>
-                </ul>
+    <!-- =====================================================
+         2. KPIs
+         ===================================================== -->
+    <section class="pc-kpis pc-reveal">
+        <div class="pc-kpi" style="--k:#6d2d9e;">
+            <div class="pc-kpi-top">
+                <div class="pc-kpi-ico">@Html.Raw(shipSvg)</div>
+                @if (Model.CargasActivas > 0)
+                {
+                    <span class="pc-trend ok">En tránsito</span>
+                }
+            </div>
+            <div class="pc-kpi-label">Embarques activos</div>
+            <div class="pc-kpi-value" data-count="@Model.CargasActivas">@Model.CargasActivas</div>
+            <div class="pc-meter"><div data-w="@pctActivos"></div></div>
+            <div class="pc-kpi-foot">@pctActivos% de tus operaciones</div>
+        </div>
+
+        <div class="pc-kpi" style="--k:#059669;">
+            <div class="pc-kpi-top">
+                <div class="pc-kpi-ico"><i class="bi bi-patch-check"></i></div>
+            </div>
+            <div class="pc-kpi-label">Completados (histórico)</div>
+            <div class="pc-kpi-value" data-count="@Model.EmbarquesFinalizados">@Model.EmbarquesFinalizados</div>
+            <div class="pc-meter"><div data-w="@pctFin"></div></div>
+            <div class="pc-kpi-foot">Entregas finalizadas con éxito</div>
+        </div>
+
+        <div class="pc-kpi" style="--k:#ea580c;">
+            <div class="pc-kpi-top">
+                <div class="pc-kpi-ico"><i class="bi bi-file-earmark-check"></i></div>
+                @if (Model.AccionesRequeridas > 0)
+                {
+                    <span class="pc-trend warn">Pendiente</span>
+                }
+            </div>
+            <div class="pc-kpi-label">Acción requerida</div>
+            <div class="pc-kpi-value" data-count="@Model.AccionesRequeridas">@Model.AccionesRequeridas</div>
+            <div class="pc-kpi-foot">
+                @if (Model.AccionesRequeridas > 0)
+                {
+                    <a href="/PortalCliente/Operaciones?vista=accion">Revisar ahora <i class="bi bi-arrow-right"></i></a>
+                }
+                else
+                {
+                    <i class="bi bi-check2-circle text-success"></i> <span>Todo al día</span>
+                }
             </div>
         </div>
 
-        <!-- Formulario de Ticket -->
-        <div class="col-lg-7">
-            <div class="contact-card">
-                <div class="d-flex justify-content-between align-items-center mb-4">
-                    <h5 class="fw-bolder text-dark m-0"><i class="bi bi-headset text-primary me-2"></i> Soporte Operativo</h5>
-                    <span class="badge bg-success bg-opacity-10 text-success border border-success"><i class="bi bi-circle-fill me-1" style="font-size: 6px;"></i> Ejecutivos en línea</span>
-                </div>
-                <p class="text-muted mb-4" style="font-size: 13px;">¿Consultas sobre un embarque en curso? Envíe un ticket directo a nuestro equipo.</p>
-                <form>
-                    <div class="row g-3">
-                        <div class="col-md-6"><input type="text" class="form-control form-control-custom" placeholder="N° de Booking o Referencia"></div>
-                        <div class="col-md-6">
-                            <select class="form-control form-control-custom text-muted">
-                                <option>Tipo de Consulta...</option>
-                                <option>Retraso Terrestre</option>
-                                <option>Corrección Documental</option>
-                                <option>Duda de Facturación</option>
+        <div class="pc-kpi" style="--k:#2563eb;">
+            <div class="pc-kpi-top">
+                <div class="pc-kpi-ico"><i class="bi bi-wallet2"></i></div>
+            </div>
+            <div class="pc-kpi-label">Saldo pendiente</div>
+            <div class="pc-kpi-value">$<span data-count="@Model.SaldoPendienteTotal.ToString("0", CultureInfo.InvariantCulture)">@Model.SaldoPendienteTotal.ToString("N0", es)</span><small>USD</small></div>
+            <div class="pc-kpi-foot">
+                <a href="/PortalCliente/Facturas">Ver estado de cuenta <i class="bi bi-arrow-right"></i></a>
+            </div>
+        </div>
+    </section>
+
+    <!-- =====================================================
+         3. ALERTA DE ACCIÓN REQUERIDA
+         ===================================================== -->
+    @if (nAccion > 0)
+    {
+        <section class="pc-alert pc-reveal">
+            <div class="pc-alert-ico"><i class="bi bi-bell-fill"></i></div>
+            <div class="pc-alert-txt">
+                <b>Necesitamos tu confirmación</b>
+                <span>Hay documentos esperando tu revisión para continuar el trámite sin demoras.</span>
+            </div>
+            <div class="pc-alert-items">
+                @foreach (var op in ops.Where(o => tokens[o.Id].Contains("accion")))
+                {
+                    if (BlPorAprobar(op))
+                    {
+                        <a href="/PortalCliente/AprobarBL/@op.Id" class="pc-alert-chip"><i class="bi bi-file-earmark-text"></i> <span class="mono">@(op.NumeroBooking ?? "S/N")</span> · Revisar B/L</a>
+                    }
+                    else
+                    {
+                        <a href="/PortalCliente/Operaciones?abrir=@op.Id" class="pc-alert-chip"><i class="bi bi-clipboard2-pulse"></i> <span class="mono">@(op.NumeroBooking ?? "S/N")</span> · Ver detalle</a>
+                    }
+                }
+            </div>
+        </section>
+    }
+
+    <!-- =====================================================
+         4. EN CURSO (resumen; la lista completa está en Mis operaciones)
+         ===================================================== -->
+    @{
+        var enCurso = ops
+            .Where(o => tokens[o.Id].Contains("curso"))
+            .Select(o => new { Op = o, Etd = AFecha(o.EtdPol), Eta = AFecha(o.EtaPod) })
+            .OrderBy(x => x.Eta.HasValue ? 0 : 1).ThenBy(x => x.Eta).ThenByDescending(x => x.Op.Id)
+            .Take(5)
+            .ToList();
+    }
+    <section class="pc-reveal pc-resumen" id="pcEnCurso">
+        <div class="pc-section-head">
+            <div>
+                <span class="pc-eyebrow">Resumen</span>
+                <h2 class="pc-section-title">Embarques en curso <span class="count">@nCurso</span></h2>
+            </div>
+            <a href="/PortalCliente/Operaciones" class="pc-btn pc-btn-dark pc-resumen-all">Ver todas mis operaciones <i class="bi bi-arrow-right"></i></a>
+        </div>
+
+        @if (enCurso.Any())
+        {
+            <div class="pc-resumen-list">
+                @foreach (var x in enCurso)
+                {
+                    var op = x.Op;
+                    int pctR = ProgresoViaje(x.Etd, x.Eta, ahora);
+                    bool accionR = tokens[op.Id].Contains("accion");
+                    <a class="pc-resumen-row" href="/PortalCliente/Operaciones?abrir=@op.Id">
+                        <span class="pc-resumen-bkg mono">@(op.NumeroBooking ?? "Sin booking")</span>
+                        <span class="pc-resumen-ruta">
+                            <span class="t">@(op.IdPuertoOrigenNavigation?.NombrePuerto ?? "Por definir")</span>
+                            <i class="bi bi-arrow-right"></i>
+                            <span class="t">@(op.IdPuertoDestinoNavigation?.NombrePuerto ?? "Por definir")</span>
+                        </span>
+                        <span class="pc-resumen-estado">
+                            @(op.EstadoWorkflow ?? "En proceso")
+                            @if (accionR)
+                            {
+                                <span class="pc-resumen-accion">Por revisar</span>
+                            }
+                        </span>
+                        <span class="pc-resumen-eta mono">@(x.Eta.HasValue ? "ETA " + x.Eta.Value.ToString("dd MMM", es) : "ETA por confirmar")</span>
+                        <span class="pc-resumen-bar" aria-hidden="true"><span data-w="@pctR"></span></span>
+                        <i class="bi bi-chevron-right pc-resumen-go" aria-hidden="true"></i>
+                    </a>
+                }
+            </div>
+            @if (nCurso > enCurso.Count)
+            {
+                <p class="pc-resumen-mas">Y @(nCurso - enCurso.Count) más en <a href="/PortalCliente/Operaciones?vista=curso">Mis operaciones</a>.</p>
+            }
+        }
+        else
+        {
+            <div class="pc-empty">
+                <div class="pc-empty-ico"><i class="bi bi-inboxes"></i></div>
+                @if (nTodas == 0)
+                {
+                    <h5>Aún no tienes operaciones</h5>
+                    <p>Solicita tu primera cotización y empieza a importar o exportar con nosotros.</p>
+                    <a href="/PortalCliente/SolicitarCotizacion" class="pc-btn pc-btn-grad" style="width:auto; display:inline-flex;"><i class="bi bi-plus-lg"></i> Solicitar cotización</a>
+                }
+                else
+                {
+                    <h5>No tienes embarques en curso</h5>
+                    <p>Tu historial completo está en Mis operaciones.</p>
+                    <a href="/PortalCliente/Operaciones?vista=finalizada" class="pc-btn pc-btn-dark" style="width:auto; display:inline-flex;"><i class="bi bi-clock-history"></i> Ver historial</a>
+                }
+            </div>
+        }
+    </section>
+
+
+    <!-- =====================================================
+         5. RUTAS & SERVICIOS
+         ===================================================== -->
+    <section class="pc-routes pc-reveal">
+        <div class="pc-routes-head">
+            <div>
+                <span class="pc-eyebrow">Explora</span>
+                <h3>Rutas destacadas &amp; servicios</h3>
+            </div>
+            <div class="pc-arrows">
+                <button type="button" class="pc-arrow" data-slide="prev" aria-label="Anterior"><i class="bi bi-arrow-left"></i></button>
+                <button type="button" class="pc-arrow" data-slide="next" aria-label="Siguiente"><i class="bi bi-arrow-right"></i></button>
+            </div>
+        </div>
+
+        <div class="pc-slider" id="pcSlider">
+            <div class="pc-slider-track">
+                <a href="/PortalCliente/SolicitarCotizacion" class="pc-vcard">
+                    <div class="pc-vcard-arte" style="--a:#3d2a8c;--b:#140c26"><svg class="pc-arte-ruta" viewBox="0 0 290 200" aria-hidden="true"><path d="M60 120 C 110 20, 190 10, 232 70" /><circle cx="60" cy="120" r="6"/><circle cx="232" cy="70" r="6"/><text x="60" y="146" text-anchor="middle">CL SAI</text><text x="232" y="96" text-anchor="middle">CN SHA</text></svg><i class="bi bi-globe-asia-australia"></i></div>
+                    <div class="pc-vcard-ov">
+                        <span class="pc-vcard-badge">Importación</span>
+                        <h4>Ruta Asia Pacífico</h4>
+                        <p>Shanghai, Ningbo, Yantian. <i class="bi bi-arrow-up-right"></i></p>
+                    </div>
+                </a>
+                <a href="/PortalCliente/SolicitarCotizacion" class="pc-vcard">
+                    <div class="pc-vcard-arte" style="--a:#443094;--b:#1a1139"><svg class="pc-arte-ruta" viewBox="0 0 290 200" aria-hidden="true"><path d="M70 140 C 90 60, 160 30, 220 60" /><circle cx="70" cy="140" r="6"/><circle cx="220" cy="60" r="6"/><text x="70" y="166" text-anchor="middle">CL VAP</text><text x="220" y="86" text-anchor="middle">NL RTM</text></svg><i class="bi bi-globe-europe-africa"></i></div>
+                    <div class="pc-vcard-ov">
+                        <span class="pc-vcard-badge">Exportación</span>
+                        <h4>Conexión Europea</h4>
+                        <p>Rotterdam, Amberes, Hamburgo. <i class="bi bi-arrow-up-right"></i></p>
+                    </div>
+                </a>
+                <a href="/PortalCliente/SolicitarCotizacion" class="pc-vcard">
+                    <div class="pc-vcard-arte pc-vcard-arte--icono" style="--a:#2b4c9a;--b:#120d2b"><i class="bi bi-snow2"></i></div>
+                    <div class="pc-vcard-ov">
+                        <span class="pc-vcard-badge">Servicio especial</span>
+                        <h4>Carga refrigerada</h4>
+                        <p>Control térmico para perecederos. <i class="bi bi-arrow-up-right"></i></p>
+                    </div>
+                </a>
+                <a href="/PortalCliente/SolicitarCotizacion" class="pc-vcard">
+                    <div class="pc-vcard-arte pc-vcard-arte--icono" style="--a:#5b2d8c;--b:#160e2f"><i class="bi bi-file-earmark-check"></i></div>
+                    <div class="pc-vcard-ov">
+                        <span class="pc-vcard-badge">Servicio especial</span>
+                        <h4>Gestión aduanera</h4>
+                        <p>Tramitación ágil y sin demoras. <i class="bi bi-arrow-up-right"></i></p>
+                    </div>
+                </a>
+                <a href="/PortalCliente/SolicitarCotizacion" class="pc-vcard-cta">
+                    <i class="bi bi-globe-americas"></i>
+                    <b>¿Otra ruta en mente?</b>
+                    <span>Cotiza cualquier origen y destino. Respondemos en menos de 24 h.</span>
+                </a>
+            </div>
+        </div>
+    </section>
+
+    <!-- =====================================================
+         6. ACCESOS RÁPIDOS + SOPORTE
+         ===================================================== -->
+    <section class="pc-bottom pc-reveal">
+        <div class="pc-panel">
+            <h5 class="pc-panel-title"><i class="bi bi-lightning-charge-fill" style="background:#fffbeb; color:#d97706;"></i> Accesos rápidos</h5>
+            <ul class="pc-quick">
+                <li>
+                    <a href="/PortalCliente/Documentos">
+                        <span class="pc-quick-ico" style="background:#ecfdf5; color:#059669;"><i class="bi bi-file-earmark-spreadsheet"></i></span>
+                        <span>
+                            <span class="pc-quick-main">Descargar matriz en blanco</span>
+                            <span class="pc-quick-sub">Formato Excel para llenado masivo</span>
+                        </span>
+                        <i class="bi bi-chevron-right go"></i>
+                    </a>
+                </li>
+                <li>
+                    <a href="/PortalCliente/Facturas">
+                        <span class="pc-quick-ico" style="background:#eff6ff; color:#2563eb;"><i class="bi bi-receipt-cutoff"></i></span>
+                        <span>
+                            <span class="pc-quick-main">Últimas facturas emitidas</span>
+                            <span class="pc-quick-sub">Revisa tus saldos del mes actual</span>
+                        </span>
+                        <i class="bi bi-chevron-right go"></i>
+                    </a>
+                </li>
+                <li>
+                    <a href="/PortalCliente/Itinerarios">
+                        <span class="pc-quick-ico" style="background:#f5f0ff; color:#6d2d9e;"><i class="bi bi-calendar2-week"></i></span>
+                        <span>
+                            <span class="pc-quick-main">Itinerarios semanales</span>
+                            <span class="pc-quick-sub">Fechas de corte y salidas disponibles</span>
+                        </span>
+                        <i class="bi bi-chevron-right go"></i>
+                    </a>
+                </li>
+            </ul>
+        </div>
+
+        <div class="pc-panel">
+            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                <h5 class="pc-panel-title"><i class="bi bi-headset" style="background:#eff6ff; color:#2563eb;"></i> Soporte operativo</h5>
+                <a href="/PortalCliente/Soporte" class="pc-soporte-link">Ver mis consultas <i class="bi bi-arrow-right"></i></a>
+            </div>
+            <p class="mt-3 mb-4" style="font-size: 13.5px; color: var(--pc-muted);">¿Consultas sobre un embarque en curso? Escríbenos y te respondemos aquí y a tu correo.</p>
+            <form method="post" asp-page="/PortalCliente/Soporte" asp-page-handler="Crear">
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <div class="pc-field">
+                            <label for="pcSopRef">Booking o referencia</label>
+                            <input type="text" id="pcSopRef" name="Referencia" class="pc-input mono" maxlength="60" list="pcSopBookings" placeholder="Ej: @(ops.FirstOrDefault()?.NumeroBooking ?? "BK123456")" autocomplete="off">
+                            <datalist id="pcSopBookings">@foreach (var o in ops.Take(40)) { <option value="@o.NumeroBooking"></option> }</datalist>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="pc-field">
+                            <label for="pcSopTipo">Tipo de consulta</label>
+                            <select id="pcSopTipo" name="Tipo" class="pc-input" required>
+                                <option value="">Selecciona...</option>
+                                @foreach (var t in AtilsonCargoSpa.Models.TicketSoporte.Tipos) { <option value="@t">@t</option> }
                             </select>
                         </div>
-                        <div class="col-12"><textarea class="form-control form-control-custom" rows="3" placeholder="Detalle su requerimiento..."></textarea></div>
-                        <div class="col-12 mt-3">
-                            <button type="button" class="btn-submit">Enviar Ticket de Soporte <i class="bi bi-send ms-2"></i></button>
+                    </div>
+                    <div class="col-12">
+                        <div class="pc-field">
+                            <label for="pcSopDetalle">Detalle</label>
+                            <textarea id="pcSopDetalle" name="Detalle" class="pc-input" rows="3" maxlength="2000" required placeholder="Cuéntanos qué necesitas..."></textarea>
                         </div>
                     </div>
-                </form>
-            </div>
+                    <div class="col-12 mt-3">
+                        <button type="submit" class="pc-btn pc-btn-grad">Enviar consulta <i class="bi bi-send"></i></button>
+                    </div>
+                </div>
+            </form>
         </div>
-    </div>
-</section>
-
-<!-- MODAL DE ITINERARIOS (LA CORTINA DE PROTECCIÓN DE PRECIOS) -->
-<div class="modal fade" id="modalItinerarios" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-lg modal-dialog-centered">
-        <div class="modal-content border-0 shadow-lg" style="border-radius: 16px; overflow: hidden;">
-            <div class="modal-header bg-dark text-white border-0 p-4">
-                <div>
-                    <h5 class="modal-title fw-bolder mb-1"><i class="bi bi-search me-2 text-warning"></i> Buscador de Itinerarios Marítimos</h5>
-                    <p class="text-white text-opacity-75 mb-0" style="font-size: 12px;">Consulte la disponibilidad de naves y conexiones globales en tiempo real.</p>
-                </div>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <div class="modal-body p-4" style="background: var(--bg-body);">
-                <div class="row g-3 mb-4">
-                    <div class="col-md-5">
-                        <label class="fw-bold text-muted mb-2" style="font-size: 11px; text-transform: uppercase;">Puerto Origen (POL)</label>
-                        <select id="itPOL" class="form-select form-control-custom">
-                            <option value="San Antonio, Chile">San Antonio, Chile</option>
-                            <option value="Valparaiso, Chile">Valparaíso, Chile</option>
-                            <option value="Shanghai, China">Shanghai, China</option>
-                        </select>
-                    </div>
-                    <div class="col-md-5">
-                        <label class="fw-bold text-muted mb-2" style="font-size: 11px; text-transform: uppercase;">Puerto Destino (POD)</label>
-                        <select id="itPOD" class="form-select form-control-custom">
-                            <option value="Miami, USA">Miami, USA</option>
-                            <option value="Callao, Peru">Callao, Perú</option>
-                            <option value="Rotterdam, NL">Rotterdam, Países Bajos</option>
-                        </select>
-                    </div>
-                    <div class="col-md-2 d-flex align-items-end">
-                        <button type="button" class="btn btn-primary w-100 fw-bold" onclick="buscarItinerarios()" style="padding: 11px; border-radius: 8px;">Buscar</button>
-                    </div>
-                </div>
-
-                <div id="resultadoItinerarios" style="display: none;">
-                    <h6 class="fw-bold text-dark mb-3" style="font-size: 13px;">Opciones de Navegación Disponibles:</h6>
-                    <div class="list-group">
-                        <!-- Naviera 1 -->
-                        <div class="list-group-item list-group-item-action d-flex justify-content-between align-items-center p-3 mb-2 border rounded shadow-sm">
-                            <div>
-                                <span class="badge bg-primary bg-opacity-10 text-primary border border-primary mb-1">MSC</span>
-                                <h6 class="fw-bold mb-0 text-dark">MSC FLAVIA v.432N</h6>
-                                <small class="text-muted d-block mt-1"><i class="bi bi-geo-alt"></i> POL: San Antonio <i class="bi bi-arrow-right mx-1"></i> POD: Callao</small>
-                                <small class="text-dark fw-bold"><i class="bi bi-calendar-event text-warning me-1"></i> ETD: 15/Nov/2026</small>
-                            </div>
-                            <!-- REDIRECCIÓN CON DATOS -->
-                            <button class="btn btn-sm btn-dark fw-bold px-3 py-2" onclick="cotizarRuta('San Antonio, Chile', 'Callao, Peru')">
-                                Solicitar Tarifa <i class="bi bi-chevron-right ms-1"></i>
-                            </button>
-                        </div>
-                        <!-- Naviera 2 -->
-                        <div class="list-group-item list-group-item-action d-flex justify-content-between align-items-center p-3 border rounded shadow-sm">
-                            <div>
-                                <span class="badge bg-danger bg-opacity-10 text-danger border border-danger mb-1">Hapag-Lloyd</span>
-                                <h6 class="fw-bold mb-0 text-dark">CORCOVADO v.22S</h6>
-                                <small class="text-muted d-block mt-1"><i class="bi bi-geo-alt"></i> POL: San Antonio <i class="bi bi-arrow-right mx-1"></i> POD: Callao</small>
-                                <small class="text-dark fw-bold"><i class="bi bi-calendar-event text-warning me-1"></i> ETD: 22/Nov/2026</small>
-                            </div>
-                            <button class="btn btn-sm btn-dark fw-bold px-3 py-2" onclick="cotizarRuta('San Antonio, Chile', 'Callao, Peru')">
-                                Solicitar Tarifa <i class="bi bi-chevron-right ms-1"></i>
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
+    </section>
 </div>
 
-<!-- SCRIPTS DE ANIMACIÓN Y MODAL -->
 @section Scripts {
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 
-        <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script>
-        function solicitarRoleoCliente(idOp, booking) {
-            Swal.fire({
-                title: 'Solicitar Roleo / Cancelación',
-                html: `
-                    <div style="text-align:left; font-size:13px;">
-                        <p class="text-muted" style="font-size:12px; margin-bottom:14px;">Booking: <strong>${booking}</strong></p>
-                        <label style="font-size:10px; font-weight:800; color:#94a3b8; text-transform:uppercase; display:block; margin-bottom:6px;">Tipo de Solicitud</label>
-                        <select id="swal-cli-tipo" class="swal2-select" style="margin:0 0 14px; width:100%; font-weight:700;">
-                            <option value="ROLEO">Roleo (Postergar embarque)</option>
-                            <option value="CANCELACION_NOSHOW">Cancelación / No Show</option>
-                        </select>
-                        <label style="font-size:10px; font-weight:800; color:#94a3b8; text-transform:uppercase; display:block; margin-bottom:6px;">Motivo de la solicitud</label>
-                        <textarea id="swal-cli-comentario" class="swal2-textarea" style="margin:0; width:100%; font-size:12px; height:80px;" placeholder="Cuéntanos el motivo..."></textarea>
-                    </div>`,
-                showCancelButton: true,
-                confirmButtonText: 'Enviar Solicitud',
-                confirmButtonColor: '#1e1b4b',
-                cancelButtonText: 'Cancelar',
-                preConfirm: () => {
-                    const comentario = document.getElementById('swal-cli-comentario').value.trim();
-                    if (!comentario) { Swal.showValidationMessage('Por favor indica el motivo.'); return false; }
-                    return { tipo: document.getElementById('swal-cli-tipo').value, comentario };
-                }
-            }).then((result) => {
-                if (!result.isConfirmed) return;
-                const token = document.querySelector('#antiForgeryFormCliente input[name="__RequestVerificationToken"]').value;
-                const formData = new FormData();
-                formData.append('idOperacion', idOp);
-                formData.append('tipo', result.value.tipo);
-                formData.append('comentario', result.value.comentario);
+        document.addEventListener('DOMContentLoaded', function () {
+            const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-                fetch('?handler=SolicitarRoleo', { method: 'POST', headers: { 'RequestVerificationToken': token }, body: formData })
-                .then(res => res.json()).then(data => {
-                    if (data.success) {
-                        Swal.fire({ icon: 'success', title: 'Solicitud Enviada', text: 'Nuestro equipo de Operaciones fue notificado y te contactará a la brevedad.', confirmButtonColor: '#1e1b4b' });
-                    } else {
-                        Swal.fire('Error', data.message || 'No se pudo enviar la solicitud.', 'error');
-                    }
-                }).catch(() => Swal.fire('Error', 'Fallo de conexión.', 'error'));
+            // ===== Reveal on scroll =====
+            const reveals = document.querySelectorAll('.pc-reveal');
+            if ('IntersectionObserver' in window && !reduce) {
+                const io = new IntersectionObserver((entries) => {
+                    entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); } });
+                }, { threshold: 0.08, rootMargin: '0px 0px -40px 0px' });
+                reveals.forEach(el => io.observe(el));
+            } else {
+                reveals.forEach(el => el.classList.add('in'));
+            }
+
+            // ===== Count-up KPIs =====
+            document.querySelectorAll('[data-count]').forEach(el => {
+                const target = parseFloat(el.dataset.count) || 0;
+                if (reduce || target === 0) return;
+                const dur = 1200, t0 = performance.now();
+                const step = (now) => {
+                    const p = Math.min((now - t0) / dur, 1);
+                    const eased = 1 - Math.pow(1 - p, 3);
+                    el.textContent = Math.round(target * eased).toLocaleString('es-CL');
+                    if (p < 1) requestAnimationFrame(step);
+                };
+                requestAnimationFrame(step);
             });
-        }
+
+            // ===== Barras y barcos (animación de entrada) =====
+            requestAnimationFrame(() => setTimeout(() => {
+                document.querySelectorAll('[data-w]').forEach(el => el.style.width = el.dataset.w + '%');
+                document.querySelectorAll('[data-left]').forEach(el => el.style.left = el.dataset.left + '%');
+            }, 150));
+
+            // ===== Slider de rutas =====
+            const slider = document.getElementById('pcSlider');
+            document.querySelectorAll('[data-slide]').forEach(b => b.addEventListener('click', () => {
+                slider.scrollBy({ left: (b.dataset.slide === 'next' ? 1 : -1) * 308, behavior: 'smooth' });
+            }));
+        });
     </script>
+
     @if (TempData["BLResultado"] != null)
     {
-        <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
         <script>
             document.addEventListener("DOMContentLoaded", function () {
                 Swal.fire({
-                    title: '@Html.Raw(TempData["BLResultado"]?.ToString() == "aprobado" ? "¡Borrador Aprobado!" : "Cambios Registrados")',
+                    title: '@Html.Raw(TempData["BLResultado"]?.ToString() == "aprobado" ? "¡Borrador aprobado!" : "Cambios registrados")',
                     text: '@Html.Raw(TempData["BLResultado"]?.ToString() == "aprobado" ? "Hemos notificado a nuestro equipo. Continuaremos con el trámite." : "Hemos registrado tus comentarios. Nuestro equipo revisará el borrador.")',
                     icon: '@(TempData["BLResultado"]?.ToString() == "aprobado" ? "success" : "info")',
-                    confirmButtonColor: '#0f172a'
+                    confirmButtonColor: '#2c1b4d'
                 });
             });
         </script>
     }
-    <script>
-        document.addEventListener("DOMContentLoaded", function() {
-            // Animaciones Reveal (Scroll)
-            function reveal() {
-                var reveals = document.querySelectorAll(".reveal");
-                for (var i = 0; i < reveals.length; i++) {
-                    var windowHeight = window.innerHeight;
-                    var elementTop = reveals[i].getBoundingClientRect().top;
-                    if (elementTop < windowHeight - 50) {
-                        reveals[i].classList.add("active");
-                    }
-                }
-            }
-            window.addEventListener("scroll", reveal);
-            reveal(); // Llamada inicial
-        });
-
-        // Simulación de búsqueda de Itinerarios (Sin mostrar precios de costos)
-        function buscarItinerarios() {
-            // En la vida real aquí haríamos un fetch() a la API de SeaRoutes/Vizion
-            document.getElementById('resultadoItinerarios').style.display = 'block';
-        }
-
-        // Redirección al cotizador autocompletando la ruta
-        function cotizarRuta(origen, destino) {
-            let baseUrl = '/PortalCliente/SolicitarReserva';
-            window.location.href = `${baseUrl}?origenQ=${encodeURIComponent(origen)}&destinoQ=${encodeURIComponent(destino)}`;
-        }
-    </script>
 }

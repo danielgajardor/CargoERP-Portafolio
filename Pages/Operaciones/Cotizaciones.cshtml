@@ -1,0 +1,356 @@
+@page
+@model AtilsonCargoSpa.Pages.Operaciones.CotizacionesModel
+@using AtilsonCargoSpa.Models
+@using AtilsonCargoSpa.Pages.Operaciones
+@using AtilsonCargoSpa.Pages.PortalCliente
+@{
+    ViewData["Title"] = "Cotizaciones";
+    var cl = System.Globalization.CultureInfo.GetCultureInfo("es-CL");
+    var sel = Model.Seleccionada;
+
+    string Hace(DateTime? f)
+    {
+        if (f == null) return "";
+        var d = DateTime.Now - f.Value;
+        if (d.TotalMinutes < 60) return $"hace {Math.Max(1, (int)d.TotalMinutes)} min";
+        if (d.TotalHours < 24) return $"hace {(int)d.TotalHours} h";
+        if (d.TotalDays < 30) return $"hace {(int)d.TotalDays} día{((int)d.TotalDays == 1 ? "" : "s")}";
+        return f.Value.ToString("dd'/'MM'/'yyyy", cl);
+    }
+
+    string Movimiento(string? tipo) => (tipo ?? "").StartsWith("IMP") ? "Importación" : "Exportación";
+
+    IEnumerable<(string Mod, string Icono, string Texto)> Modulos(Cotizacion c)
+    {
+        if (SolicitarCotizacionModel.IncluyeModulo(c.TipoServicio, "MAR")) yield return ("MAR", "bi-water", "Marítimo");
+        if (SolicitarCotizacionModel.IncluyeModulo(c.TipoServicio, "TER")) yield return ("TER", "bi-truck", "Terrestre");
+        if (SolicitarCotizacionModel.IncluyeModulo(c.TipoServicio, "DOC")) yield return ("DOC", "bi-file-earmark-text", "Documental");
+    }
+
+    string textoVacio = !string.IsNullOrWhiteSpace(Model.Buscar) ? "Ninguna cotización coincide con la búsqueda."
+        : Model.Filtro == CotizacionesModel.FiltroRespondidas ? "Todavía no hay cotizaciones respondidas."
+        : Model.Filtro == CotizacionesModel.FiltroArchivadas ? "No hay cotizaciones archivadas."
+        : "No hay cotizaciones pendientes. Todo al día.";
+
+    var aviso = !string.IsNullOrEmpty(Model.Aviso) && CotizacionesModel.Avisos.TryGetValue(Model.Aviso, out var av) ? av : default;
+}
+
+<link rel="stylesheet" href="~/css/cotizaciones-ops.css" asp-append-version="true" />
+
+<div class="container-fluid py-4 cot-ops">
+
+    <div class="page-header">
+        <div class="page-header__title-row">
+            <div class="page-header__icon"><i class="bi bi-calculator"></i></div>
+            <div>
+                <h1>Cotizaciones</h1>
+                <p class="page-header__subtitle">Solicitudes de tarifa desde el Portal Cliente. Responde el valor por tramo y el cliente lo ve en su portal.</p>
+            </div>
+        </div>
+        <partial name="_CotizacionesNav" model="@("cotizaciones")" />
+    </div>
+
+    @if (aviso.Texto != null)
+    {
+        <div class="alert alert-@aviso.Tipo cot-aviso d-flex align-items-center gap-2" role="status">
+            <i class="bi @(aviso.Tipo == "success" ? "bi-check-circle-fill" : aviso.Tipo == "warning" ? "bi-exclamation-triangle-fill" : "bi-x-circle-fill")"></i>
+            <span>@aviso.Texto</span>
+        </div>
+    }
+
+    <div class="cot-toolbar">
+        <ul class="nav tabs-underline cot-tabs" role="tablist">
+            <li class="nav-item">
+                <a class="nav-link @(Model.Filtro == CotizacionesModel.FiltroPendientes ? "active is-warning" : "")" asp-page="./Cotizaciones" asp-route-filtro="@CotizacionesModel.FiltroPendientes">
+                    Pendientes <span class="cot-count @(Model.TotalPendientes > 0 ? "is-hot" : "")">@Model.TotalPendientes</span>
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link @(Model.Filtro == CotizacionesModel.FiltroRespondidas ? "active is-success" : "")" asp-page="./Cotizaciones" asp-route-filtro="@CotizacionesModel.FiltroRespondidas">
+                    Respondidas <span class="cot-count">@Model.TotalRespondidas</span>
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link @(Model.Filtro == CotizacionesModel.FiltroArchivadas ? "active" : "")" asp-page="./Cotizaciones" asp-route-filtro="@CotizacionesModel.FiltroArchivadas">
+                    Archivadas <span class="cot-count">@Model.TotalArchivadas</span>
+                </a>
+            </li>
+        </ul>
+        <form method="get" class="search-field cot-search" role="search">
+            <input type="hidden" name="filtro" value="@Model.Filtro" />
+            <i class="bi bi-search"></i>
+            <input type="search" name="buscar" value="@Model.Buscar" placeholder="Cliente o N° de cotización" aria-label="Buscar cotización" />
+        </form>
+    </div>
+
+    @if (!Model.Lista.Any() && sel == null)
+    {
+        <div class="empty-state mt-3">
+            <i class="bi bi-inbox"></i>
+            <p>@textoVacio</p>
+        </div>
+    }
+    else
+    {
+        <div class="cot-layout">
+            <!-- Lista -->
+            <div class="cot-list" aria-label="Listado de cotizaciones">
+                @foreach (var c in Model.Lista)
+                {
+                    bool activa = sel != null && sel.Id == c.Id;
+                    <a class="cot-item @(activa ? "is-active" : "")" asp-page="./Cotizaciones" asp-route-filtro="@Model.Filtro" asp-route-id="@c.Id" asp-route-buscar="@Model.Buscar" aria-current="@(activa ? "true" : null)">
+                        <div class="cot-item__top">
+                            <span class="cot-item__id">#@c.Id</span>
+                            <span class="cot-item__time">@Hace(Model.Filtro == CotizacionesModel.FiltroRespondidas ? c.FechaRespuesta : c.FechaSolicitud)</span>
+                        </div>
+                        <div class="cot-item__cliente">@CotizacionesModel.NombreCliente(c)</div>
+                        <div class="cot-item__ruta">@CotizacionesModel.ResumenRuta(c)</div>
+                        <div class="cot-item__mods">
+                            <span class="cot-mod cot-mod--dir">@Movimiento(c.TipoServicio)</span>
+                            @foreach (var m in Modulos(c))
+                            {
+                                <span class="cot-mod"><i class="bi @m.Icono"></i>@m.Texto</span>
+                            }
+                        </div>
+                    </a>
+                }
+                @if (sel != null && !Model.Lista.Any(c => c.Id == sel.Id))
+                {
+                    <p class="cot-list__note">La cotización #@sel.Id no está en esta pestaña.</p>
+                }
+            </div>
+
+            <!-- Detalle y respuesta -->
+            @if (sel != null)
+            {
+                bool mar = SolicitarCotizacionModel.IncluyeModulo(sel.TipoServicio, "MAR");
+                bool ter = SolicitarCotizacionModel.IncluyeModulo(sel.TipoServicio, "TER");
+                bool doc = SolicitarCotizacionModel.IncluyeModulo(sel.TipoServicio, "DOC");
+                bool respondida = sel.Estado == Cotizacion.EstadoRespondida;
+                bool archivada = sel.Activo != true;
+                string? correoCliente = sel.IdClienteNavigation?.Correo;
+                int? puertoTerrestrePreselect = sel.IdPuertoTerrestre
+                    ?? Model.PuertosChile.FirstOrDefault(p => p.NombrePuerto.Trim().ToUpper() == (sel.ZonaEntrega ?? "").Trim().ToUpper())?.Id;
+                var validaHasta = sel.ValidaHasta ?? DateOnly.FromDateTime(DateTime.Today.AddDays(15));
+
+                <section class="cot-detail erp-card" aria-labelledby="cotDetTitulo">
+                    <header class="cot-detail__head">
+                        <div>
+                            <span class="cot-detail__eyebrow">Cotización #@sel.Id · @Movimiento(sel.TipoServicio)</span>
+                            <h2 id="cotDetTitulo">@CotizacionesModel.NombreCliente(sel)</h2>
+                            <span class="cot-detail__meta">
+                                Solicitada el @(sel.FechaSolicitud?.ToString("dd'/'MM'/'yyyy HH:mm", cl))
+                                @if (!string.IsNullOrWhiteSpace(correoCliente))
+                                {
+                                    <text> · <i class="bi bi-envelope"></i> @correoCliente</text>
+                                }
+                            </span>
+                        </div>
+                        @if (archivada)
+                        {
+                            <span class="badge-status badge-status--neutral">Archivada</span>
+                        }
+                        else if (respondida)
+                        {
+                            <span class="badge-status badge-status--success"><i class="bi bi-check2-circle me-1"></i>Respondida</span>
+                        }
+                        else
+                        {
+                            <span class="badge-status badge-status--warning"><i class="bi bi-hourglass-split me-1"></i>Pendiente</span>
+                        }
+                    </header>
+
+                    <h3 class="cot-block-title">Lo que pidió el cliente</h3>
+                    <div class="cot-req">
+                        @if (mar)
+                        {
+                            <div class="cot-req__item">
+                                <div class="cot-req__ico"><i class="bi bi-water"></i></div>
+                                <div>
+                                    <span class="cot-req__label">Marítimo</span>
+                                    <strong>@CotizacionesModel.NombrePuerto(sel.IdPuertoOrigenNavigation) <i class="bi bi-arrow-right"></i> @CotizacionesModel.NombrePuerto(sel.IdPuertoDestinoNavigation)</strong>
+                                    <span class="cot-req__sub">@(sel.TipoContenedor ?? "Sin tipo de contenedor")</span>
+                                </div>
+                            </div>
+                        }
+                        @if (ter)
+                        {
+                            <div class="cot-req__item">
+                                <div class="cot-req__ico"><i class="bi bi-truck"></i></div>
+                                <div>
+                                    <span class="cot-req__label">Terrestre</span>
+                                    <strong>@(sel.ZonaCarga ?? "—") <i class="bi bi-arrow-left-right"></i> @(sel.ZonaEntrega ?? "—")</strong>
+                                    <span class="cot-req__sub">Zona de planta ⇄ zona de puerto / depósito</span>
+                                </div>
+                            </div>
+                        }
+                        @if (doc)
+                        {
+                            <div class="cot-req__item">
+                                <div class="cot-req__ico"><i class="bi bi-file-earmark-text"></i></div>
+                                <div>
+                                    <span class="cot-req__label">Documental</span>
+                                    <strong>@(sel.TipoCargaDocumental ?? "Sin tipo de carga")</strong>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                    @if (!string.IsNullOrWhiteSpace(sel.Comentarios))
+                    {
+                        <blockquote class="cot-quote"><i class="bi bi-chat-left-quote"></i> @sel.Comentarios</blockquote>
+                    }
+
+                    @if (Model.ReservasDeSeleccionada.Any())
+                    {
+                        <div class="cot-reservas" role="note">
+                            <i class="bi bi-check2-all"></i>
+                            <div>
+                                <strong>El cliente ya pidió @(Model.ReservasDeSeleccionada.Count == 1 ? "una reserva" : Model.ReservasDeSeleccionada.Count + " reservas") con esta tarifa</strong>
+                                @foreach (var rsv in Model.ReservasDeSeleccionada)
+                                {
+                                    <span>
+                                        Solicitud #@rsv.Id · @(rsv.FechaSolicitud?.ToString("dd'/'MM HH:mm", cl))
+                                        @if (!string.IsNullOrWhiteSpace(rsv.Nave))
+                                        {
+                                            <text> · @rsv.Nave</text>
+                                        }
+                                        · @(rsv.Estado == Cotizacion.EstadoConvertida ? "operación creada" : rsv.Activo == true ? "pendiente en el Centro de Notificaciones" : "archivada")
+                                    </span>
+                                }
+                            </div>
+                        </div>
+                    }
+
+                    <h3 class="cot-block-title">
+                        @(respondida ? "Respuesta enviada" : "Responder")
+                        @if (respondida && sel.FechaRespuesta != null)
+                        {
+                            <span class="cot-block-title__meta">@sel.FechaRespuesta.Value.ToString("dd'/'MM'/'yyyy HH:mm", cl)@(string.IsNullOrWhiteSpace(sel.UsuarioRespuesta) ? "" : " · " + sel.UsuarioRespuesta)</span>
+                        }
+                    </h3>
+
+                    @if (archivada)
+                    {
+                        <p class="cot-muted">Esta cotización está archivada. Restáurala para responderla o modificar la respuesta.</p>
+                    }
+                    else
+                    {
+                        <form method="post" asp-page-handler="Responder" id="formResponder" class="cot-form">
+                            <input type="hidden" name="Respuesta.IdCotizacion" value="@sel.Id" />
+                            <input type="hidden" name="Filtro" value="@Model.Filtro" />
+
+                            @if (mar)
+                            {
+                                <div class="cot-line">
+                                    <div class="cot-line__label"><i class="bi bi-water"></i> Flete marítimo <small>por contenedor</small></div>
+                                    <div class="cot-money">
+                                        <select name="Respuesta.MonedaMaritimo" class="form-select" aria-label="Moneda flete marítimo">
+                                            @foreach (var m in CotizacionesModel.Monedas)
+                                            {
+                                                <option value="@m" selected="@((sel.MonedaMaritimo ?? "USD") == m)">@m</option>
+                                            }
+                                        </select>
+                                        <input type="number" name="Respuesta.MontoMaritimo" class="form-control" min="0" step="0.01" inputmode="decimal" placeholder="0" value="@(sel.MontoMaritimo?.ToString(System.Globalization.CultureInfo.InvariantCulture))" aria-label="Monto flete marítimo" />
+                                    </div>
+                                </div>
+                            }
+                            @if (ter)
+                            {
+                                <div class="cot-line">
+                                    <div class="cot-line__label"><i class="bi bi-truck"></i> Transporte terrestre</div>
+                                    <div class="cot-line__fields">
+                                        <select name="Respuesta.IdPuertoTerrestre" class="form-select" aria-label="Puerto de salida o entrega">
+                                            <option value="">Puerto de salida / entrega…</option>
+                                            @foreach (var p in Model.PuertosChile)
+                                            {
+                                                <option value="@p.Id" selected="@(puertoTerrestrePreselect == p.Id)">@p.NombrePuerto</option>
+                                            }
+                                        </select>
+                                        <div class="cot-money">
+                                            <select name="Respuesta.MonedaTerrestre" class="form-select" aria-label="Moneda transporte terrestre">
+                                                @foreach (var m in CotizacionesModel.Monedas)
+                                                {
+                                                    <option value="@m" selected="@((sel.MonedaTerrestre ?? "CLP") == m)">@m</option>
+                                                }
+                                            </select>
+                                            <input type="number" name="Respuesta.MontoTerrestre" class="form-control" min="0" step="0.01" inputmode="decimal" placeholder="0" value="@(sel.MontoTerrestre?.ToString(System.Globalization.CultureInfo.InvariantCulture))" aria-label="Monto transporte terrestre" />
+                                        </div>
+                                    </div>
+                                </div>
+                            }
+                            @if (doc)
+                            {
+                                <div class="cot-line">
+                                    <div class="cot-line__label"><i class="bi bi-file-earmark-text"></i> Servicio documental</div>
+                                    <div class="cot-money">
+                                        <select name="Respuesta.MonedaDocumental" class="form-select" aria-label="Moneda servicio documental">
+                                            @foreach (var m in CotizacionesModel.Monedas)
+                                            {
+                                                <option value="@m" selected="@((sel.MonedaDocumental ?? "USD") == m)">@m</option>
+                                            }
+                                        </select>
+                                        <input type="number" name="Respuesta.MontoDocumental" class="form-control" min="0" step="0.01" inputmode="decimal" placeholder="0" value="@(sel.MontoDocumental?.ToString(System.Globalization.CultureInfo.InvariantCulture))" aria-label="Monto servicio documental" />
+                                    </div>
+                                </div>
+                            }
+                            <p class="cot-hint">Un tramo sin monto le aparece al cliente como "No cotizado". Valores netos.</p>
+
+                            <div class="row g-3 mt-1">
+                                <div class="col-sm-5">
+                                    <label class="cot-label" for="cotValida">Válida hasta</label>
+                                    <input type="date" id="cotValida" name="Respuesta.ValidaHasta" class="form-control" value="@validaHasta.ToString("yyyy-MM-dd")" />
+                                </div>
+                                <div class="col-12">
+                                    <label class="cot-label" for="cotComentario">Comentario para el cliente <span class="cot-muted">(opcional)</span></label>
+                                    <textarea id="cotComentario" name="Respuesta.ComentarioRespuesta" class="form-control" rows="3" maxlength="2000" placeholder="Ej: tarifa sujeta a disponibilidad de espacio, no incluye THC...">@sel.ComentarioRespuesta</textarea>
+                                </div>
+                            </div>
+
+                            <div class="cot-actions">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" name="Respuesta.NotificarCliente" value="true" id="chkNotificar"
+                                           checked="@(!string.IsNullOrWhiteSpace(correoCliente))" disabled="@(string.IsNullOrWhiteSpace(correoCliente))" />
+                                    <label class="form-check-label" for="chkNotificar">
+                                        @(string.IsNullOrWhiteSpace(correoCliente) ? "El cliente no tiene correo registrado" : "Avisar al cliente por correo")
+                                    </label>
+                                </div>
+                                <button type="submit" class="btn btn-atilson cot-btn-primary" id="btnResponder">
+                                    <i class="bi bi-send me-1"></i>@(respondida ? "Actualizar respuesta" : "Enviar respuesta")
+                                </button>
+                            </div>
+                        </form>
+                    }
+
+                    <form method="post" asp-page-handler="Archivar" class="cot-archive" onsubmit="return confirm('@(archivada ? "¿Restaurar esta cotización?" : "¿Archivar esta cotización? Dejará de verse en Pendientes/Respondidas.")');">
+                        <input type="hidden" name="idCotizacion" value="@sel.Id" />
+                        <input type="hidden" name="restaurar" value="@(archivada ? "true" : "false")" />
+                        <input type="hidden" name="Filtro" value="@Model.Filtro" />
+                        <button type="submit" class="btn btn-link cot-link-btn">
+                            <i class="bi @(archivada ? "bi-arrow-counterclockwise" : "bi-archive")"></i> @(archivada ? "Restaurar cotización" : "Archivar cotización")
+                        </button>
+                    </form>
+                </section>
+            }
+        </div>
+    }
+</div>
+
+@section Scripts {
+    <script>
+        (function () {
+            const form = document.getElementById('formResponder');
+            if (!form) return;
+            form.addEventListener('submit', function (e) {
+                const montos = Array.from(form.querySelectorAll('input[type="number"]'));
+                if (!montos.some(function (i) { return parseFloat(i.value) > 0; })) {
+                    e.preventDefault();
+                    alert('Ingresa al menos un monto para responder la cotización.');
+                    return;
+                }
+                const btn = document.getElementById('btnResponder');
+                btn.disabled = true;
+                btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Guardando...';
+            });
+        })();
+    </script>
+}
