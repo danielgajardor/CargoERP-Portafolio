@@ -50,7 +50,16 @@ public partial class Unidadestecnica
     public string? CondicionReefer { get; set; }
 
     public string? MarcaAc { get; set; }
+
+    // Mismo patrón que Operacione.cs: ciclo de cierre en destino con fecha real
+    // + usuario/fecha de registro para cada hito (Arribado → Retirado → Vacío
+    // Devuelto), por contenedor cuando el booking tiene más de uno.
+    public DateTime? FechaArriboDestino { get; set; }
+    public string? UsuarioArriboDestino { get; set; }
     public DateTime? FechaRetiroDestino { get; set; }
+    public string? UsuarioRetiroDestino { get; set; }
+    public DateTime? FechaDevolucionVacio { get; set; }
+    public string? UsuarioDevolucionVacio { get; set; }
 
     public string? EvidenciaContenedor { get; set; }
     public string? NumeroSello { get; set; }

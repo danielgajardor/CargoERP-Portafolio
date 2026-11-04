@@ -1,0 +1,663 @@
+/* =========================================================================
+   DETALLE DE OPERACIÓN — CAPA PREMIUM
+   Solo propiedades visuales. No toca display / pointer-events / appearance
+   que controlan el modo edición (toggleEditMode / cancelEditMode).
+   Todo queda acotado a .dt-premium para no afectar otras vistas.
+   ========================================================================= */
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600&display=swap');
+
+@property --dt-pct { syntax: '<number>'; inherits: true; initial-value: 0; }
+
+/* ---------- 0. Tokens (también armoniza las variables existentes) ---------- */
+.dt-premium {
+    --dt-brand: #6d2d9e;
+    --dt-brand-2: #8b5cf6;
+    --dt-deep: #2c1b4d;
+    --dt-ink: #140c26;
+    --dt-text: #1e1b2e;
+    --dt-muted: #6b6880;
+    --dt-faint: #a19eb3;
+    --dt-line: #ece8f3;
+    --dt-soft: #f8f7fc;
+    --dt-tint: #f4eefb;
+    --dt-grad: linear-gradient(135deg, #6d2d9e 0%, #8b5cf6 55%, #60a5fa 100%);
+    --dt-shadow: 0 1px 2px rgba(20,12,38,.04), 0 18px 40px -26px rgba(44,27,77,.28);
+    --dt-shadow-lg: 0 30px 70px -30px rgba(44,27,77,.55);
+
+    /* Variables que ya usa la vista: se reajustan al sistema premium */
+    --atilson-dark: #140c26;
+    --atilson-purple: #6d2d9e;
+    --atilson-purple-deep: #4c1d7a;
+    --atilson-purple-soft: #f4eefb;
+    --atilson-purple-border: #e4d8fb;
+    --txt-main: #1e1b2e;
+    --txt-muted: #6b6880;
+    --border-soft: #ece8f3;
+    --bg-soft: #f8f7fc;
+
+    /* Panel Documental (_PanelDocumental.cshtml): ese partial no usa las
+       variables de arriba, usa su propio set --doc-* (definido en el :root
+       de operaciones-detalle.css) porque nació como una pieza aparte. Son
+       ~170 usos repartidos en ese archivo — en vez de tocar cada uno,
+       se realinean acá los tonos "neutros" (borde, tinta, gris de texto)
+       al mismo sistema premium, igual que ya se hizo arriba con
+       --atilson-purple/--border-soft. Los colores semánticos (success/
+       danger/info/warning) ya caían cerca de esta paleta y quedan igual,
+       para no tocar más de lo necesario. */
+    --doc-ink: #140c26;
+    --doc-slate: #6b6880;
+    --doc-slate-deep: #140c26;
+    --doc-gray: #a19eb3;
+    --doc-gray-deep: #6b6880;
+    --doc-gray-border: #ece8f3;
+    --doc-bg-faint: #f8f7fc;
+
+    max-width: 1500px;
+    padding-bottom: 64px !important;
+}
+
+body:has(.dt-premium) {
+    background:
+        radial-gradient(1200px 500px at 100% -10%, rgba(139,92,246,.08), transparent 60%),
+        #f5f4f9 !important;
+}
+
+.dt-premium .mono,
+.dt-premium .font-monospace { font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Consolas, monospace !important; letter-spacing: -.2px; }
+
+.dt-hero, .dt-strip, .dt-timeline, .dt-closed,
+.dt-premium #detalleTabs,
+.dt-premium .section-title-sm,
+.dt-premium .form-subcard-title,
+.swal2-popup { font-family: 'Plus Jakarta Sans', system-ui, -apple-system, 'Segoe UI', sans-serif; }
+
+/* ---------- 1. HERO ---------- */
+.dt-hero {
+    position: relative; isolation: isolate; overflow: hidden; color: #fff;
+    border-radius: 26px; padding: 22px 30px 26px; margin-bottom: 16px;
+    background:
+        radial-gradient(700px 320px at 100% 0%, rgba(139,92,246,.42), transparent 60%),
+        radial-gradient(500px 280px at 0% 110%, rgba(96,165,250,.18), transparent 60%),
+        linear-gradient(135deg, #140c26 0%, #241539 50%, #2c1b4d 100%);
+    box-shadow: var(--dt-shadow-lg);
+}
+.dt-hero::after {
+    content: ''; position: absolute; inset: 0; z-index: -1; pointer-events: none;
+    background-image: linear-gradient(rgba(255,255,255,.04) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.04) 1px, transparent 1px);
+    background-size: 42px 42px;
+    -webkit-mask-image: linear-gradient(90deg, #000 0%, transparent 55%);
+    mask-image: linear-gradient(90deg, #000 0%, transparent 55%);
+}
+
+.dt-hero-top { display: flex; justify-content: space-between; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 22px; }
+.dt-crumbs { display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 600; color: #a99fc4; }
+.dt-crumbs a { color: #d6d1e6; text-decoration: none; display: inline-flex; align-items: center; gap: 6px; transition: color .2s; }
+.dt-crumbs a:hover { color: #fff; }
+.dt-crumbs > i { font-size: 10px; opacity: .6; }
+.dt-crumbs .mono { color: #fff; }
+
+.dt-hero-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.dt-hbtn {
+    display: inline-flex; align-items: center; gap: 8px; padding: 8px 14px; border-radius: 11px;
+    font-size: 12px; font-weight: 700; color: #fff; cursor: pointer;
+    background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.16);
+    backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+    transition: background .2s, transform .2s;
+}
+.dt-hbtn:hover { background: rgba(255,255,255,.16); transform: translateY(-1px); }
+.dt-hbtn-accent { background: #fff; color: var(--dt-ink); border-color: #fff; }
+.dt-hbtn-accent:hover { background: #fff; color: var(--dt-brand); box-shadow: 0 10px 24px -10px rgba(139,92,246,.7); }
+.dt-hbtn.is-copied { background: rgba(16,185,129,.25); border-color: rgba(110,231,183,.5); }
+
+.dt-hero-main { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(320px, 1fr); gap: 32px; align-items: center; }
+
+.dt-tags { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+.dt-flow, .dt-tag {
+    display: inline-flex; align-items: center; gap: 6px; padding: 5px 11px; border-radius: 99px;
+    font-size: 11px; font-weight: 800; letter-spacing: .5px; text-transform: uppercase;
+}
+.dt-flow.expo { background: rgba(96,165,250,.18); color: #bfdbfe; border: 1px solid rgba(147,197,253,.35); }
+.dt-flow.impo { background: rgba(52,211,153,.16); color: #a7f3d0; border: 1px solid rgba(110,231,183,.35); }
+.dt-tag { background: rgba(255,255,255,.08); color: #e9e4f5; border: 1px solid rgba(255,255,255,.16); }
+.dt-tag-live::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: #34d399; box-shadow: 0 0 0 0 rgba(52,211,153,.6); animation: dtPing 2s infinite; }
+@keyframes dtPing { 70% { box-shadow: 0 0 0 8px rgba(52,211,153,0); } 100% { box-shadow: 0 0 0 0 rgba(52,211,153,0); } }
+
+.dt-booking { font-size: clamp(28px, 3.4vw, 42px); font-weight: 600; letter-spacing: -1.4px; line-height: 1.05; margin: 0 0 8px; color: #fff; }
+.dt-client { font-size: 14px; font-weight: 600; color: #d6d1e6; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.dt-client > i { color: #a78bfa; }
+.dt-client b { color: #fff; font-weight: 600; }
+/* N° de instructivo editable desde la cabecera (oct-2026) */
+.dt-instructivo {
+    display: inline-flex; align-items: center; gap: 6px; padding: 2px 10px; border-radius: 999px;
+    border: 1px solid rgba(255,255,255,.18); background: rgba(255,255,255,.06); color: #d6d1e6;
+    font-size: 13px; font-weight: 600; cursor: pointer; transition: background .15s, border-color .15s;
+}
+.dt-instructivo:hover { background: rgba(255,255,255,.14); border-color: rgba(255,255,255,.35); }
+.dt-instructivo i { font-size: 11px; opacity: .7; }
+.dt-instructivo.vacio { border-style: dashed; color: #fcd34d; }
+.dt-sep { opacity: .4; }
+
+.dt-chips { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-start; gap: 8px 20px; margin-top: 16px; }
+.dt-chips-facts, .dt-chips-alerts { display: flex; flex-wrap: wrap; gap: 8px; }
+.dt-chips-alerts { justify-content: flex-end; }
+.dt-chip {
+    display: inline-flex; align-items: center; gap: 7px; padding: 6px 11px; border-radius: 10px;
+    font-size: 11.5px; font-weight: 700; color: #e9e4f5;
+    background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.13);
+}
+.dt-chip i { color: #c4b5fd; }
+.dt-chip[data-goto-tab], button.dt-chip { cursor: pointer; transition: background .2s; font: inherit; appearance: none; -webkit-appearance: none; }
+.dt-chip[data-goto-tab]:hover, button.dt-chip:hover { background: rgba(255,255,255,.14); }
+.dt-chip-ok { background: rgba(16,185,129,.16); border-color: rgba(110,231,183,.35); color: #a7f3d0; }
+.dt-chip-ok i { color: #6ee7b7; }
+.dt-chip-info { background: rgba(14,165,233,.16); border-color: rgba(125,211,252,.35); color: #bae6fd; }
+.dt-chip-info i { color: #7dd3fc; }
+.dt-chip-warn { background: rgba(251,146,60,.16); border-color: rgba(253,186,116,.4); color: #fed7aa; }
+.dt-chip-warn i { color: #fdba74; }
+.dt-chip-bad { background: rgba(239,68,68,.18); border-color: rgba(252,165,165,.4); color: #fecaca; }
+.dt-chip-bad i { color: #fca5a5; }
+button.dt-chip-bad:hover { background: rgba(239,68,68,.3); }
+
+/* Progreso global */
+.dt-hero-progress {
+    display: flex; align-items: center; gap: 22px; padding: 20px 22px; border-radius: 22px;
+    background: linear-gradient(160deg, rgba(255,255,255,.12), rgba(255,255,255,.04));
+    border: 1px solid rgba(255,255,255,.16);
+    backdrop-filter: blur(18px) saturate(140%); -webkit-backdrop-filter: blur(18px) saturate(140%);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.12);
+}
+.dt-ring {
+    --dt-pct: 0;
+    width: 112px; height: 112px; border-radius: 50%; flex-shrink: 0; display: grid; place-items: center;
+    background: conic-gradient(#a78bfa 0%, #60a5fa calc(var(--dt-pct) * 1%), rgba(255,255,255,.12) calc(var(--dt-pct) * 1%));
+    transition: --dt-pct 1.4s cubic-bezier(.2,.8,.2,1);
+    filter: drop-shadow(0 0 14px rgba(139,92,246,.35));
+}
+.dt-ring-in { width: 88px; height: 88px; border-radius: 50%; background: #1d1138; display: grid; place-items: center; text-align: center; }
+.dt-ring-in b { display: block; font-size: 26px; font-weight: 800; letter-spacing: -1px; line-height: 1; }
+.dt-ring-in span { font-size: 9.5px; font-weight: 800; letter-spacing: 1.2px; text-transform: uppercase; color: #a99fc4; }
+
+.dt-mods { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 9px; }
+.dt-mod { background: transparent; border: 0; padding: 0; color: inherit; text-align: left; cursor: pointer; }
+.dt-mod-top { display: flex; justify-content: space-between; font-size: 12px; font-weight: 700; color: #d6d1e6; margin-bottom: 5px; }
+.dt-mod-top i { color: #a78bfa; margin-right: 4px; }
+.dt-mod-top b { color: #fff; font-weight: 800; }
+.dt-mod-bar { display: block; height: 5px; border-radius: 99px; background: rgba(255,255,255,.1); overflow: hidden; }
+.dt-mod-bar > span { display: block; height: 100%; width: 0; border-radius: 99px; background: linear-gradient(90deg, #a78bfa, #60a5fa); transition: width 1.2s cubic-bezier(.2,.8,.2,1); }
+.dt-mod-bar > span.full { background: linear-gradient(90deg, #34d399, #10b981); }
+.dt-mod:hover .dt-mod-top { color: #fff; }
+
+/* Ruta */
+.dt-route {
+    display: grid; grid-template-columns: minmax(0, 1fr) minmax(160px, 1.6fr) minmax(0, 1fr); gap: 20px; align-items: center;
+    margin-top: 24px; padding-top: 22px; border-top: 1px solid rgba(255,255,255,.1);
+}
+.dt-port { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.dt-port.end { text-align: right; align-items: flex-end; }
+.dt-port-lbl { font-size: 10px; font-weight: 800; letter-spacing: 1.2px; text-transform: uppercase; color: #a99fc4; }
+.dt-port b { font-size: 17px; font-weight: 800; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.dt-port .mono { font-size: 12px; color: #d6d1e6; }
+.dt-term { font-size: 11px; color: #a99fc4; font-weight: 600; }
+
+.dt-track { position: relative; height: 40px; margin: 0 10px; }
+.dt-track::before {
+    content: ''; position: absolute; left: 0; right: 0; top: 50%; height: 2px; transform: translateY(-50%);
+    background-image: linear-gradient(90deg, rgba(255,255,255,.28) 50%, transparent 50%); background-size: 9px 2px;
+}
+.dt-track-dot { position: absolute; top: 50%; width: 10px; height: 10px; border-radius: 50%; transform: translateY(-50%); }
+.dt-track-dot.start { left: -5px; background: #a78bfa; box-shadow: 0 0 0 4px rgba(167,139,250,.25); }
+.dt-track-dot.end { right: -5px; background: #1d1138; border: 2px solid rgba(255,255,255,.5); }
+.dt-track-fill { position: absolute; left: 0; top: 50%; height: 3px; width: 0; transform: translateY(-50%); border-radius: 99px; background: linear-gradient(90deg, #a78bfa, #60a5fa); box-shadow: 0 0 12px rgba(139,92,246,.7); transition: width 1.4s cubic-bezier(.2,.8,.2,1); }
+.dt-track-ship {
+    position: absolute; top: 50%; left: 0; transform: translate(-50%, -50%);
+    width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; font-size: 17px;
+    background: #fff; color: var(--dt-brand); box-shadow: 0 8px 20px -6px rgba(139,92,246,.8);
+    transition: left 1.4s cubic-bezier(.2,.8,.2,1);
+}
+.dt-track-lbl { position: absolute; left: 50%; bottom: -14px; transform: translateX(-50%); white-space: nowrap; font-size: 10.5px; font-weight: 700; color: #c9c2dd; letter-spacing: .3px; }
+
+/* ---------- 2. STRIP DE INDICADORES ---------- */
+.dt-strip { display: grid; grid-template-columns: 1.3fr repeat(3, minmax(0, 1fr)); gap: 14px; margin-bottom: 14px; }
+.dt-stat {
+    position: relative; overflow: hidden; display: flex; flex-direction: column; gap: 4px; text-align: left;
+    background: #fff; border: 1px solid var(--dt-line); border-radius: 18px; padding: 16px 18px;
+    box-shadow: var(--dt-shadow); transition: transform .25s, box-shadow .25s, border-color .25s;
+    font: inherit; color: inherit;
+}
+.dt-stat-btn { cursor: pointer; }
+.dt-stat-btn:hover { transform: translateY(-3px); border-color: #ddd1ec; box-shadow: 0 22px 44px -26px rgba(44,27,77,.45); }
+.dt-stat-lbl { font-size: 11px; font-weight: 800; letter-spacing: .6px; text-transform: uppercase; color: var(--dt-faint); display: flex; align-items: center; gap: 7px; }
+.dt-stat-val { font-size: 28px; font-weight: 800; letter-spacing: -1px; color: var(--dt-ink); line-height: 1.1; }
+.dt-stat-val.is-good { color: #059669; }
+.dt-stat-val.is-bad { color: #dc2626; }
+.dt-stat-val.is-warn { color: #c2410c; }
+.dt-stat-sub { font-size: 12px; color: var(--dt-muted); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.dt-stat-next { color: #fff; border: 0; background: linear-gradient(135deg, #2c1b4d, #4c1d7a); }
+.dt-stat-next .dt-stat-lbl { color: #c9c2dd; }
+.dt-stat-next .dt-stat-val { color: #fff; }
+.dt-stat-next .dt-stat-sub { color: #d6d1e6; }
+.dt-stat-next.is-warn { background: linear-gradient(135deg, #7c2d12, #c2410c); }
+.dt-stat-next.is-crit { background: linear-gradient(135deg, #7f1d1d, #dc2626); animation: dtCrit 2.4s ease-in-out infinite; }
+.dt-stat-next.is-ok { background: linear-gradient(135deg, #2c1b4d, #6d2d9e); }
+@keyframes dtCrit { 50% { box-shadow: 0 0 0 6px rgba(220,38,38,.15), var(--dt-shadow); } }
+
+/* ---------- 3. TIMELINE DE VENTANAS CRÍTICAS ---------- */
+.dt-timeline { background: #fff; border: 1px solid var(--dt-line); border-radius: 20px; padding: 18px 22px 20px; margin-bottom: 18px; box-shadow: var(--dt-shadow); }
+.dt-timeline-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 18px; }
+.dt-timeline-title { font-size: 13px; font-weight: 800; color: var(--dt-ink); display: flex; align-items: center; gap: 8px; }
+.dt-timeline-title i { color: var(--dt-brand); }
+.dt-last { font-size: 11.5px; color: var(--dt-muted); display: inline-flex; align-items: center; gap: 6px; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dt-last b { color: var(--dt-brand); }
+
+.dt-tl { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(110px, 1fr); overflow-x: auto; padding-bottom: 4px; }
+.dt-tl-item { position: relative; text-align: center; padding: 0 6px; }
+.dt-tl-item::before { content: ''; position: absolute; top: 18px; left: -50%; width: 100%; height: 3px; background: var(--dt-line); border-radius: 99px; }
+.dt-tl-item:first-child::before { display: none; }
+.dt-tl-item.is-done::before, .dt-tl-item.is-next::before { background: var(--dt-grad); }
+.dt-tl-dot {
+    position: relative; z-index: 1; width: 38px; height: 38px; border-radius: 50%; margin: 0 auto 8px;
+    display: grid; place-items: center; font-size: 15px;
+    background: #fff; border: 2px solid var(--dt-line); color: var(--dt-faint);
+}
+.dt-tl-item.is-done .dt-tl-dot { background: var(--dt-grad); border-color: transparent; color: #fff; box-shadow: 0 8px 18px -8px rgba(109,45,158,.7); }
+.dt-tl-item.is-next .dt-tl-dot { border-color: var(--dt-brand-2); color: var(--dt-brand); animation: dtRing 2s infinite; }
+.dt-tl-item.is-none .dt-tl-dot { border-style: dashed; }
+@keyframes dtRing { 0% { box-shadow: 0 0 0 0 rgba(139,92,246,.35); } 70% { box-shadow: 0 0 0 12px rgba(139,92,246,0); } 100% { box-shadow: 0 0 0 0 rgba(139,92,246,0); } }
+.dt-tl-lbl { display: block; font-size: 12px; font-weight: 800; color: var(--dt-ink); }
+.dt-tl-item.is-none .dt-tl-lbl, .dt-tl-item.is-future .dt-tl-lbl { color: var(--dt-muted); }
+.dt-tl-date { display: block; font-size: 11px; color: var(--dt-muted); margin-top: 2px; }
+.dt-tl-item.is-none .dt-tl-date { color: var(--dt-faint); font-style: italic; font-family: inherit !important; }
+.dt-tl-rel { display: inline-block; margin-top: 6px; font-size: 10.5px; font-weight: 800; color: var(--dt-brand); background: var(--dt-tint); padding: 2px 9px; border-radius: 99px; }
+
+/* ---------- 4. OPERACIÓN CERRADA ---------- */
+.dt-closed {
+    display: flex; align-items: center; gap: 16px; padding: 16px 20px; border-radius: 18px; margin-bottom: 18px;
+    background: linear-gradient(120deg, #ecfdf5, #f0fdf9); border: 1px solid #a7f3d0;
+    box-shadow: 0 14px 30px -22px rgba(16,185,129,.6);
+}
+.dt-closed-ico { width: 46px; height: 46px; border-radius: 14px; display: grid; place-items: center; font-size: 22px; color: #fff; background: linear-gradient(135deg, #10b981, #059669); box-shadow: 0 10px 22px -10px rgba(5,150,105,.8); flex-shrink: 0; }
+.dt-closed b { display: block; font-size: 14px; font-weight: 800; color: #065f46; }
+.dt-closed span { font-size: 12.5px; color: #047857; }
+
+/* Ícono de "tarifa pendiente" junto al título de una sección (reemplaza los
+   banners op-tarifa-alert grandes). Hover nativo vía title=""; clic abre el
+   detalle en SweetAlert (ver detalle-premium.js). */
+.dt-premium .dt-tarifa-ico {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 19px; height: 19px; margin-left: 7px; border-radius: 50%;
+    background: rgba(220,38,38,.1); color: #dc2626 !important; font-size: 11px !important;
+    cursor: pointer; vertical-align: middle; transition: background .2s, transform .2s;
+}
+.dt-premium .dt-tarifa-ico:hover { background: rgba(220,38,38,.2); transform: scale(1.1); }
+
+/* ---------- 4b. PANEL DE AVANCE COLAPSABLE ----------
+   Permite minimizar el anillo/ruta/indicadores/línea de tiempo para no
+   competir por espacio con las pestañas de servicios. Lo esencial
+   (booking, flujo, servicio, cliente, contenedores, mercancía y alertas)
+   vive en .dt-hero-id y nunca se oculta. */
+.dt-hero-progress, .dt-route, .dt-strip, .dt-timeline {
+    max-height: 2000px; /* techo holgado para que el colapso a 0 se pueda animar */
+    transition: max-height .4s cubic-bezier(.2,.8,.2,1), opacity .25s ease, margin .4s ease, padding .4s ease;
+}
+.dt-dash-collapsed .dt-hero-main { grid-template-columns: 1fr; }
+.dt-dash-collapsed .dt-hero-progress {
+    max-height: 0; opacity: 0; padding-top: 0; padding-bottom: 0; margin: 0; border-width: 0;
+    overflow: hidden; pointer-events: none;
+}
+.dt-dash-collapsed .dt-route { max-height: 0; opacity: 0; padding-top: 0; margin-top: 0; border-top-width: 0; overflow: hidden; pointer-events: none; }
+.dt-dash-collapsed .dt-strip,
+.dt-dash-collapsed .dt-timeline { max-height: 0; opacity: 0; margin: 0; overflow: hidden; pointer-events: none; }
+.dt-dash-collapsed .dt-timeline { padding-top: 0; padding-bottom: 0; border-width: 0; }
+
+/* ---------- 5. PESTAÑAS PRINCIPALES (barra flotante) ---------- */
+.dt-premium #detalleTabs {
+    position: sticky; top: 10px; z-index: 40;
+    display: flex; flex-wrap: nowrap; gap: 4px !important; overflow-x: auto; scrollbar-width: none;
+    padding: 6px !important; margin-bottom: 18px !important;
+    background: rgba(255,255,255,.86) !important;
+    backdrop-filter: blur(16px) saturate(160%); -webkit-backdrop-filter: blur(16px) saturate(160%);
+    border: 1px solid var(--dt-line) !important; border-radius: 16px;
+    box-shadow: 0 14px 34px -22px rgba(44,27,77,.45);
+}
+.dt-premium #detalleTabs::-webkit-scrollbar { display: none; }
+.dt-premium #detalleTabs .nav-item { flex: 0 0 auto; }
+.dt-premium #detalleTabs .nav-link {
+    display: inline-flex !important; align-items: center; gap: 2px; white-space: nowrap;
+    min-width: 0 !important; flex: none !important;
+    padding: 10px 15px !important; margin: 0 !important;
+    border: 0 !important; border-radius: 11px !important;
+    background: transparent !important; color: var(--dt-muted) !important;
+    font-size: 11.5px !important; font-weight: 800 !important; letter-spacing: .4px !important;
+    box-shadow: none !important; transition: background .2s, color .2s !important;
+}
+.dt-premium #detalleTabs .nav-link:hover { background: var(--dt-tint) !important; color: var(--dt-brand) !important; }
+.dt-premium #detalleTabs .nav-link.active {
+    background: linear-gradient(135deg, #2c1b4d, #5b2a8a) !important; color: #fff !important;
+    box-shadow: 0 10px 22px -12px rgba(44,27,77,.9) !important;
+}
+.dt-premium #detalleTabs .nav-link.text-danger:not(.active) { color: #dc2626 !important; }
+.dt-premium #detalleTabs .nav-link.active .tab-progress-ring { background: conic-gradient(#34d399 calc(var(--pct, 0) * 1%), rgba(255,255,255,.25) 0); }
+.dt-premium #detalleTabs .nav-link.active .tab-progress-ring::after { background: #3a2363; }
+.dt-premium #detalleTabs .nav-link.active .tab-progress-ring[data-complete="true"] { background: #10b981; }
+.dt-premium #detalleTabs .nav-link.active .tab-progress-ring[data-complete="true"]::after { background: transparent; }
+.dt-premium #detalleTabs .nav-link > i { opacity: .85; }
+
+/* Entrada suave de cada panel */
+.dt-premium > .tab-content > .tab-pane.active { animation: dtPane .35s cubic-bezier(.2,.8,.2,1) both; }
+@keyframes dtPane { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+
+/* ---------- 6. SECCIONES Y TARJETAS ---------- */
+.dt-premium .form-section {
+    border-radius: 20px !important; border: 1px solid var(--dt-line) !important;
+    box-shadow: var(--dt-shadow) !important; padding: 28px 30px !important; background: #fff !important;
+}
+.dt-premium .section-title-sm {
+    position: relative; padding-left: 14px !important;
+    font-size: 12px !important; font-weight: 800 !important; letter-spacing: .9px !important; color: var(--dt-ink) !important;
+    border-bottom: 1px dashed var(--dt-line) !important; padding-bottom: 14px !important; margin-bottom: 20px !important;
+}
+.dt-premium .section-title-sm::before {
+    content: ''; position: absolute; left: 0; top: 2px; width: 4px; height: 15px; border-radius: 4px; background: var(--dt-grad);
+}
+.dt-premium .mod-label { color: var(--dt-faint) !important; letter-spacing: .7px !important; }
+
+.dt-premium .form-subcard {
+    background: linear-gradient(180deg, #fbfaff 0%, var(--dt-soft) 100%); border: 1px solid var(--dt-line);
+    border-radius: 16px; padding: 20px 22px; transition: border-color .2s, box-shadow .2s;
+}
+.dt-premium .form-subcard:hover { border-color: #e2d8f0; box-shadow: 0 12px 26px -22px rgba(44,27,77,.5); }
+.dt-premium .form-subcard-title { font-size: 11px; font-weight: 800; color: var(--dt-ink); border-bottom: 1px dashed var(--dt-line); }
+.dt-premium .form-subcard-title i {
+    width: 26px; height: 26px; border-radius: 8px; display: inline-grid; place-items: center;
+    background: var(--dt-tint); color: var(--dt-brand) !important; font-size: 12px !important;
+}
+
+.dt-premium .form-section .p-3.border.rounded,
+.dt-premium .form-section .border.rounded.bg-light {
+    border-radius: 16px !important; border-color: var(--dt-line) !important; background: var(--dt-soft) !important;
+}
+
+/* Campos: estado de lectura más limpio, edición más clara */
+.dt-premium .erp-input { border-radius: 11px !important; border-color: var(--dt-line) !important; background-color: #fbfaff !important; }
+.dt-premium .erp-input:focus, .dt-premium .edit-mode .inline-field:focus {
+    border-color: var(--dt-brand-2) !important; background-color: #fff !important;
+    box-shadow: 0 0 0 4px rgba(139,92,246,.12) !important;
+}
+.dt-premium .edit-mode { position: relative; }
+.dt-premium .form-section.edit-mode {
+    border-color: #d8c8f0 !important;
+    box-shadow: 0 0 0 4px rgba(139,92,246,.08), var(--dt-shadow) !important;
+}
+
+/* Botones */
+.dt-premium .btn { border-radius: 11px !important; }
+.dt-premium .btn-dark {
+    background: linear-gradient(135deg, #2c1b4d, #5b2a8a) !important; border: 0 !important; color: #fff !important;
+    box-shadow: 0 10px 22px -12px rgba(44,27,77,.85);
+}
+.dt-premium .btn-dark:hover:not(:disabled) { background: linear-gradient(135deg, #3a2363, #6d2d9e) !important; transform: translateY(-1px); }
+.dt-premium .btn-danger { background: linear-gradient(135deg, #b91c1c, #ef4444) !important; border: 0 !important; box-shadow: 0 10px 22px -12px rgba(220,38,38,.8); }
+.dt-premium .btn-edit-inline { border-radius: 10px !important; }
+
+/* Widget de responsabilidad */
+.dt-premium .resp-widget {
+    border-radius: 14px; background: linear-gradient(90deg, #fbfaff, #f6f2fc);
+    border: 1px solid var(--dt-line); padding: 12px 16px;
+}
+.dt-premium .resp-widget-icon { background: var(--dt-grad); color: #fff; width: 30px; height: 30px; }
+.dt-premium .resp-widget-field select { border-radius: 8px; border-color: var(--dt-line); }
+
+/* Alertas */
+.dt-premium .form-section .alert-danger { border-radius: 14px !important; }
+.dt-premium .alert-secondary { border-radius: 14px !important; }
+
+/* Selector de contenedor */
+.dt-premium .container-subtabs { background: #fff; border-radius: 14px; box-shadow: var(--dt-shadow); padding: 6px; }
+.dt-premium .container-subtabs .nav-link { border-radius: 10px; }
+.dt-premium .container-subtabs .nav-link.active { background: var(--dt-tint); color: var(--dt-brand); box-shadow: inset 0 0 0 1px #e4d8fb; }
+
+/* Steppers */
+.dt-premium .step-item.completed .step-circle { background: var(--dt-grad) !important; border-color: transparent !important; }
+.dt-premium .step-item.completed .step-title { color: var(--dt-brand) !important; }
+
+/* ---------- 7. EXTRACOSTOS ---------- */
+.dt-premium #det-extracostos .table-responsive { border-radius: 16px !important; border: 1px solid var(--dt-line) !important; box-shadow: none !important; overflow: hidden; }
+.dt-premium #det-extracostos table { --bs-table-striped-bg: transparent; --bs-table-accent-bg: transparent; margin: 0; }
+.dt-premium #det-extracostos .table > :not(caption) > * > * {
+    border-width: 0 0 1px 0 !important; border-color: var(--dt-line) !important;
+    padding: 14px 12px !important; box-shadow: none !important; background: #fff;
+}
+.dt-premium #det-extracostos thead th { background: var(--dt-soft) !important; color: var(--dt-faint) !important; font-weight: 800; }
+.dt-premium #det-extracostos tbody tr:hover > * { background: #fbf9ff !important; }
+.dt-premium #det-extracostos tbody tr:last-child > * { border-bottom: 0 !important; }
+
+/* ---------- 8. HISTORIAL ---------- */
+.dt-premium #historialTabsDet .nav-link { border-radius: 99px !important; padding: 6px 14px !important; transition: all .2s; }
+.dt-premium #historialTabsDet .nav-link.active { background: var(--dt-deep) !important; color: #fff !important; border-color: var(--dt-deep) !important; }
+.dt-premium #det-historial .tab-content { padding-right: 4px; }
+.dt-premium #det-historial .tab-content::-webkit-scrollbar { width: 6px; }
+.dt-premium #det-historial .tab-content::-webkit-scrollbar-thumb { background: #d8d4e6; border-radius: 10px; }
+.dt-premium #det-historial .tab-content .rounded { border-radius: 12px !important; transition: transform .2s; }
+.dt-premium #det-historial .tab-content .rounded:hover { transform: translateX(3px); }
+
+/* ---------- 9. MODALES Y SWEETALERT ---------- */
+.dt-premium .modal-content,
+#modalGeneradorCorreos .modal-content { border-radius: 22px !important; overflow: hidden; box-shadow: 0 40px 90px -30px rgba(20,12,38,.6) !important; }
+#modalAddCostoGlobalDet .modal-header,
+#modalGeneradorCorreos .modal-header {
+    background: radial-gradient(500px 200px at 100% 0%, rgba(139,92,246,.45), transparent 60%), linear-gradient(135deg, #140c26, #2c1b4d) !important;
+    border: 0; padding: 22px 26px;
+}
+.swal2-popup { border-radius: 22px !important; }
+.swal2-styled.swal2-confirm { border-radius: 11px !important; font-weight: 700 !important; }
+.swal2-styled.swal2-cancel { border-radius: 11px !important; }
+
+/* Scroll del documento */
+.dt-premium ::selection { background: rgba(139,92,246,.2); }
+
+/* =========================================================================
+   11. PANEL DOCUMENTAL (Gestor Documental Pro) — NIVEL PREMIUM
+   Este partial (_PanelDocumental.cshtml) se usa también en el modal de la
+   vista Index (quick-edit), con sus propias hojas de estilo — por eso cada
+   regla de acá va acotada a .dt-premium, igual que el resto de este
+   archivo: nada de esto llega a tocar esa otra vista. Solo propiedades
+   visuales; ningún display/pointer-events/appearance de los que ya
+   controla el modo edición fue modificado.
+   ========================================================================= */
+
+/* Tipografía: .pro-title/.pro-input/etc. heredan Jakarta Sans de una sola
+   vez poniéndola en el contenedor raíz (font-family hereda por defecto). */
+.dt-premium .pro-wrapper { font-family: 'Plus Jakarta Sans', system-ui, -apple-system, 'Segoe UI', sans-serif; }
+
+/* --- Cascarón: sidebar + contenido --- */
+.dt-premium .pro-wrapper {
+    border: 1px solid var(--dt-line) !important; border-radius: 22px !important;
+    box-shadow: var(--dt-shadow) !important; background: #fff;
+}
+.dt-premium .pro-sidebar {
+    background: linear-gradient(180deg, #fbfaff 0%, var(--dt-soft) 100%) !important;
+    border-right: 1px solid var(--dt-line) !important; padding: 22px 14px !important; gap: 3px !important;
+}
+.dt-premium .pro-sidebar .pro-label {
+    color: var(--dt-faint) !important; font-weight: 800 !important; letter-spacing: .8px !important;
+    border-top-color: var(--dt-line) !important;
+}
+.dt-premium .pro-content-area { padding: 30px 34px !important; }
+.dt-premium .pro-content-area::-webkit-scrollbar { width: 6px; }
+.dt-premium .pro-content-area::-webkit-scrollbar-track { background: transparent; }
+.dt-premium .pro-content-area::-webkit-scrollbar-thumb { background: #d8d4e6; border-radius: 10px; }
+
+/* --- Navegación de certificados (sidebar) --- */
+.dt-premium .pro-nav-btn {
+    border-radius: 12px !important; font-weight: 700 !important; color: var(--dt-muted) !important;
+    padding: 11px 14px 11px 17px !important; margin-bottom: 3px !important;
+}
+.dt-premium .pro-nav-btn::before { background: var(--dt-grad) !important; border-radius: 0 4px 4px 0; }
+.dt-premium .pro-nav-btn:hover { background: var(--dt-tint) !important; color: var(--dt-brand) !important; }
+.dt-premium .pro-nav-btn.active {
+    background: linear-gradient(135deg, #2c1b4d, #5b2a8a) !important; color: #fff !important;
+    border-color: transparent !important; box-shadow: 0 10px 22px -12px rgba(44,27,77,.6) !important;
+}
+.dt-premium .pro-nav-btn.active::before { background: #fff !important; opacity: .55; }
+.dt-premium .pro-dot { box-shadow: 0 0 0 3px rgba(20,12,38,.04); }
+.dt-premium .pro-nav-btn.active .pro-dot { box-shadow: 0 0 0 3px rgba(255,255,255,.3); }
+
+/* --- Títulos de sección: mismo chip de ícono que .form-subcard-title --- */
+.dt-premium .pro-title {
+    font-weight: 800 !important; letter-spacing: -.3px !important; color: var(--dt-ink) !important;
+}
+.dt-premium .pro-title > i:first-child {
+    width: 30px; height: 30px; border-radius: 10px; flex-shrink: 0;
+    display: inline-flex; align-items: center; justify-content: center;
+    background: var(--dt-tint); color: var(--dt-brand) !important; font-size: 14px !important;
+    margin-right: 10px !important;
+}
+.dt-premium .pro-subtitle { color: var(--dt-muted) !important; margin-bottom: 22px !important; }
+/* Los íconos dentro de badges/avisos no son el ícono principal de la
+   sección: no llevan el chip de fondo y conservan su color semántico
+   (verde "enviado", ámbar "pendiente"...) en vez del morado uniforme. */
+.dt-premium .pro-title .badge i, .dt-premium .pro-title > i:not(:first-child):not(.dt-tarifa-ico) { background: none; width: auto; height: auto; margin-right: 4px !important; }
+.dt-premium .pro-title .badge {
+    border-radius: 999px !important; font-weight: 800 !important; letter-spacing: .3px !important;
+    padding: 4px 10px !important;
+}
+
+/* --- Topbar "Gestor Documental Pro" --- */
+.dt-premium .pro-topbar { border-bottom-color: var(--dt-line) !important; }
+.dt-premium .pro-topbar h5 { font-weight: 800 !important; color: var(--dt-ink) !important; letter-spacing: -.4px !important; }
+.dt-premium .pro-topbar p { color: var(--dt-muted) !important; }
+.dt-premium .pro-topbar-ico {
+    width: 40px; height: 40px; border-radius: 12px; flex-shrink: 0;
+    display: inline-flex; align-items: center; justify-content: center;
+    background: var(--dt-grad); color: #fff; font-size: 17px;
+    box-shadow: 0 10px 20px -10px rgba(109,45,158,.6);
+}
+.dt-premium .pro-topbar-note {
+    background: var(--dt-tint) !important; color: var(--dt-brand) !important; border-radius: 999px;
+    padding: 7px 13px !important; font-weight: 800 !important; display: inline-flex; align-items: center; gap: 6px;
+}
+
+/* --- Tarjetas (pro-card / gray / red) y sub-tarjetas blancas con borde --- */
+.dt-premium .pro-card, .dt-premium .pro-card-gray, .dt-premium .pro-card-red { border-radius: 16px !important; }
+.dt-premium .pro-card { border-color: var(--dt-line) !important; }
+.dt-premium .pro-card-gray { background: var(--dt-soft) !important; border-color: var(--dt-line) !important; }
+.dt-premium .pro-content-area .rounded.border.bg-white,
+.dt-premium .pro-content-area .p-3.rounded.border { border-radius: 14px !important; border-color: var(--dt-line) !important; }
+
+/* --- Campos y controles --- */
+.dt-premium .pro-label { color: var(--dt-faint) !important; font-weight: 800 !important; letter-spacing: .6px !important; }
+.dt-premium .pro-input {
+    border-radius: 10px !important; border-color: var(--dt-line) !important; background-color: #fbfaff !important;
+    transition: border-color .15s ease, box-shadow .15s ease, background-color .15s ease;
+}
+.dt-premium .edit-mode .pro-input:not([readonly]) {
+    border-color: var(--dt-brand-2) !important; background-color: #fff !important;
+    box-shadow: 0 0 0 4px rgba(139,92,246,.12) !important;
+}
+.dt-premium .pro-check, .dt-premium .cuadradito-check {
+    border-radius: 6px !important; border-color: var(--dt-faint) !important;
+}
+.dt-premium .pro-check:checked, .dt-premium .cuadradito-check:checked {
+    background-color: var(--dt-ink) !important; border-color: var(--dt-ink) !important;
+    box-shadow: 0 0 0 3px rgba(139,92,246,.15) !important;
+}
+.dt-premium .pro-file-input { border-radius: 8px !important; border-color: var(--dt-faint) !important; background: var(--dt-soft) !important; }
+.dt-premium .pro-file-input::file-selector-button { background: var(--dt-tint) !important; color: var(--dt-brand) !important; border-radius: 6px !important; }
+
+/* --- Botones de acción pequeños (Ver / Aprobado / Rechazado / Enviar / Guardar) --- */
+.dt-premium .pro-btn { border-radius: 9px !important; font-weight: 800 !important; letter-spacing: .2px; transition: filter .2s, transform .2s, box-shadow .2s; }
+.dt-premium .pro-btn:hover { transform: translateY(-1px); box-shadow: 0 8px 16px -8px rgba(20,12,38,.35); }
+
+/* --- Tablas de reemisiones (Principal / Reemisión 1-3) --- */
+.dt-premium .pro-table th { color: var(--dt-faint) !important; border-color: var(--dt-line) !important; }
+.dt-premium .pro-table td { border-color: var(--dt-line) !important; }
+.dt-premium .pro-table tbody tr:hover > td { background: var(--dt-soft); }
+
+/* --- Trazabilidad (stepper de Fito/Sanitario/Captura) --- */
+.dt-premium .pro-stepper::before { background: var(--dt-line); }
+.dt-premium .pro-step-icon { border-color: var(--dt-line); box-shadow: 0 0 0 4px #fff, var(--dt-shadow); }
+.dt-premium .pro-step.completed .pro-step-icon { box-shadow: 0 0 0 4px #fff, 0 6px 14px -6px rgba(16,185,129,.5); }
+.dt-premium .pro-step.rejected .pro-step-icon { box-shadow: 0 0 0 4px #fff, 0 6px 14px -6px rgba(239,68,68,.5); }
+.dt-premium .pro-step-text { color: var(--dt-faint); }
+.dt-premium .pro-step.completed .pro-step-text, .dt-premium .pro-step.rejected .pro-step-text { color: var(--dt-ink); }
+
+/* --- Mini-stepper (Env → Proc → Vis, en Documentos Base) --- */
+.dt-premium .mini-step {
+    border-radius: 999px !important; padding: 2px 9px !important; background: var(--dt-line) !important;
+    color: var(--dt-muted) !important; font-weight: 800 !important;
+}
+.dt-premium .mini-step.active { background: var(--dt-grad) !important; color: #fff !important; }
+.dt-premium .mini-arrow { color: var(--dt-faint) !important; }
+
+/* --- Modalidad GRUPAL / INDIVIDUAL (btn-group) --- */
+.dt-premium .modalidad-cert-radio + label.btn {
+    border-radius: 9px !important; font-weight: 800 !important; letter-spacing: .3px;
+    color: var(--dt-muted) !important; border-color: var(--dt-line) !important; background: #fff !important;
+    transition: all .15s ease;
+}
+.dt-premium .modalidad-cert-radio:checked + label.btn {
+    background: var(--dt-grad) !important; border-color: transparent !important; color: #fff !important;
+    box-shadow: 0 8px 18px -10px rgba(109,45,158,.6) !important;
+}
+
+/* --- Selectores Pagado por / Responsable --- */
+.dt-premium .resp-pagado, .dt-premium .resp-responsable {
+    border-radius: 999px !important; font-weight: 800 !important; background: var(--dt-soft) !important;
+}
+
+/* --- Aviso compacto de tarifa pendiente (por contenedor individual) --- */
+.dt-premium .op-tarifa-alert--compact { border-radius: 999px !important; }
+
+/* --- Registro de actividad (logs por certificado) --- */
+.dt-premium .log-incidencias-wrap { border-radius: 12px !important; }
+.dt-premium .log-incidencias-wrap::-webkit-scrollbar { width: 6px; }
+.dt-premium .log-incidencias-wrap::-webkit-scrollbar-thumb { background: #d8d4e6; border-radius: 10px; }
+
+/* --- Subcertificados (COA/DT/CODAUT/CLAVE/NEPPEX): lista vertical --- */
+.dt-premium .subcert-row { border-radius: 12px; transition: background .2s; border-color: var(--dt-line) !important; }
+.dt-premium .subcert-row:hover { background: var(--dt-soft); }
+
+/* --- Select2 dentro del panel (Agencia de Aduanas) --- */
+.dt-premium .pro-content-area .select2-container--default .select2-selection--single {
+    border-radius: 10px !important; border-color: var(--dt-line) !important; background-color: #fbfaff !important;
+}
+
+/* ---------- 10. RESPONSIVE / ACCESIBILIDAD ---------- */
+@media (max-width: 1199.98px) {
+    .dt-hero-main { grid-template-columns: 1fr; }
+    .dt-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 767.98px) {
+    .dt-hero { padding: 18px 18px 22px; border-radius: 20px; }
+    .dt-hbtn span { display: none; }
+    .dt-hero-progress { flex-direction: column; align-items: stretch; }
+    .dt-ring { margin: 0 auto; }
+    .dt-route { grid-template-columns: 1fr 1fr; }
+    .dt-track { grid-column: 1 / -1; order: 3; margin: 10px 10px 14px; }
+    .dt-strip { grid-template-columns: 1fr; }
+    .dt-premium .form-section { padding: 20px 18px !important; }
+    /* Panel Documental: el sidebar fijo (250px) ya no cabe junto al
+       contenido en pantallas angostas — se apila arriba. */
+    .dt-premium .pro-wrapper { flex-direction: column; min-height: 0; }
+    .dt-premium .pro-sidebar { width: 100%; flex-direction: row; flex-wrap: wrap; border-right: 0; border-bottom: 1px solid var(--dt-line); }
+    .dt-premium .pro-sidebar .pro-label { width: 100%; }
+    .dt-premium .pro-nav-btn { width: auto; flex: 1 1 auto; }
+    .dt-premium .pro-content-area { padding: 22px 18px !important; height: auto !important; max-height: 70vh; }
+}
+@media (prefers-reduced-motion: reduce) {
+    .dt-premium *, .dt-hero *, .dt-strip *, .dt-timeline * { animation: none !important; transition: none !important; }
+}
+
+/* Indicador de costo del Gate Out (oct-2026, solo lectura) */
+.dt-gate-costo { display: flex; gap: 10px; align-items: flex-start; padding: 10px 14px; border-radius: 10px; border: 1px solid #e2e8f0; background: #f8fafc; margin-bottom: 14px; }
+.dt-gate-costo > i { font-size: 18px; line-height: 1.2; }
+.dt-gate-costo b { display: block; font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: .4px; }
+.dt-gate-costo span { font-size: 12px; color: #475569; }
+.dt-gate-costo--con { background: #fff7ed; border-color: #fed7aa; }
+.dt-gate-costo--con > i, .dt-gate-costo--con b { color: #c2410c; }
+.dt-gate-costo--sin { background: #f0fdf4; border-color: #bbf7d0; }
+.dt-gate-costo--sin > i, .dt-gate-costo--sin b { color: #15803d; }
+.dt-gate-costo--pend { background: #fffbeb; border-color: #fde68a; }
+.dt-gate-costo--pend > i, .dt-gate-costo--pend b { color: #b45309; }
+.dt-gate-costo--na > i, .dt-gate-costo--na b { color: #64748b; }

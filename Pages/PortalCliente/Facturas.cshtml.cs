@@ -48,6 +48,7 @@ namespace AtilsonCargoSpa.Pages.PortalCliente
             if (idClienteLogueado == null) return RedirectToPage("/Login");
 
             var query = _context.Operaciones
+                .AsNoTracking()
                 .Include(o => o.IdPuertoOrigenNavigation)
                 .Include(o => o.IdPuertoDestinoNavigation)
                 .Include(o => o.TransaccionesFinancieras)
@@ -59,15 +60,18 @@ namespace AtilsonCargoSpa.Pages.PortalCliente
 
             if (!string.IsNullOrEmpty(SearchString))
             {
-                query = query.Where(o => o.NumeroBooking != null && o.NumeroBooking.Contains(SearchString));
+                string s = SearchString.Trim();
+                query = query.Where(o =>
+                    (o.NumeroBooking != null && o.NumeroBooking.Contains(s)) ||
+                    o.TransaccionesFinancieras.Any(t => t.NumeroDocumento != null && t.NumeroDocumento.Contains(s)));
             }
 
             OperacionesFinancieras = await query.OrderByDescending(o => o.Id).ToListAsync();
 
             var txs = OperacionesFinancieras.SelectMany(o => o.TransaccionesFinancieras.Where(t => t.TipoMovimiento == "INGRESO" && t.Moneda == "USD")).ToList();
 
-            TotalFacturadoGlobal = txs.Where(t => t.EstadoFila == "FACTURADO" || t.EstadoFila == "PAGADO").Sum(t => t.MontoNeto);
-            TotalPendienteGlobal = txs.Where(t => t.EstadoFila != "PAGADO").Sum(t => t.MontoNeto);
+            TotalFacturadoGlobal = txs.Where(t => t.EstadoFila == "FACTURADO" || t.EstadoFila == "PAGADO" || t.EstadoFila == "CONCILIADO").Sum(t => t.MontoNeto);
+            TotalPendienteGlobal = txs.Where(t => t.EstadoFila != "PAGADO" && t.EstadoFila != "CONCILIADO").Sum(t => t.MontoNeto);
 
             return Page();
         }
@@ -125,6 +129,7 @@ namespace AtilsonCargoSpa.Pages.PortalCliente
         private async Task<Operacione?> CargarOperacionAsync(int id, int idCliente)
         {
             return await _context.Operaciones
+                .AsNoTracking()
                 .Include(o => o.IdClienteNavigation)
                 .Include(o => o.IdNavieraNavigation)
                 .Include(o => o.OperacionesTerrestres)
@@ -177,10 +182,11 @@ namespace AtilsonCargoSpa.Pages.PortalCliente
 
         private async Task<EstadoCuentaClienteDto?> ConstruirEstadoCuentaAsync(int idCliente, DateTime desde, DateTime hasta)
         {
-            var cliente = await _context.Clientes.FindAsync(idCliente);
+            var cliente = await _context.Clientes.AsNoTracking().FirstOrDefaultAsync(c => c.Id == idCliente);
             if (cliente == null) return null;
 
             var operaciones = await _context.Operaciones
+                .AsNoTracking()
                 .Where(o => o.IdCliente == idCliente && !o.IsDeleted &&
                             o.FechaCreacion.HasValue && o.FechaCreacion.Value >= desde && o.FechaCreacion.Value <= hasta)
                 .Include(o => o.TransaccionesFinancieras)

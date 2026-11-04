@@ -1,0 +1,33 @@
+@* Video de la empresa (nov-2026). Se configura en appsettings › SitioWeb:Video:
+   - un enlace de YouTube: se muestra la portada y el reproductor carga recién al presionar
+     "Reproducir" (la página no descarga YouTube si nadie lo ve, y se usa youtube-nocookie);
+   - o un archivo propio, por ejemplo "/video/atilson.mp4" dentro de wwwroot.
+   Sin video configurado no se muestra nada. *@
+@inject AtilsonCargoSpa.Services.SitioWebInfo Sitio
+@{
+    string? id = Sitio.VideoYoutubeId, archivo = Sitio.VideoArchivo;
+}
+@if (archivo != null)
+{
+    <figure class="video-emp">
+        <div class="video-emp-marco">
+            <video controls preload="metadata" playsinline poster="@Sitio.VideoPortada" aria-label="@Sitio.VideoTitulo">
+                <source src="@Url.Content(archivo)" type="@(archivo.EndsWith(".webm", StringComparison.OrdinalIgnoreCase) ? "video/webm" : "video/mp4")" />
+            </video>
+        </div>
+        <figcaption><i class="bi bi-play-circle" aria-hidden="true"></i> @Sitio.VideoTitulo</figcaption>
+    </figure>
+}
+else if (id != null)
+{
+    <figure class="video-emp">
+        <div class="video-emp-marco" data-video-youtube="@id">
+            <button type="button" class="video-emp-portada" aria-label="Reproducir video: @Sitio.VideoTitulo">
+                <img src="https://i.ytimg.com/vi/@id/hqdefault.jpg" alt="" loading="lazy" decoding="async" />
+                <span class="video-emp-play" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M8 5.5v13l11-6.5z" /></svg></span>
+                <span class="video-emp-etiqueta" aria-hidden="true">Ver video</span>
+            </button>
+        </div>
+        <figcaption><i class="bi bi-play-circle" aria-hidden="true"></i> @Sitio.VideoTitulo</figcaption>
+    </figure>
+}

@@ -1,0 +1,96 @@
+@* Aviso en pantalla de registros nuevos (nov-2026). Cuando una empresa se registra en el portal
+   o alguien del equipo pide su cuenta, los internos lo ven al entrar al ERP aunque el correo de
+   aviso no haya salido. Empresas: Ventas, administradores y jefaturas. Equipo: administradores.
+   El aviso se cierra con "Entendido" y vuelve a aparecer solo cuando llega una solicitud nueva
+   (se recuerda en este navegador el último número visto). *@
+@inject AtilsonCargoSpa.Services.RegistroClientesService RegistroClientes
+@inject AtilsonCargoSpa.Services.RegistroEquipoService RegistroEquipo
+@{
+    var items = new List<(string Tipo, int Id, string Nombre, DateTime Fecha, string Url)>();
+    bool interno = User.Identity?.IsAuthenticated == true && !User.IsInRole("Cliente");
+    bool esAdmin = AtilsonCargoSpa.Helpers.PermisosEquipo.EsAdmin(User);
+    bool veEmpresas = interno && (esAdmin || AtilsonCargoSpa.Helpers.PermisosEquipo.EsJefatura(User) || User.IsInRole("Ventas"));
+    if (veEmpresas)
+        foreach (var x in await RegistroClientes.UltimasPendientesAsync())
+            items.Add(("e", x.Id, x.Nombre, x.Fecha, "/App/Clientes/Solicitudes"));
+    if (interno && esAdmin)
+        foreach (var x in await RegistroEquipo.UltimasPendientesAsync())
+            items.Add(("q", x.Id, x.Nombre, x.Fecha, "/App/Equipo/Index"));
+    int maxE = items.Where(i => i.Tipo == "e").Select(i => i.Id).DefaultIfEmpty(0).Max();
+    int maxQ = items.Where(i => i.Tipo == "q").Select(i => i.Id).DefaultIfEmpty(0).Max();
+}
+@if (items.Count > 0)
+{
+    <aside class="aviso-reg" id="avisoRegistros" role="status" aria-live="polite" hidden data-e="@maxE" data-q="@maxQ">
+        <div class="aviso-reg-cab">
+            <span class="aviso-reg-ico"><i class="bi bi-person-plus"></i></span>
+            <div>
+                <b>@(items.Count == 1 ? "Nueva solicitud de registro" : "Solicitudes de registro por revisar")</b>
+                <small>Esperan tu revisión en Maestros.</small>
+            </div>
+            <button type="button" class="aviso-reg-x" data-cerrar aria-label="Cerrar aviso"><i class="bi bi-x-lg"></i></button>
+        </div>
+        <ul>
+            @foreach (var i in items.OrderByDescending(i => i.Fecha).Take(4))
+            {
+                <li data-tipo="@i.Tipo" data-id="@i.Id">
+                    <a href="@i.Url">
+                        <span class="aviso-reg-tag @(i.Tipo == "e" ? "emp" : "eq")">@(i.Tipo == "e" ? "Empresa" : "Equipo")</span>
+                        <span class="aviso-reg-nom">@i.Nombre</span>
+                        <time>@i.Fecha.ToString("dd-MM HH:mm")</time>
+                    </a>
+                </li>
+            }
+        </ul>
+        @if (esAdmin && !RegistroClientes.CorreoConfigurado)
+        {
+            <p class="aviso-reg-nota"><i class="bi bi-envelope-exclamation"></i> Los avisos por correo no están saliendo: falta la contraseña del correo remitente (Smtp:Password).</p>
+        }
+        <button type="button" class="aviso-reg-ok" data-cerrar>Entendido</button>
+    </aside>
+    <style>
+        .aviso-reg { position: fixed; right: 20px; bottom: 20px; z-index: 1085; width: min(360px, calc(100vw - 32px)); background: #fff; border-radius: 16px; box-shadow: 0 24px 50px -20px rgba(30,20,70,.45), 0 0 0 1px #e6e2f1; padding: 14px 14px 12px; font-size: 13px; color: #1e1835; animation: avisoRegEntra .45s cubic-bezier(.2,.8,.2,1); }
+        .aviso-reg[hidden] { display: none; }
+        @@keyframes avisoRegEntra { from { opacity: 0; transform: translateY(16px) scale(.98); } }
+        .aviso-reg-cab { display: grid; grid-template-columns: 38px 1fr 28px; gap: 10px; align-items: center; }
+        .aviso-reg-ico { width: 38px; height: 38px; border-radius: 12px; display: grid; place-items: center; background: #443094; color: #fff; font-size: 17px; position: relative; }
+        .aviso-reg-ico::after { content: ""; position: absolute; top: -3px; right: -3px; width: 10px; height: 10px; border-radius: 50%; background: #f43f5e; box-shadow: 0 0 0 2px #fff; }
+        .aviso-reg-cab b { display: block; font-size: 14px; }
+        .aviso-reg-cab small { color: #6b6585; }
+        .aviso-reg-x { border: 0; background: none; color: #8a84a3; width: 28px; height: 28px; border-radius: 8px; }
+        .aviso-reg-x:hover { background: #f4f2fa; color: #1e1835; }
+        .aviso-reg ul { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 4px; }
+        .aviso-reg li a { display: grid; grid-template-columns: auto 1fr auto; gap: 8px; align-items: center; padding: 8px 10px; border-radius: 10px; text-decoration: none; color: inherit; background: #f7f6fb; }
+        .aviso-reg li a:hover { background: #efecf8; }
+        .aviso-reg li.nuevo a { background: #f1edff; box-shadow: inset 3px 0 0 #6d4fd8; }
+        .aviso-reg-tag { font-size: 10.5px; font-weight: 700; padding: 2px 7px; border-radius: 999px; }
+        .aviso-reg-tag.emp { background: #e0f2fe; color: #075985; }
+        .aviso-reg-tag.eq { background: #ede9fe; color: #5b21b6; }
+        .aviso-reg-nom { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .aviso-reg time { color: #8a84a3; font-size: 11.5px; font-variant-numeric: tabular-nums; }
+        .aviso-reg-nota { margin: 10px 0 0; padding: 8px 10px; border-radius: 10px; background: #fff7ed; color: #9a3412; font-size: 12px; }
+        .aviso-reg-ok { margin-top: 10px; width: 100%; border: 0; border-radius: 10px; padding: 9px; background: #1e1835; color: #fff; font-weight: 700; }
+        .aviso-reg-ok:hover { background: #443094; }
+        @@media (prefers-reduced-motion: reduce) { .aviso-reg { animation: none; } }
+    </style>
+    <script>
+        (function () {
+            var a = document.getElementById('avisoRegistros'); if (!a) return;
+            var visto = { e: 0, q: 0 };
+            try { visto = JSON.parse(localStorage.getItem('atilson-registros-vistos') || '{}'); } catch (x) { }
+            visto.e = visto.e || 0; visto.q = visto.q || 0;
+            var hayNuevo = false;
+            a.querySelectorAll('li[data-tipo]').forEach(function (li) {
+                if (+li.dataset.id > (visto[li.dataset.tipo] || 0)) { li.classList.add('nuevo'); hayNuevo = true; }
+            });
+            if (!hayNuevo) return;
+            a.hidden = false;
+            a.querySelectorAll('[data-cerrar]').forEach(function (b) {
+                b.addEventListener('click', function () {
+                    a.hidden = true;
+                    try { localStorage.setItem('atilson-registros-vistos', JSON.stringify({ e: Math.max(visto.e, +a.dataset.e), q: Math.max(visto.q, +a.dataset.q) })); } catch (x) { }
+                });
+            });
+        })();
+    </script>
+}

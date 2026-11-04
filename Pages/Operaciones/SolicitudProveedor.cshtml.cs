@@ -75,7 +75,7 @@ namespace AtilsonCargoSpa.Pages.Operaciones
             CorreoTransporte = terr?.CorreoTransporte ?? "";
 
             // ASUNTO EXACTO AL EJEMPLO
-            AsuntoTransporte = $"SOLICITUD SERVICIO TRANSPORTE {empresaTrans}***** MN {naveStr} // BOOKING: {Operacion.NumeroBooking} ({containerStr}) // {nombreCliente} // {naviera} // ATILSON CARGO SPA";
+            AsuntoTransporte = $"SOLICITUD SERVICIO TRANSPORTE {empresaTrans}***** MN {naveStr} // BOOKING: {Operacion.NumeroBooking} ({containerStr}) // {nombreCliente} // {naviera} // CARGOFLOW DEMO SPA";
 
             // CUERPO EXACTO AL EJEMPLO
             TextoTransporte = "Estimado/a equipo, buenos días:\n\n" +
@@ -125,17 +125,17 @@ namespace AtilsonCargoSpa.Pages.Operaciones
                                "--\n" +
                                "Saludos Cordiales / Best Regards\n\n" +
                                "Operaciones Atilson\n" +
-                               "ATILSON CARGO SPA\n" +
+                               "CARGOFLOW DEMO SPA\n" +
                                "___________________________________________________________\n" +
                                "Edificio Mar del Sur, Calle Blanco Nº 1623 Of. 1104 Valparaíso, Chile.\n" +
-                               "(+56) 9 89012691\n" +
-                               "operaciones@atilson.com\n" +
-                               "www.atilson.com";
+                               "(+56) 9 0000 0000\n" +
+                               "operaciones@cargoflow-demo.cl\n" +
+                               "www.cargoflow-demo.cl";
             // ==========================================
             // PREPARACIÓN: CORREO ADUANA
             // ==========================================
             CorreoAduana = "";
-            AsuntoAduana = $"SOLICITUD TRAMITACIÓN DUS // BOOKING: {Operacion.NumeroBooking} // {nombreCliente} // ATILSON CARGO SPA";
+            AsuntoAduana = $"SOLICITUD TRAMITACIÓN DUS // BOOKING: {Operacion.NumeroBooking} // {nombreCliente} // CARGOFLOW DEMO SPA";
 
             TextoDoc = "Estimado equipo de Aduanas, buenos días:\n\n" +
                        "Junto con saludar, favor considerar la siguiente tramitación documental para inicio de gestión:\n\n" +
@@ -153,10 +153,10 @@ namespace AtilsonCargoSpa.Pages.Operaciones
                        "--\n" +
                        "Saludos Cordiales / Best Regards\n\n" +
                        "Operaciones Atilson\n" +
-                       "ATILSON CARGO SPA\n" +
+                       "CARGOFLOW DEMO SPA\n" +
                        "___________________________________________________________\n" +
                        "Edificio Mar del Sur, Calle Blanco Nº 1623 Of. 1104 Valparaíso, Chile.\n" +
-                       "www.atilson.com";
+                       "www.cargoflow-demo.cl";
 
             return Page();
         }

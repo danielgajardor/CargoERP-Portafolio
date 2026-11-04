@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="utf-8" />
@@ -9,6 +9,7 @@
     <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
 
     <style>
             :root {
@@ -58,9 +59,17 @@
             }
 
             .logo-atilson {
-                max-height: 28px;
-                filter: brightness(0) invert(1);
+                height: 34px;
+                width: auto;
+                max-width: 150px;
+                display: block;
             }
+
+            /* Mi perfil (oct-2026) */
+            .user-perfil { color: inherit; text-decoration: none; border-radius: 10px; padding: 4px; margin: -4px; transition: background-color .2s; }
+            .user-perfil:hover { background: rgba(255,255,255,.06); color: inherit; }
+            .user-avatar img { width: 100%; height: 100%; border-radius: inherit; object-fit: cover; }
+            .nav-badge-soporte { display: inline-block; min-width: 18px; padding: 1px 6px; margin-left: 6px; border-radius: 999px; background: #a78bfa; color: #fff; font-size: 10.5px; font-weight: 800; line-height: 16px; text-align: center; }
 
             .minimal-toggle {
                 background: transparent;
@@ -317,83 +326,118 @@
                     color: #ef4444;
                 }
     </style>
+    <link rel="stylesheet" href="~/css/erp-comun.css" asp-append-version="true" />
 </head>
 <body>
 
     <script>
-            if (localStorage.getItem('sidebar-collapsed-cliente') === 'true') {
+            if (window.innerWidth >= 992 && localStorage.getItem('sidebar-collapsed-cliente') === 'true') {
                 document.body.classList.add('sidebar-collapsed');
             }
     </script>
 
     @{
         var currentUrl = ViewContext.RouteData.Values["page"]?.ToString() ?? "/PortalCliente/Index";
-        string nombreEmpresa = User.Identity?.Name ?? "Comercial Algamar S.A.";
+        string nombreEmpresa = User.Identity?.Name ?? "Cliente";
+        AtilsonCargoSpa.Services.ResumenPerfil? miPerfil = null;
+        if (Context.RequestServices.GetService(typeof(AtilsonCargoSpa.Services.PerfilUsuarioService)) is AtilsonCargoSpa.Services.PerfilUsuarioService perfilSvc)
+            miPerfil = await perfilSvc.ResumenAsync(User);
+        // Soporte (oct-2026): conversaciones con respuestas del equipo que el cliente aún no ve.
+        int respuestasSinVer = 0;
+        if (int.TryParse(User.FindFirst("IdCliente")?.Value, out int idClienteMenu) && idClienteMenu > 0
+            && Context.RequestServices.GetService(typeof(AtilsonCargoSpa.Services.SoporteClientesService)) is AtilsonCargoSpa.Services.SoporteClientesService soporteMenu)
+            respuestasSinVer = await soporteMenu.ContarNoLeidasClienteAsync(idClienteMenu);
     }
 
     <aside class="sidebar">
         <div class="sidebar-header">
             <a asp-page="/PortalCliente/Index" class="brand-logo-link">
-                <img src="~/img/Atilson.png" alt="Atilson" class="logo-atilson me-2" onerror="this.style.display='none'" />
+                <img src="~/img/marca/atilson-logo-blanco.svg" alt="Atilson" class="logo-atilson me-2" onerror="this.style.display='none'" asp-append-version="true" />
             </a>
             <button id="sidebarToggle" class="minimal-toggle" title="Contraer Menú">
                 <i class="bi bi-list"></i>
             </button>
         </div>
 
+        @{
+            // Menú del portal (oct-2026): una entrada por pantalla, sin duplicados.
+            string Activo(params string[] paginas) => paginas.Any(p => string.Equals(currentUrl, p, StringComparison.OrdinalIgnoreCase)) ? "active" : "";
+        }
         <ul class="sidebar-nav" id="sidebarMenu">
 
             <li class="nav-item">
-                <a class="nav-link @(currentUrl == "/PortalCliente/Index" ? "active" : "")" asp-page="/PortalCliente/Index">
-                    <i class="bi bi-grid-1x2-fill icon-main"></i> <span class="nav-text">Dashboard General</span>
+                <a class="nav-link @Activo("/PortalCliente/Index")" asp-page="/PortalCliente/Index" title="Inicio">
+                    <i class="bi bi-house-door-fill icon-main"></i> <span class="nav-text">Inicio</span>
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link @Activo("/PortalCliente/Operaciones", "/PortalCliente/AprobarBL")" asp-page="/PortalCliente/Operaciones" title="Mis operaciones">
+                    <i class="bi bi-box-seam icon-main"></i> <span class="nav-text">Mis operaciones</span>
                 </a>
             </li>
 
-            <li class="nav-item sidebar-title">Panel de Control</li>
+            <li class="nav-item sidebar-title">Solicitudes</li>
 
             <li class="nav-item">
-                <a class="nav-link" data-bs-toggle="collapse" href="#menuOperaciones" role="button" aria-expanded="false" aria-controls="menuOperaciones">
-                    <i class="bi bi-box-seam icon-main"></i>
-                    <span class="nav-text">Mis Operaciones</span>
-                    <i class="bi bi-chevron-down"></i>
+                <a class="nav-link @Activo("/PortalCliente/SolicitarCotizacion")" asp-page="/PortalCliente/SolicitarCotizacion" title="Solicitar cotización">
+                    <i class="bi bi-calculator icon-main"></i> <span class="nav-text">Solicitar cotización</span>
                 </a>
-                <div class="collapse" id="menuOperaciones" data-bs-parent="#sidebarMenu">
-                    <ul class="nav flex-column">
-                        <li><a class="nav-link sub-link" asp-page="/PortalCliente/Tracking">Seguimiento en Línea</a></li>
-                        <li><a class="nav-link sub-link" asp-page="/PortalCliente/Historial">Historial de Embarques</a></li>
-                    </ul>
-                </div>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link @Activo("/PortalCliente/MisCotizaciones")" asp-page="/PortalCliente/MisCotizaciones" title="Mis cotizaciones">
+                    <i class="bi bi-chat-square-text icon-main"></i> <span class="nav-text">Mis cotizaciones</span>
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link @Activo("/PortalCliente/SolicitarReserva")" asp-page="/PortalCliente/SolicitarReserva" title="Solicitar servicio">
+                    <i class="bi bi-calendar-check icon-main"></i> <span class="nav-text">Solicitar servicio</span>
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link @Activo("/PortalCliente/Itinerarios")" asp-page="/PortalCliente/Itinerarios" title="Itinerarios de naves">
+                    <i class="bi bi-calendar2-week icon-main"></i> <span class="nav-text">Itinerarios de naves</span>
+                </a>
             </li>
 
-            <li class="nav-item">
-                <a class="nav-link" data-bs-toggle="collapse" href="#menuFinanzas" role="button" aria-expanded="false" aria-controls="menuFinanzas">
-                    <i class="bi bi-cash-coin icon-main"></i>
-                    <span class="nav-text">Finanzas y Pagos</span>
-                    <i class="bi bi-chevron-down"></i>
-                </a>
-                <div class="collapse" id="menuFinanzas" data-bs-parent="#sidebarMenu">
-                    <ul class="nav flex-column">
-                        <li><a class="nav-link sub-link" asp-page="/PortalCliente/Facturas">Facturas Pendientes</a></li>
-                        <li><a class="nav-link sub-link" asp-page="/PortalCliente/Facturas">Mi Estado de Cuenta</a></li>
-                    </ul>
-                </div>
-            </li>
+            <li class="nav-item sidebar-title">Mi cuenta</li>
 
             <li class="nav-item">
-                <a class="nav-link @(currentUrl.StartsWith("/PortalCliente/Documentos") ? "active" : "")" asp-page="/PortalCliente/Documentos">
-                    <i class="bi bi-folder-check icon-main"></i> <span class="nav-text">Matriz y Documentos</span>
+                <a class="nav-link @Activo("/PortalCliente/Facturas")" asp-page="/PortalCliente/Facturas" title="Estado de cuenta">
+                    <i class="bi bi-cash-coin icon-main"></i> <span class="nav-text">Estado de cuenta</span>
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link @Activo("/PortalCliente/Documentos")" asp-page="/PortalCliente/Documentos" title="Matriz y documentos">
+                    <i class="bi bi-folder-check icon-main"></i> <span class="nav-text">Matriz y documentos</span>
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link @Activo("/PortalCliente/MisUbicaciones")" asp-page="/PortalCliente/MisUbicaciones" title="Mis plantas y depósitos">
+                    <i class="bi bi-geo-alt-fill icon-main"></i> <span class="nav-text">Mis plantas y depósitos</span>
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link @Activo("/PortalCliente/Soporte")" asp-page="/PortalCliente/Soporte" title="Soporte">
+                    <i class="bi bi-headset icon-main"></i> <span class="nav-text">Soporte @if (respuestasSinVer > 0) { <span class="nav-badge-soporte" title="Respuestas nuevas del equipo">@respuestasSinVer</span> }</span>
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link @Activo("/PortalCliente/Perfil")" asp-page="/PortalCliente/Perfil" title="Mi perfil">
+                    <i class="bi bi-person-circle icon-main"></i> <span class="nav-text">Mi perfil</span>
                 </a>
             </li>
         </ul>
 
         <div class="sidebar-user-footer">
-            <div class="d-flex align-items-center">
-                <div class="user-avatar" title="@nombreEmpresa">@(nombreEmpresa.Substring(0, 1).ToUpper())</div>
+            <a asp-page="/PortalCliente/Perfil" class="d-flex align-items-center user-perfil" title="Mi perfil">
+                <div class="user-avatar">
+                    @if (miPerfil?.FotoUrl != null) { <img src="@miPerfil.FotoUrl" alt="" /> } else { @AtilsonCargoSpa.Services.PerfilUsuarioService.Iniciales(nombreEmpresa) }
+                </div>
                 <div class="user-info">
                     <span class="d-block fw-bold text-white text-truncate" style="font-size: 12px; max-width: 120px;">@nombreEmpresa</span>
-                    <span style="font-size: 9.5px; font-weight: 600; color: var(--atilson-accent-light);">Perfil Cliente</span>
+                    <span style="font-size: 9.5px; font-weight: 600; color: var(--atilson-accent-light);">Mi perfil</span>
                 </div>
-            </div>
+            </a>
             <form method="post" asp-page="/Logout" title="Cerrar Sesión">
                 <button type="submit" class="btn-logout">
                     <span>Cerrar Sesión</span>
@@ -403,8 +447,15 @@
         </div>
     </aside>
 
+    <div class="menu-movil-fondo" id="menuMovilFondo" aria-hidden="true"></div>
+
     <main class="main-content">
-        <div style="flex-grow: 1; padding: 25px;">
+        <div class="barra-movil">
+            <button type="button" id="menuMovilAbrir" aria-label="Abrir menú" aria-expanded="false" aria-controls="sidebarMenu"><i class="bi bi-list"></i></button>
+            <a asp-page="/PortalCliente/Index" aria-label="Ir al inicio"><img src="~/img/marca/atilson-logo-blanco.svg" alt="Atilson" asp-append-version="true" /></a>
+            <span class="titulo-movil">@ViewData["Title"]</span>
+        </div>
+        <div class="contenido-pagina" style="flex-grow: 1; padding: 25px;">
             @RenderBody()
         </div>
     </main>
@@ -418,6 +469,7 @@
                 const body = document.body;
 
                 toggleBtn.addEventListener('click', function() {
+                    if (window.innerWidth < 992) return;
                     body.classList.toggle('sidebar-collapsed');
                     let isCollapsed = body.classList.contains('sidebar-collapsed');
                     localStorage.setItem('sidebar-collapsed-cliente', isCollapsed);
@@ -443,7 +495,7 @@
 
                 document.querySelectorAll('.sidebar-nav .nav-link[data-bs-toggle="collapse"]').forEach(toggle => {
                     toggle.addEventListener('click', function(e) {
-                        if (document.body.classList.contains('sidebar-collapsed')) {
+                        if (document.body.classList.contains('sidebar-collapsed') && window.innerWidth >= 992) {
                             document.getElementById('sidebarToggle').click();
                         }
                     });
@@ -475,6 +527,9 @@
             });
     </script>
 
+    <partial name="_AvisosFlash" />
     @await RenderSectionAsync("Scripts", required: false)
+    <script src="~/js/buscador-selects.js" asp-append-version="true"></script>
+    <script src="~/js/menu-movil.js" asp-append-version="true"></script>
 </body>
 </html>

@@ -1,0 +1,213 @@
+@page
+@model AtilsonCargoSpa.Pages.PortalCliente.MisCotizacionesModel
+@using AtilsonCargoSpa.Models
+@using AtilsonCargoSpa.Pages.Operaciones
+@using AtilsonCargoSpa.Pages.PortalCliente
+@{
+    ViewData["Title"] = "Mis Cotizaciones";
+    Layout = "_LayoutCliente";
+    var cl = System.Globalization.CultureInfo.GetCultureInfo("es-CL");
+    int nResp = Model.Cotizaciones.Count(c => MisCotizacionesModel.Estado(c) == MisCotizacionesModel.EstadoVista.Respondida);
+    int nPend = Model.Cotizaciones.Count(c => MisCotizacionesModel.Estado(c) == MisCotizacionesModel.EstadoVista.Pendiente);
+}
+
+<link rel="stylesheet" href="~/css/portal-forms.css" asp-append-version="true" />
+<link rel="stylesheet" href="~/css/portal-cotizaciones.css" asp-append-version="true" />
+<link rel="stylesheet" href="~/css/portal-itinerarios.css" asp-append-version="true" />
+
+<div class="container py-4">
+    <div class="af-wrap">
+        <a asp-page="/PortalCliente/Index" class="af-back"><i class="bi bi-arrow-left"></i> Inicio</a>
+
+        <div class="mc-head">
+            <div class="af-head">
+                <h1>Mis cotizaciones</h1>
+                <p>Aquí ves las tarifas que te respondimos. Con una tarifa en mano puedes solicitar el servicio.</p>
+            </div>
+            <a asp-page="./SolicitarCotizacion" class="af-btn-primary mc-new"><i class="bi bi-plus-lg me-1"></i> Nueva cotización</a>
+        </div>
+
+        @if (!Model.Cotizaciones.Any())
+        {
+            <div class="mc-empty">
+                <div class="mc-empty__ico"><i class="bi bi-calculator"></i></div>
+                <h2>Aún no has pedido cotizaciones</h2>
+                <p>Cuéntanos la ruta y el tipo de carga, y te respondemos con la tarifa.</p>
+                <a asp-page="./SolicitarCotizacion" class="af-btn-primary">Solicitar cotización</a>
+            </div>
+        }
+        else
+        {
+            <div class="mc-filters" role="group" aria-label="Filtrar cotizaciones">
+                <button type="button" class="mc-filter is-active" data-filtro="todas">Todas <span>@Model.Cotizaciones.Count</span></button>
+                <button type="button" class="mc-filter" data-filtro="Respondida">Con respuesta <span>@nResp</span></button>
+                <button type="button" class="mc-filter" data-filtro="Pendiente">En revisión <span>@nPend</span></button>
+            </div>
+
+            <div class="mc-list">
+                @foreach (var c in Model.Cotizaciones)
+                {
+                    var estado = MisCotizacionesModel.Estado(c);
+                    bool mar = SolicitarCotizacionModel.IncluyeModulo(c.TipoServicio, "MAR");
+                    bool ter = SolicitarCotizacionModel.IncluyeModulo(c.TipoServicio, "TER");
+                    bool doc = SolicitarCotizacionModel.IncluyeModulo(c.TipoServicio, "DOC");
+                    bool conRespuesta = estado is MisCotizacionesModel.EstadoVista.Respondida or MisCotizacionesModel.EstadoVista.Vencida
+                                        || (estado == MisCotizacionesModel.EstadoVista.Cerrada && c.FechaRespuesta != null);
+                    bool destacada = Model.Id == c.Id;
+                    var salidasRuta = Model.SalidasPorCotizacion.TryGetValue(c.Id, out var sr) ? sr : new List<ItinerarioNave>();
+                    int reservasPedidas = Model.ReservasPorCotizacion.TryGetValue(c.Id, out var rp) ? rp : 0;
+                    string Precio(decimal? monto, string? moneda) => conRespuesta ? CotizacionesModel.FormatearMonto(monto, moneda) : "En revisión";
+
+                    <article class="mc-card mc-card--@estado.ToString().ToLower() @(destacada ? "is-target" : "")" id="cot-@c.Id" data-estado="@estado">
+                        <header class="mc-card__head">
+                            <div>
+                                <span class="mc-card__eyebrow">Cotización #@c.Id · @((c.TipoServicio ?? "").StartsWith("IMP") ? "Importación" : "Exportación")</span>
+                                <span class="mc-card__date">Solicitada el @(c.FechaSolicitud?.ToString("dd 'de' MMMM yyyy", cl))</span>
+                            </div>
+                            @switch (estado)
+                            {
+                                case MisCotizacionesModel.EstadoVista.Respondida:
+                                    <span class="mc-badge mc-badge--ok"><i class="bi bi-check2-circle"></i> Tarifa lista</span>
+                                    break;
+                                case MisCotizacionesModel.EstadoVista.Vencida:
+                                    <span class="mc-badge mc-badge--off"><i class="bi bi-clock-history"></i> Vencida</span>
+                                    break;
+                                case MisCotizacionesModel.EstadoVista.Cerrada:
+                                    <span class="mc-badge mc-badge--off"><i class="bi bi-archive"></i> Cerrada</span>
+                                    break;
+                                default:
+                                    <span class="mc-badge mc-badge--wait"><i class="bi bi-hourglass-split"></i> En revisión</span>
+                                    break;
+                            }
+                        </header>
+
+                        <div class="mc-lines">
+                            @if (mar)
+                            {
+                                <div class="mc-line">
+                                    <div class="mc-line__ico"><i class="bi bi-water"></i></div>
+                                    <div class="mc-line__body">
+                                        <span class="mc-line__label">Flete marítimo</span>
+                                        <strong>@(c.IdPuertoOrigenNavigation?.NombrePuerto ?? "—") <i class="bi bi-arrow-right"></i> @(c.IdPuertoDestinoNavigation?.NombrePuerto ?? "—")</strong>
+                                        <span class="mc-line__sub">@c.TipoContenedor</span>
+                                    </div>
+                                    <div class="mc-line__price @(conRespuesta && c.MontoMaritimo != null ? "" : "is-muted")">
+                                        @Precio(c.MontoMaritimo, c.MonedaMaritimo)
+                                        @if (conRespuesta && c.MontoMaritimo != null)
+                                        {
+                                            <small>por contenedor</small>
+                                        }
+                                    </div>
+                                </div>
+                            }
+                            @if (ter)
+                            {
+                                <div class="mc-line">
+                                    <div class="mc-line__ico"><i class="bi bi-truck"></i></div>
+                                    <div class="mc-line__body">
+                                        <span class="mc-line__label">Transporte terrestre</span>
+                                        <strong>@(c.ZonaCarga ?? "—") <i class="bi bi-arrow-left-right"></i> @(c.IdPuertoTerrestreNavigation?.NombrePuerto ?? c.ZonaEntrega ?? "—")</strong>
+                                        @if (conRespuesta && c.IdPuertoTerrestreNavigation != null)
+                                        {
+                                            <span class="mc-line__sub">Puerto: @c.IdPuertoTerrestreNavigation.NombrePuerto</span>
+                                        }
+                                    </div>
+                                    <div class="mc-line__price @(conRespuesta && c.MontoTerrestre != null ? "" : "is-muted")">@Precio(c.MontoTerrestre, c.MonedaTerrestre)</div>
+                                </div>
+                            }
+                            @if (doc)
+                            {
+                                <div class="mc-line">
+                                    <div class="mc-line__ico"><i class="bi bi-file-earmark-text"></i></div>
+                                    <div class="mc-line__body">
+                                        <span class="mc-line__label">Servicio documental</span>
+                                        <strong>@(c.TipoCargaDocumental ?? "—")</strong>
+                                    </div>
+                                    <div class="mc-line__price @(conRespuesta && c.MontoDocumental != null ? "" : "is-muted")">@Precio(c.MontoDocumental, c.MonedaDocumental)</div>
+                                </div>
+                            }
+                        </div>
+
+                        @if (conRespuesta && !string.IsNullOrWhiteSpace(c.ComentarioRespuesta))
+                        {
+                            <p class="mc-note"><i class="bi bi-chat-left-text"></i> @c.ComentarioRespuesta</p>
+                        }
+
+                        @if (estado == MisCotizacionesModel.EstadoVista.Respondida && salidasRuta.Any())
+                        {
+                            <div class="mc-salidas">
+                                <div class="mc-salidas__head">
+                                    <span><i class="bi bi-calendar2-week"></i> Próximas salidas para esta ruta</span>
+                                    @if (salidasRuta.Count > 3)
+                                    {
+                                        <a asp-page="./Itinerarios" asp-route-pol="@c.IdPuertoOrigen" asp-route-pod="@c.IdPuertoDestino">Ver las @salidasRuta.Count</a>
+                                    }
+                                </div>
+                                <div class="mc-salidas__list">
+                                    @foreach (var s in salidasRuta.Take(3))
+                                    {
+                                        <partial name="_SalidaCard" model="@(new SalidaCardVm { Salida = s, Compacta = true, AccionTexto = "Reservar", AccionUrl = Url.Page("./SolicitarReserva", new { itinerario = s.Id, cotizacion = c.Id }) })" />
+                                    }
+                                </div>
+                            </div>
+                        }
+
+                        @if (conRespuesta || estado == MisCotizacionesModel.EstadoVista.Pendiente)
+                        {
+                            <footer class="mc-card__foot">
+                                <span class="mc-card__validity">
+                                    @if (estado == MisCotizacionesModel.EstadoVista.Pendiente)
+                                    {
+                                        <text><i class="bi bi-info-circle"></i> Te avisaremos por correo cuando esté lista.</text>
+                                    }
+                                    else if (c.ValidaHasta != null)
+                                    {
+                                        <text><i class="bi bi-calendar-event"></i> @(estado == MisCotizacionesModel.EstadoVista.Vencida ? "Venció" : "Válida hasta") el @c.ValidaHasta.Value.ToString("dd'/'MM'/'yyyy")</text>
+                                    }
+                                    else
+                                    {
+                                        <text>Valores netos.</text>
+                                    }
+                                </span>
+                                @if (estado == MisCotizacionesModel.EstadoVista.Respondida)
+                                {
+                                    <span class="mc-foot-actions">
+                                        @if (reservasPedidas > 0)
+                                        {
+                                            <span class="mc-badge mc-badge--ok"><i class="bi bi-check2-all"></i> @(reservasPedidas == 1 ? "Servicio solicitado" : reservasPedidas + " servicios solicitados")</span>
+                                        }
+                                        <a asp-page="./SolicitarReserva" asp-route-cotizacion="@c.Id" class="mc-cta">@(reservasPedidas > 0 ? "Otro servicio" : "Solicitar servicio") <i class="bi bi-arrow-right"></i></a>
+                                    </span>
+                                }
+                                else if (estado == MisCotizacionesModel.EstadoVista.Vencida)
+                                {
+                                    <a asp-page="./SolicitarCotizacion" class="mc-cta mc-cta--ghost">Volver a cotizar</a>
+                                }
+                            </footer>
+                        }
+                    </article>
+                }
+            </div>
+        }
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        (function () {
+            const filtros = document.querySelectorAll('.mc-filter');
+            const cards = document.querySelectorAll('.mc-card');
+            filtros.forEach(function (btn) {
+                btn.addEventListener('click', function () {
+                    filtros.forEach(function (b) { b.classList.toggle('is-active', b === btn); });
+                    const f = btn.getAttribute('data-filtro');
+                    cards.forEach(function (card) {
+                        card.hidden = f !== 'todas' && card.getAttribute('data-estado') !== f;
+                    });
+                });
+            });
+            const target = document.querySelector('.mc-card.is-target');
+            if (target) target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        })();
+    </script>
+}

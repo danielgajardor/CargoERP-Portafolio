@@ -1,0 +1,92 @@
+/* =========================================================================
+   MAESTROS (Clientes / Depósitos / Plantas / Navieras / Puertos) — CAPA PREMIUM
+   Mismo lenguaje visual que el resto de la familia premium: gradiente
+   morado/violeta, Plus Jakarta Sans, sombras "glow", radios grandes. Solo
+   propiedades visuales — ningún handler de formulario (Create/Edit/delete)
+   ni validación fue tocada.
+
+   Un solo archivo para los 15 Index/Create/Edit de los 5 módulos: todos
+   comparten exactamente el mismo vocabulario de clases (.filter-card,
+   .table-platinum, .module-card, .input-modern, .btn-submit-pro...) y las
+   mismas variables locales (--txt-main, --atilson-dark, etc.), porque
+   vienen del mismo template — así que una sola hoja, acotada a .mst-premium,
+   cubre los cinco módulos sin duplicar código. Como esos nombres de clase
+   son genéricos, acotar todo a .mst-premium evita que cualquier otra vista
+   que llegue a reutilizarlos a futuro se vea afectada.
+   ========================================================================= */
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600&display=swap');
+
+/* ---------- 0. Tokens ---------- */
+.mst-premium {
+    --mst-brand: #6d2d9e;
+    --mst-brand-2: #8b5cf6;
+    --mst-ink: #140c26;
+    --mst-muted: #6b6880;
+    --mst-line: #ece8f3;
+    --mst-soft: #f8f7fc;
+    --mst-tint: #f4eefb;
+    --mst-shadow: 0 1px 2px rgba(20,12,38,.04), 0 18px 40px -26px rgba(44,27,77,.28);
+
+    /* Los 15 archivos (Index/Create/Edit × 5 módulos) definen el mismo
+       :root local — se realinean acá al sistema premium, sin tocar los
+       usos de estas variables repartidos en cada archivo. --bg-main
+       (blanco) se deja igual: ya es el correcto. */
+    --txt-main: #140c26;
+    --txt-muted: #6b6880;
+    --border-soft: #ece8f3;
+    --bg-soft: #f8f7fc;
+    --atilson-dark: #6d2d9e;
+
+    font-family: 'Plus Jakarta Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+    padding-bottom: 48px;
+}
+
+body:has(.mst-premium) {
+    background:
+        radial-gradient(1100px 460px at 100% -10%, rgba(139,92,246,.06), transparent 60%),
+        #f5f4f9;
+}
+
+/* ---------- 1. Filtros (Index) ---------- */
+.mst-premium .filter-card { border-color: var(--mst-line) !important; border-radius: 16px !important; box-shadow: var(--mst-shadow) !important; }
+.mst-premium .filter-input { border-color: var(--mst-line) !important; border-radius: 8px !important; }
+.mst-premium .filter-input:focus { box-shadow: 0 0 0 4px rgba(139,92,246,.12) !important; }
+
+/* ---------- 2. Tabla platinum (Index) ---------- */
+.mst-premium .table-container {
+    border-color: var(--mst-line) !important; border-radius: 18px !important; box-shadow: var(--mst-shadow) !important;
+}
+.mst-premium .table-platinum th { border-bottom-color: var(--mst-ink) !important; letter-spacing: .6px !important; }
+.mst-premium .table-platinum th:first-child { border-top-left-radius: 17px; }
+.mst-premium .table-platinum th:last-child { border-top-right-radius: 17px; }
+.mst-premium .table-platinum td { border-bottom-color: var(--mst-line) !important; }
+.mst-premium .table-platinum tbody tr:hover { background-color: var(--mst-tint) !important; }
+
+/* ---------- 3. Badges y botones de acción (Index) ---------- */
+.mst-premium .badge-exec { border-radius: 999px !important; }
+.mst-premium .btn-action { border-radius: 7px !important; transition: all .18s ease !important; }
+.mst-premium .btn-action:hover { transform: translateY(-1px); }
+.mst-premium .pagination-controls { border-top-color: var(--mst-line) !important; border-radius: 0 0 17px 17px; }
+
+/* ---------- 4. Tarjetas de formulario (Create / Edit) ---------- */
+.mst-premium .module-card { border-color: var(--mst-line) !important; border-radius: 14px !important; box-shadow: var(--mst-shadow) !important; }
+.mst-premium .module-header { border-bottom-color: var(--mst-line) !important; }
+.mst-premium .input-modern:focus { box-shadow: 0 0 0 4px rgba(139,92,246,.12) !important; }
+.mst-premium .btn-submit-pro { box-shadow: 0 10px 22px -12px rgba(44,27,77,.85) !important; }
+.mst-premium .btn-submit-pro:hover { box-shadow: 0 14px 28px -12px rgba(44,27,77,.9) !important; }
+
+/* ---------- 5. Ficha maestra de Cliente (dossier, solo Clientes/Edit) ---------- */
+.mst-premium .dossier-header { border-bottom-color: var(--mst-line) !important; border-radius: 14px 14px 0 0 !important; }
+.mst-premium .dossier-body { border-radius: 14px !important; box-shadow: var(--mst-shadow) !important; }
+.mst-premium .table-erp th { background: var(--mst-tint) !important; color: var(--mst-brand) !important; border-bottom-color: var(--mst-line) !important; }
+.mst-premium .table-erp td { border-bottom-color: var(--mst-line) !important; }
+.mst-premium .table-erp tbody tr:hover { background-color: var(--mst-soft) !important; }
+.mst-premium .badge-area { border-radius: 999px !important; }
+
+/* ---------- 6. Botones genéricos ---------- */
+.mst-premium .btn { border-radius: 9px !important; transition: all .18s ease !important; }
+
+/* ---------- 7. Responsive ---------- */
+@media (prefers-reduced-motion: reduce) {
+    .mst-premium .btn, .mst-premium .btn-action, .mst-premium .btn-submit-pro { transition: none !important; }
+}

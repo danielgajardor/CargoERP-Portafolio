@@ -1,0 +1,165 @@
+@page
+@model AtilsonCargoSpa.Pages.ItinerariosModel
+@using AtilsonCargoSpa.Helpers
+@using AtilsonCargoSpa.Models
+@{
+    Layout = "_LayoutPublico";
+    ViewData["Title"] = "Itinerarios de naves · Atilson Cargo";
+    ViewData["Description"] = "Salidas de naves de las próximas semanas desde Chile: naviera, nave, fechas de zarpe y arribo, días de tránsito y corte documental.";
+    ViewData["Nav"] = "itinerarios";
+    var semanas = Model.Salidas.GroupBy(s => ItinerariosHelper.InicioSemana(s.Etd)).OrderBy(g => g.Key).ToList();
+    bool filtrando = Model.Pol != null || Model.Pod != null || Model.Naviera != null;
+    string ruta = $"{Model.NombrePol ?? "cualquier origen"} → {Model.NombrePod ?? "cualquier destino"}";
+}
+@section Head {
+    <link rel="stylesheet" href="~/css/portal-itinerarios.css" asp-append-version="true" />
+    <style>
+        /* Itinerarios públicos (nov-2026). Las tarjetas son las del portal (portal-itinerarios.css). */
+        .it-pub { --atilson-accent: var(--indigo); --atilson-dark: var(--noche); }
+        .it-hero {
+            position: relative; overflow: hidden; isolation: isolate; color: #fff;
+            background: radial-gradient(900px 480px at 85% 20%, rgba(68,48,148,.5), transparent 65%), linear-gradient(180deg, var(--noche), #1a1139);
+            padding: 160px 0 120px;
+        }
+        .it-hero .contenedor { position: relative; z-index: 2; }
+        .it-hero .plexus { -webkit-mask-image: linear-gradient(90deg, rgba(0,0,0,.3), #000 65%); mask-image: linear-gradient(90deg, rgba(0,0,0,.3), #000 65%); }
+        .it-hero h1 { font-size: clamp(38px, 4.6vw, 64px); margin: 0 0 18px; }
+        .it-hero p { color: #d6d0ec; font-size: 19px; max-width: 58ch; margin: 0; }
+        .it-hero .it-lema { color: var(--lila); font-weight: 600; font-size: 16px; margin-bottom: 16px; display: flex; gap: 10px; align-items: center; }
+        .it-filtro {
+            position: relative; z-index: 3; margin-top: -48px;
+            display: grid; grid-template-columns: 1fr 1fr 1fr auto; gap: 12px; align-items: end;
+            background: #fff; border-radius: 22px; padding: 18px; box-shadow: 0 24px 60px -24px rgba(22,14,47,.55), 0 0 0 1px var(--linea);
+        }
+        .it-filtro label { display: block; font-size: 13px; font-weight: 600; color: var(--gris); margin: 0 0 6px 4px; }
+        .it-filtro select { width: 100%; height: 50px; border: 1px solid var(--linea); border-radius: 12px; padding: 0 14px; font: inherit; font-size: 15.5px; color: var(--tinta); background: #fff; }
+        .it-filtro select:focus { outline: none; border-color: var(--indigo); box-shadow: 0 0 0 4px rgba(68,48,148,.14); }
+        .it-filtro button { height: 50px; border: 0; border-radius: 999px; background: var(--indigo); color: #fff; font-weight: 700; font-size: 15.5px; padding: 0 28px; display: inline-flex; align-items: center; gap: 8px; }
+        .it-filtro button:hover { background: var(--indigo-700); }
+        .it-cuerpo { padding: 56px 0 100px; }
+        .it-cab { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; flex-wrap: wrap; margin-bottom: 28px; }
+        .it-cab h2 { font-size: 24px; font-weight: 800; font-stretch: 110%; margin: 0; }
+        .it-cab p { color: var(--gris); margin: 4px 0 0; }
+        .it-cab a { color: var(--indigo); font-weight: 700; text-decoration: none; }
+        .it-aviso { display: flex; gap: 12px; align-items: center; background: var(--niebla); border-radius: 14px; padding: 14px 18px; color: var(--tinta); font-size: 15px; margin-bottom: 32px; }
+        .it-aviso i { color: var(--indigo); font-size: 20px; }
+        .it-aviso a { color: var(--indigo); font-weight: 700; }
+        .it-pub .it-pweek { margin-bottom: 36px; }
+        .it-pub .it-pweek__title { font-size: 15px; font-weight: 700; color: var(--gris); margin: 0 0 12px; }
+        .it-pub .it-pweek__list { display: grid; gap: 12px; }
+        .it-vacio { text-align: center; padding: 60px 20px; border: 1px dashed #d4cdea; border-radius: 22px; }
+        .it-vacio i { font-size: 40px; color: var(--indigo); }
+        .it-vacio h3 { font-size: 22px; font-weight: 800; margin: 12px 0 6px; }
+        .it-vacio p { color: var(--gris); max-width: 52ch; margin: 0 auto 22px; }
+        .it-vacio .acciones { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+        @@media (max-width: 991px) {
+            .it-hero { padding: 120px 0 100px; }
+            .it-filtro { grid-template-columns: 1fr 1fr; }
+            .it-filtro button { grid-column: 1 / -1; justify-content: center; }
+        }
+        @@media (max-width: 575px) {
+            .it-filtro { grid-template-columns: 1fr; }
+        }
+    </style>
+}
+
+<header class="it-hero">
+    <div class="plexus" data-plexus="0.7" aria-hidden="true"></div>
+    <div class="contenedor">
+        <p class="it-lema"><i class="bi bi-calendar2-week" aria-hidden="true"></i> Itinerarios</p>
+        <h1 class="titular">Próximas salidas de naves</h1>
+        <p>Salidas de las próximas @ItinerarioNave.SemanasHorizonte semanas, sin necesidad de registrarte. Para reservar un espacio ingresas al portal de clientes.</p>
+    </div>
+</header>
+
+<div class="it-pub">
+    <div class="contenedor">
+        <form method="get" class="it-filtro" role="search" aria-label="Buscar salidas">
+            <div>
+                <label for="busPol">Desde</label>
+                <select id="busPol" name="pol">
+                    <option value="">Cualquier puerto</option>
+                    @foreach (var p in Model.OpcionesPol)
+                    {
+                        <option value="@p.Id" selected="@(Model.Pol == p.Id)">@p.NombrePuerto@(PuertosHelper.EsChileno(p) ? "" : ", " + p.Pais)</option>
+                    }
+                </select>
+            </div>
+            <div>
+                <label for="busPod">Hasta</label>
+                <select id="busPod" name="pod">
+                    <option value="">Cualquier puerto</option>
+                    @foreach (var p in Model.OpcionesPod)
+                    {
+                        <option value="@p.Id" selected="@(Model.Pod == p.Id)">@p.NombrePuerto@(string.IsNullOrWhiteSpace(p.Pais) ? "" : ", " + p.Pais)</option>
+                    }
+                </select>
+            </div>
+            <div>
+                <label for="busNav">Naviera</label>
+                <select id="busNav" name="naviera">
+                    <option value="">Todas</option>
+                    @foreach (var n in Model.OpcionesNaviera)
+                    {
+                        <option value="@n.Id" selected="@(Model.Naviera == n.Id)">@n.NombreNaviera</option>
+                    }
+                </select>
+            </div>
+            <button type="submit"><i class="bi bi-search"></i> Buscar salidas</button>
+        </form>
+
+        <div class="it-cuerpo">
+            @if (!Model.Salidas.Any())
+            {
+                <div class="it-vacio">
+                    <i class="bi bi-calendar-x" aria-hidden="true"></i>
+                    @if (Model.TotalProximas == 0)
+                    {
+                        <h3>Aún no hay salidas publicadas</h3>
+                        <p>Estamos actualizando los itinerarios. Mientras tanto, cotiza tu servicio o escríbenos y te proponemos naves y fechas.</p>
+                    }
+                    else
+                    {
+                        <h3>No encontramos salidas para @ruta</h3>
+                        <p>Prueba otra combinación o pídenos la ruta: te respondemos con tarifa y opciones de nave.</p>
+                    }
+                    <div class="acciones">
+                        @if (filtrando && Model.TotalProximas > 0)
+                        {
+                            <a href="/Itinerarios" class="btn-hero btn-hero-borde">Ver todas las salidas</a>
+                        }
+                        <a href="/PortalCliente/SolicitarCotizacion" class="btn-hero btn-hero-indigo"><i class="bi bi-calculator"></i> Cotizar servicio</a>
+                        <a href="/#contacto" class="btn-hero btn-hero-borde"><i class="bi bi-envelope"></i> Escribirnos</a>
+                    </div>
+                </div>
+            }
+            else
+            {
+                <div class="it-cab">
+                    <div>
+                        <h2>@Model.Salidas.Count salida@(Model.Salidas.Count == 1 ? "" : "s") @(filtrando ? "para " + ruta : "disponibles")</h2>
+                        <p>Fechas estimadas informadas por cada naviera; pueden cambiar.</p>
+                    </div>
+                    @if (filtrando)
+                    {
+                        <a href="/Itinerarios">Ver todas las salidas</a>
+                    }
+                </div>
+                <p class="it-aviso"><i class="bi bi-shield-lock" aria-hidden="true"></i><span>Para reservar una salida, elige <b>Reservar</b>: te pediremos ingresar al portal. ¿Aún no tienes cuenta? <a href="/Registro">Registra tu empresa</a>.</span></p>
+
+                foreach (var semana in semanas)
+                {
+                    <section class="it-pweek" aria-label="@ItinerariosHelper.EtiquetaSemana(semana.Key)">
+                        <h3 class="it-pweek__title">@ItinerariosHelper.EtiquetaSemana(semana.Key)</h3>
+                        <div class="it-pweek__list">
+                            @foreach (var s in semana)
+                            {
+                                <partial name="/Pages/PortalCliente/_SalidaCard.cshtml" model="@(new SalidaCardVm { Salida = s, AccionUrl = "/PortalCliente/SolicitarReserva?itinerario=" + s.Id, AccionTexto = "Reservar" })" />
+                            }
+                        </div>
+                    </section>
+                }
+            }
+        </div>
+    </div>
+</div>

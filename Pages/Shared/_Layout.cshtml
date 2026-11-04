@@ -1,12 +1,41 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>@ViewData["Title"] - Atilson Cargo ERP</title>
+    <script>
+        // Densidad de la vista (oct-2026, adaptable desde nov-2026): con el navegador al 100%
+        // el ERP se dibuja al 90% en pantallas de notebook/escritorio (como con el zoom del
+        // navegador en 90%). En monitores grandes sube (100% / 110%) para que letras y tablas
+        // no queden diminutas, y en celular/tablet queda al 100% con el menú plegable.
+        // Se recalcula al cambiar el tamaño o al mover la pestaña a otro monitor.
+        // Ver wwwroot/js/escala-vista.js.
+        (function () {
+            var html = document.documentElement;
+            function escalaPara(w) { return w < 992 ? 1 : w < 2000 ? 0.9 : w < 2400 ? 1 : 1.1; }
+            function aplicar() {
+                var z = escalaPara(window.innerWidth);
+                if (html.getAttribute('data-escala') === String(z)) return false;
+                html.setAttribute('data-escala', String(z));
+                html.style.setProperty('--escala', z);
+                html.style.zoom = z === 1 ? '' : z;
+                return true;
+            }
+            aplicar();
+            var t;
+            window.addEventListener('resize', function () {
+                clearTimeout(t);
+                t = setTimeout(function () { if (aplicar() && window.escalaVistaParchear) window.escalaVistaParchear(); }, 120);
+            });
+        })();
+    </script>
 
     <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
     <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
+    <link rel="stylesheet" href="~/css/design-system.css" asp-append-version="true" />
+    <link rel="stylesheet" href="~/css/traspaso-finanzas.css" asp-append-version="true" />
+    <link rel="stylesheet" href="~/css/erp-comun.css" asp-append-version="true" />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
 
@@ -58,9 +87,17 @@
             }
 
             .logo-atilson {
-                max-height: 28px;
-                filter: brightness(0) invert(1);
+                height: 34px;
+                width: auto;
+                max-width: 150px;
+                display: block;
             }
+            /* Mi perfil (oct-2026): el pie del menú lleva al perfil, con la foto */
+            .user-perfil { color: inherit; text-decoration: none; border-radius: 10px; padding: 4px; margin: -4px; transition: background-color .2s; }
+            .user-perfil:hover { background: rgba(255,255,255,.06); color: inherit; }
+            .user-avatar { position: relative; }
+            .user-avatar img { width: 100%; height: 100%; border-radius: inherit; object-fit: cover; }
+
 
             .minimal-toggle {
                 background: transparent;
@@ -195,6 +232,9 @@
                 margin-bottom: 8px !important;
             }
 
+            /* DENSIDAD DE LA VISTA (zoom 0.9): el panel lateral de documentos mide 100vh */
+            html[data-escala]:not([data-escala="1"]) .doc-base-panel { height: calc(100vh / var(--escala, 1)) !important; }
+
             /* USUARIO */
             .sidebar-user-footer {
                 padding: 18px 15px;
@@ -322,23 +362,61 @@
 <body>
 
     <script>
-            if (localStorage.getItem('sidebar-collapsed-erp') === 'true') {
+            if (window.innerWidth >= 992 && localStorage.getItem('sidebar-collapsed-erp') === 'true') {
                 document.body.classList.add('sidebar-collapsed');
             }
     </script>
 
     @{
-        var currentUrl = ViewContext.RouteData.Values["page"]?.ToString() ?? "/Dashboard";
+        var currentUrl = ViewContext.RouteData.Values["page"]?.ToString() ?? "/App/Dashboard";
         string nombreUsuario = User.Identity?.Name ?? "Sistema";
-        string[] listaJefaturas = { "Daniel Gajardo", "Cristian Prada", "Jane Diaz", "Ignacio Reyes", "Sistema", "Admin" };
-        bool esJefatura = Array.Exists(listaJefaturas, j => j == nombreUsuario);
+        // Jefaturas (nombres en Helpers/PermisosEquipo.cs) o rol Administrador.
+        bool esJefatura = AtilsonCargoSpa.Helpers.PermisosEquipo.EsJefatura(User);
+        bool esAdminEquipo = AtilsonCargoSpa.Helpers.PermisosEquipo.EsAdmin(User);
+        // Traspaso Ops -> Finanzas (oct-2026): bookings NUEVOS o reabiertos que Finanzas aún no abre.
+        int traspasosPendientes = 0;
+        if (esJefatura)
+        {
+            var traspasoSvc = Context.RequestServices.GetService(typeof(AtilsonCargoSpa.Services.TraspasoFinanzasService)) as AtilsonCargoSpa.Services.TraspasoFinanzasService;
+            if (traspasoSvc != null) traspasosPendientes = await traspasoSvc.ContarPendientesAsync();
+        }
+        // Portal (oct-2026): empresas registradas desde el portal que esperan aprobación,
+        // y plantas/depósitos que registraron los clientes y Atilson aún no valida.
+        int registrosPendientes = 0;
+        int plantasPorValidar = 0, depositosPorValidar = 0;
+        if (User.Identity?.IsAuthenticated == true && !User.IsInRole("Cliente"))
+        {
+            var registroSvc = Context.RequestServices.GetService(typeof(AtilsonCargoSpa.Services.RegistroClientesService)) as AtilsonCargoSpa.Services.RegistroClientesService;
+            if (registroSvc != null)
+            {
+                registrosPendientes = await registroSvc.ContarPendientesAsync();
+                (plantasPorValidar, depositosPorValidar) = await registroSvc.ContarUbicacionesPorValidarAsync();
+            }
+        }
+        // Equipo Atilson (oct-2026): cuentas del equipo por validar (solo administradores).
+        int cuentasEquipoPendientes = 0;
+        if (esAdminEquipo)
+        {
+            var equipoSvc = Context.RequestServices.GetService(typeof(AtilsonCargoSpa.Services.RegistroEquipoService)) as AtilsonCargoSpa.Services.RegistroEquipoService;
+            if (equipoSvc != null) cuentasEquipoPendientes = await equipoSvc.ContarPendientesAsync();
+        }
+        // Mi perfil y Soporte clientes (oct-2026): foto del pie y consultas por responder.
+        AtilsonCargoSpa.Services.ResumenPerfil? miPerfil = null;
+        int consultasAbiertas = 0;
+        if (User.Identity?.IsAuthenticated == true)
+        {
+            if (Context.RequestServices.GetService(typeof(AtilsonCargoSpa.Services.PerfilUsuarioService)) is AtilsonCargoSpa.Services.PerfilUsuarioService perfilSvc)
+                miPerfil = await perfilSvc.ResumenAsync(User);
+            if (!User.IsInRole("Cliente") && Context.RequestServices.GetService(typeof(AtilsonCargoSpa.Services.SoporteClientesService)) is AtilsonCargoSpa.Services.SoporteClientesService soporteSvc)
+                consultasAbiertas = await soporteSvc.ContarAbiertosAsync();
+        }
     }
 
     <!-- SIDEBAR -->
     <aside class="sidebar">
         <div class="sidebar-header">
-            <a asp-page="/Dashboard" class="brand-logo-link">
-                <img src="~/img/Atilson.png" alt="Atilson" class="logo-atilson me-2" onerror="this.style.display='none'" />
+            <a asp-page="/App/Dashboard" class="brand-logo-link">
+                <img src="~/img/marca/atilson-logo-blanco.svg" alt="Atilson" class="logo-atilson me-2" onerror="this.style.display='none'" asp-append-version="true" />
             </a>
             <button id="sidebarToggle" class="minimal-toggle" title="Contraer Menú">
                 <i class="bi bi-list"></i>
@@ -348,7 +426,7 @@
         <ul class="sidebar-nav" id="sidebarMenu">
 
             <li class="nav-item">
-                <a class="nav-link @(currentUrl == "/Dashboard" || currentUrl == "/Index" ? "active" : "")" asp-page="/Dashboard">
+                <a class="nav-link @(currentUrl == "/App/Dashboard" || currentUrl == "/Index" ? "active" : "")" asp-page="/App/Dashboard">
                     <i class="bi bi-grid-1x2-fill icon-main"></i> <span class="nav-text">Dashboard</span>
                 </a>
             </li>
@@ -364,9 +442,8 @@
                 <div class="collapse" id="menuOperaciones" data-bs-parent="#sidebarMenu">
                     <ul class="nav flex-column">
                         <li><a class="nav-link sub-link" asp-page="/Operaciones/Index">Main Board</a></li>
-                        <li><a class="nav-link sub-link" asp-page="/Operaciones/Maritimo">Servicio Marítimo</a></li>
-                        <li><a class="nav-link sub-link" asp-page="/Operaciones/Transporte">Servicio Terrestre</a></li>
-                        <li><a class="nav-link sub-link" asp-page="/Operaciones/Documental">Gestión Documental</a></li>
+                        <li><a class="nav-link sub-link" asp-page="/Operaciones/Cotizaciones">Cotizaciones</a></li>
+                        <li><a class="nav-link sub-link" asp-page="/Operaciones/Itinerarios">Itinerarios de Naves</a></li>
                     </ul>
                 </div>
             </li>
@@ -378,16 +455,17 @@
                 <li class="nav-item">
                     <a class="nav-link" data-bs-toggle="collapse" href="#menuFinanzas" role="button" aria-expanded="false" aria-controls="menuFinanzas">
                         <i class="bi bi-currency-dollar icon-main"></i>
-                        <span class="nav-text">Finanzas</span>
+                        <span class="nav-text">Finanzas @if (traspasosPendientes > 0) { <span class="nav-badge-traspaso" title="Bookings nuevos o reabiertos por Operaciones">@traspasosPendientes</span> }</span>
                         <i class="bi bi-chevron-down"></i>
                     </a>
                                         <div class="collapse" id="menuFinanzas" data-bs-parent="#sidebarMenu">
                         <ul class="nav flex-column">
                             <li><a class="nav-link sub-link" asp-page="/Finanzas/Index">Main Board</a></li>
-                            <li><a class="nav-link sub-link" asp-page="/Finanzas/ControlFinanciero">Control Financiero</a></li>
+                            <li><a class="nav-link sub-link" asp-page="/Finanzas/ControlFinanciero">Control Financiero @if (traspasosPendientes > 0) { <span class="nav-badge-traspaso" data-traspaso-contador title="Bookings nuevos o reabiertos por Operaciones">@traspasosPendientes</span> }</a></li>
                             <li><a class="nav-link sub-link" asp-page="/Finanzas/Cobranza">Cobranza</a></li>
                             <li><a class="nav-link sub-link" asp-page="/Finanzas/OrdenesCompra">Órdenes de Compra</a></li>
                             <li><a class="nav-link sub-link" asp-page="/Finanzas/Facturacion">Facturación Clientes</a></li>
+                            <li><a class="nav-link sub-link" asp-page="/Finanzas/ConsolidadoCliente">Consolidado Cliente</a></li>
                         </ul>
                     </div>
                 </li>
@@ -407,21 +485,44 @@
                 </li>
             }
 
+            <li class="nav-item sidebar-title">Clientes y equipo</li>
+
+            <li class="nav-item">
+                <a class="nav-link @(currentUrl == "/App/Soporte" ? "active" : "")" asp-page="/App/Soporte" title="Soporte clientes">
+                    <i class="bi bi-headset icon-main"></i>
+                    <span class="nav-text">Soporte clientes @if (consultasAbiertas > 0) { <span class="nav-badge-traspaso" title="Consultas por responder">@consultasAbiertas</span> }</span>
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link @(currentUrl == "/App/Directorio" ? "active" : "")" asp-page="/App/Directorio" title="Directorio del equipo">
+                    <i class="bi bi-people-fill icon-main"></i>
+                    <span class="nav-text">Directorio del equipo</span>
+                </a>
+            </li>
+
             <li class="nav-item sidebar-title">Configuración Base</li>
 
             <li class="nav-item">
                 <a class="nav-link" data-bs-toggle="collapse" href="#menuMaestros" role="button" aria-expanded="false" aria-controls="menuMaestros">
                     <i class="bi bi-buildings-fill icon-main"></i>
-                    <span class="nav-text">Maestros</span>
+                    <span class="nav-text">Maestros @if (registrosPendientes + plantasPorValidar + depositosPorValidar + cuentasEquipoPendientes > 0) { <span class="nav-badge-traspaso" title="Registros por revisar">@(registrosPendientes + plantasPorValidar + depositosPorValidar + cuentasEquipoPendientes)</span> }</span>
                     <i class="bi bi-chevron-down"></i>
                 </a>
                 <div class="collapse" id="menuMaestros" data-bs-parent="#sidebarMenu">
                     <ul class="nav flex-column">
-                        <li><a class="nav-link sub-link" asp-page="/Clientes/Index">Mis Clientes</a></li>
-                        <li><a class="nav-link sub-link" asp-page="/Plantas/Index">Plantas</a></li>
-                        <li><a class="nav-link sub-link" asp-page="/Depositos/Index">Depósitos</a></li>
-                        <li><a class="nav-link sub-link" asp-page="/Navieras/Index">Navieras</a></li>
-                        <li><a class="nav-link sub-link" asp-page="/Puertos/Index">Puertos</a></li>
+                        <li><a class="nav-link sub-link" asp-page="/App/Clientes/Index">Mis Clientes</a></li>
+                        <li><a class="nav-link sub-link" asp-page="/App/Clientes/Solicitudes">Solicitudes de registro @if (registrosPendientes > 0) { <span class="nav-badge-traspaso" title="Empresas esperando aprobación">@registrosPendientes</span> }</a></li>
+                        <li><a class="nav-link sub-link" asp-page="/App/Plantas/Index">Plantas @if (plantasPorValidar > 0) { <span class="nav-badge-traspaso" title="Plantas registradas por clientes, por validar">@plantasPorValidar</span> }</a></li>
+                        <li><a class="nav-link sub-link" asp-page="/App/Depositos/Index">Depósitos @if (depositosPorValidar > 0) { <span class="nav-badge-traspaso" title="Depósitos registrados por clientes, por validar">@depositosPorValidar</span> }</a></li>
+                        <li><a class="nav-link sub-link" asp-page="/App/Proveedores/Index">Proveedores</a></li>
+                        <li><a class="nav-link sub-link" asp-page="/App/Agencias/Index">Agencias de aduana</a></li>
+                        <li><a class="nav-link sub-link" asp-page="/App/Navieras/Index">Navieras</a></li>
+                        <li><a class="nav-link sub-link" asp-page="/App/Puertos/Index">Puertos</a></li>
+                        <li><a class="nav-link sub-link" asp-page="/App/Ciudades/Index">Ciudades</a></li>
+                        @if (esAdminEquipo)
+                        {
+                            <li><a class="nav-link sub-link" asp-page="/App/Equipo/Index">Equipo Atilson @if (cuentasEquipoPendientes > 0) { <span class="nav-badge-traspaso" title="Cuentas del equipo por validar">@cuentasEquipoPendientes</span> }</a></li>
+                        }
                     </ul>
                 </div>
             </li>
@@ -430,13 +531,15 @@
         @if (User.Identity?.IsAuthenticated == true)
         {
             <div class="sidebar-user-footer">
-                <div class="d-flex align-items-center">
-                    <div class="user-avatar" title="@nombreUsuario">@(nombreUsuario.Substring(0, 1).ToUpper())</div>
+                <a asp-page="/App/Perfil" class="d-flex align-items-center user-perfil" title="Mi perfil">
+                    <div class="user-avatar">
+                        @if (miPerfil?.FotoUrl != null) { <img src="@miPerfil.FotoUrl" alt="" /> } else { @AtilsonCargoSpa.Services.PerfilUsuarioService.Iniciales(nombreUsuario) }
+                    </div>
                     <div class="user-info">
                         <span class="d-block fw-bold text-white text-truncate" style="font-size: 12px; max-width: 120px;">@nombreUsuario</span>
-                        <span style="font-size: 9.5px; font-weight: 600; color: var(--atilson-accent-light);">@User.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value</span>
+                        <span style="font-size: 9.5px; font-weight: 600; color: var(--atilson-accent-light);">@User.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value · Mi perfil</span>
                     </div>
-                </div>
+                </a>
                 <form method="post" asp-page="/Logout" title="Cerrar Sesión">
                     <button type="submit" class="btn-logout">
                         <span>Cerrar Sesión</span>
@@ -447,8 +550,15 @@
         }
     </aside>
 
+    <div class="menu-movil-fondo" id="menuMovilFondo" aria-hidden="true"></div>
+
     <main class="main-content">
-        <div style="flex-grow: 1; padding: 25px;">
+        <div class="barra-movil">
+            <button type="button" id="menuMovilAbrir" aria-label="Abrir menú" aria-expanded="false" aria-controls="sidebarMenu"><i class="bi bi-list"></i></button>
+            <a asp-page="/App/Dashboard" aria-label="Ir al Dashboard"><img src="~/img/marca/atilson-logo-blanco.svg" alt="Atilson" asp-append-version="true" /></a>
+            <span class="titulo-movil">@ViewData["Title"]</span>
+        </div>
+        <div class="contenido-pagina" style="flex-grow: 1; padding: 25px;">
             @RenderBody()
         </div>
     </main>
@@ -461,8 +571,12 @@
                 const toggleBtn = document.getElementById('sidebarToggle');
                 const body = document.body;
 
+                const esMovil = () => window.innerWidth < 992;
+                const menuMovil = abrir => window.menuMovil && window.menuMovil(abrir);
+
                 // 1. Lógica Toggle Principal
                 toggleBtn.addEventListener('click', function() {
+                    if (esMovil()) { menuMovil(false); return; }
                     body.classList.toggle('sidebar-collapsed');
                     let isCollapsed = body.classList.contains('sidebar-collapsed');
                     localStorage.setItem('sidebar-collapsed-erp', isCollapsed);
@@ -489,7 +603,7 @@
                 // 2. CLIC INTELIGENTE CUANDO  ESTÁ CONTRAIDO POR LA VENTANA MODAL
                 document.querySelectorAll('.sidebar-nav .nav-link[data-bs-toggle="collapse"]').forEach(toggle => {
                     toggle.addEventListener('click', function(e) {
-                        if (document.body.classList.contains('sidebar-collapsed')) {
+                        if (document.body.classList.contains('sidebar-collapsed') && !esMovil()) {
                             document.getElementById('sidebarToggle').click();
                         }
                     });
@@ -497,7 +611,7 @@
 
                 // 3. Selección Estricta de URL activa
                 let currentPath = window.location.pathname.replace(/\/$/, '').replace(/\/Index$/, '');
-                if (currentPath === '') currentPath = '/Dashboard';
+                if (currentPath === '') currentPath = '/App/Dashboard';
 
                 document.querySelectorAll('.sidebar-nav .nav-link:not([data-bs-toggle="collapse"])').forEach(link => {
                     let href = link.getAttribute('href');
@@ -522,6 +636,11 @@
                 });
             });
     </script>
+    <partial name="_AvisosFlash" />
+    <partial name="_AvisoRegistros" />
     @await RenderSectionAsync("Scripts", required: false)
+    <script src="~/js/menu-movil.js" asp-append-version="true"></script>
+    <script src="~/js/escala-vista.js" asp-append-version="true"></script>
+    <script src="~/js/buscador-selects.js" asp-append-version="true"></script>
 </body>
 </html>

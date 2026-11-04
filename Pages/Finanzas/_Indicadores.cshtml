@@ -1,0 +1,24 @@
+@* UF, dólar observado y euro vigentes (nov-2026), en una línea, como en el sitio web.
+   Son los valores que usa Finanzas para convertir montos a pesos. *@
+@inject AtilsonCargoSpa.Services.IndicadoresEconomicosService Indicadores
+@{
+    var es = System.Globalization.CultureInfo.GetCultureInfo("es-CL");
+    var uf = await Indicadores.ObtenerUfAsync();
+    var usd = await Indicadores.ObtenerDolarAsync();
+    var eur = await Indicadores.ObtenerEuroAsync();
+    bool alDia = !(uf.EsRespaldo || usd.EsRespaldo || eur.EsRespaldo);
+    // Fuente principal (nov-2026): si los tres vienen del Banco Central, se dice en la línea.
+    bool delBancoCentral = alDia && new[] { uf, usd, eur }.All(v => v.Fuente == AtilsonCargoSpa.Services.IndicadoresEconomicosService.FuenteBancoCentral);
+    string Ayuda(string nombre, AtilsonCargoSpa.Services.IndicadorValor v) =>
+        nombre + (v.Fecha.HasValue ? " del " + v.Fecha.Value.ToString("dd-MM-yyyy") : "") + " · " + v.Fuente;
+}
+<div class="fin-ind @(alDia ? "" : "fin-ind--viejo")" aria-label="Indicadores del día">
+    <span class="fin-ind-punto" title="@(alDia ? "Valores del día" : "Último valor disponible")" aria-hidden="true"></span>
+    <span title="@Ayuda("UF", uf)"><b>UF</b> $@uf.Valor.ToString("N2", es)</span>
+    <span title="@Ayuda("Dólar observado", usd)"><b>USD</b> $@usd.Valor.ToString("N2", es)</span>
+    <span title="@Ayuda("Euro", eur)"><b>EUR</b> $@eur.Valor.ToString("N2", es)</span>
+    @if (delBancoCentral)
+    {
+        <small class="fin-ind-fuente">Banco Central</small>
+    }
+</div>

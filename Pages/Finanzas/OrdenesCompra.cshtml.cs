@@ -63,7 +63,7 @@ namespace AtilsonCargoSpa.Pages.Finanzas
                 // "Por asignar" (Comercial no ha cerrado la tarifa). Réplica server-side
                 // del bloqueo visual del botón, para que no se pueda saltar manipulando
                 // el HTML.
-                if (transacciones.Any(t => t.MontoNeto == 0m && !t.TarifaManual))
+                if (transacciones.Any(t => t.MontoNeto == 0m && !t.TarifaManual && t.EstadoFila != "NO FACTURABLE" && (t.JustificacionManual == null || !t.JustificacionManual.StartsWith("Sin costo"))))
                 {
                     TempData["ErrorMsg"] = "No se puede generar la OC: falta el valor de transporte. Comercial debe cerrar la tarifa antes de emitir la orden de compra.";
                     return RedirectToPage("./OrdenesCompra");

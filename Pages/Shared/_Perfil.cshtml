@@ -1,0 +1,208 @@
+@model AtilsonCargoSpa.Pages.Shared.PerfilPageModel
+@using AtilsonCargoSpa.Models
+@using AtilsonCargoSpa.Services
+@{
+    var u = Model.Usuario;
+    var p = Model.Perfil;
+    var es = new System.Globalization.CultureInfo("es-CL");
+    string rolVisible = Model.EsCliente ? (Model.Empresa?.RazonSocial ?? "Cliente") : u.Rol;
+}
+<link rel="stylesheet" href="~/css/perfil.css" asp-append-version="true" />
+
+<div class="pf" data-seccion="@Model.Seccion">
+    <header class="pf-cabecera">
+        <h1>Mi perfil</h1>
+        <p>@(Model.EsCliente ? "Tus datos de contacto, tu foto y tu contraseña del portal." : "Tus datos, tu foto y tu contraseña.")</p>
+    </header>
+
+    @if (Model.FaltaScript)
+    {
+        <div class="pf-aviso error"><i class="bi bi-exclamation-triangle"></i><span>@PerfilUsuarioService.ScriptPendiente Mientras tanto puedes cambiar tu contraseña.</span></div>
+    }
+    @if (!string.IsNullOrEmpty(Model.Aviso))
+    {
+        <div class="pf-aviso ok" role="status"><i class="bi bi-check-circle"></i><span>@Model.Aviso</span></div>
+    }
+    @if (!string.IsNullOrEmpty(Model.AvisoError))
+    {
+        <div class="pf-aviso error" role="alert"><i class="bi bi-exclamation-circle"></i><span>@Model.AvisoError</span></div>
+    }
+
+    <div class="pf-grid">
+        <!-- Identidad -->
+        <aside class="pf-identidad">
+            <div class="pf-avatar-wrap">
+                @if (p?.FotoUrl != null)
+                {
+                    <img src="@p.FotoUrl" alt="Foto de @u.NombreCompleto" class="pf-avatar" />
+                }
+                else
+                {
+                    <div class="pf-avatar pf-avatar-ini" aria-hidden="true">@PerfilUsuarioService.Iniciales(u.NombreCompleto)</div>
+                }
+            </div>
+            <h2>@u.NombreCompleto</h2>
+            @if (!string.IsNullOrEmpty(p?.Cargo))
+            {
+                <p class="pf-cargo">@p.Cargo</p>
+            }
+            <p class="pf-rol">@rolVisible</p>
+            <dl class="pf-datos">
+                <div><dt>Correo</dt><dd>@u.Correo</dd></div>
+                @if (!string.IsNullOrEmpty(p?.Telefono))
+                {
+                    <div><dt>Teléfono</dt><dd>@p.Telefono</dd></div>
+                }
+                @if (p?.UltimoAcceso != null)
+                {
+                    <div><dt>Último acceso</dt><dd>@p.UltimoAcceso.Value.ToString("d 'de' MMMM, HH:mm", es)</dd></div>
+                }
+            </dl>
+
+            <form method="post" asp-page-handler="Foto" enctype="multipart/form-data" id="formFoto" class="pf-foto-acciones">
+                <label class="pf-btn pf-btn-sec" for="inputFoto"><i class="bi bi-camera"></i> @(p?.FotoUrl != null ? "Cambiar foto" : "Subir foto")</label>
+                <input type="file" id="inputFoto" name="foto" accept="image/jpeg,image/png,image/webp" class="visually-hidden" />
+            </form>
+            @if (p?.FotoUrl != null)
+            {
+                <form method="post" asp-page-handler="QuitarFoto">
+                    <button type="submit" class="pf-link">Quitar foto</button>
+                </form>
+            }
+            <p class="pf-ayuda">JPG, PNG o WEBP. La recortamos cuadrada automáticamente.</p>
+        </aside>
+
+        <div class="pf-secciones">
+            <!-- Datos -->
+            <section class="pf-card" id="datos">
+                <h3><i class="bi bi-person"></i> Datos personales</h3>
+                <form method="post" asp-page-handler="Datos" class="pf-campos">
+                    <div class="pf-campo full">
+                        <label for="pfNombre">Nombre y apellido</label>
+                        <input id="pfNombre" name="nombre" value="@u.NombreCompleto" maxlength="100" required autocomplete="name" />
+                    </div>
+                    <div class="pf-campo">
+                        <label for="pfCorreo">Correo</label>
+                        <input id="pfCorreo" value="@u.Correo" disabled />
+                        <span class="pf-ayuda">Es tu usuario para entrar. Para cambiarlo, pídeselo a @(Model.EsCliente ? "tu ejecutivo(a) de Atilson" : "un administrador").</span>
+                    </div>
+                    <div class="pf-campo">
+                        <label for="pfTelefono">Teléfono</label>
+                        <input id="pfTelefono" name="telefono" value="@p?.Telefono" maxlength="50" inputmode="tel" autocomplete="tel" placeholder="+56 9 1234 5678" />
+                    </div>
+                    <div class="pf-campo full">
+                        <label for="pfCargo">Cargo</label>
+                        <input id="pfCargo" name="cargo" value="@p?.Cargo" maxlength="100" placeholder="@(Model.EsCliente ? "Ej.: Jefe de comercio exterior" : "Ej.: Ejecutiva de operaciones")" autocomplete="organization-title" />
+                    </div>
+                    <div class="pf-pie"><button type="submit" class="pf-btn" @(Model.FaltaScript ? "disabled" : "")><i class="bi bi-check2"></i> Guardar datos</button></div>
+                </form>
+            </section>
+
+            @if (Model.EsCliente && Model.Empresa != null)
+            {
+                <section class="pf-card">
+                    <h3><i class="bi bi-building"></i> Empresa</h3>
+                    <dl class="pf-empresa">
+                        <div><dt>Razón social</dt><dd>@Model.Empresa.RazonSocial</dd></div>
+                        <div><dt>RUT</dt><dd>@(Model.Empresa.Rut ?? "—")</dd></div>
+                        <div><dt>Dirección</dt><dd>@(Model.Empresa.Direccion ?? "—")</dd></div>
+                        <div><dt>Correo de la empresa</dt><dd>@(Model.Empresa.Correo ?? "—")</dd></div>
+                    </dl>
+                    <p class="pf-ayuda mb-0">¿Algún dato de la empresa está mal? <a asp-page="/PortalCliente/Soporte">Escríbenos por Soporte</a> y lo corregimos.</p>
+                </section>
+            }
+
+            <!-- Seguridad -->
+            <section class="pf-card" id="seguridad">
+                <h3><i class="bi bi-shield-lock"></i> Contraseña</h3>
+                <p class="pf-intro">
+                    @if (p?.FechaCambioPassword != null)
+                    {
+                        <span>La cambiaste por última vez el @p.FechaCambioPassword.Value.ToString("d 'de' MMMM 'de' yyyy", es).</span>
+                    }
+                    else
+                    {
+                        <span>Usa al menos 8 caracteres, con letras y números. Te enviaremos un aviso por correo al cambiarla.</span>
+                    }
+                </p>
+                @if (Model.ErrorPassword != null)
+                {
+                    <div class="pf-aviso error" role="alert"><i class="bi bi-exclamation-circle"></i><span>@Model.ErrorPassword</span></div>
+                }
+                <form method="post" asp-page-handler="Password" class="pf-campos" autocomplete="off">
+                    <input type="text" name="usuario" value="@u.Correo" autocomplete="username" class="visually-hidden" tabindex="-1" aria-hidden="true" readonly />
+                    <div class="pf-campo full">
+                        <label for="pfActual">Contraseña actual</label>
+                        <input id="pfActual" name="passwordActual" type="password" autocomplete="current-password" required class="@(Model.CampoError == "PasswordActual" ? "error" : "")" />
+                    </div>
+                    <div class="pf-campo">
+                        <label for="pfNueva">Nueva contraseña</label>
+                        <input id="pfNueva" name="passwordNueva" type="password" autocomplete="new-password" minlength="8" required class="@(Model.CampoError == "PasswordNueva" ? "error" : "")" />
+                        <div class="pf-fuerza" aria-hidden="true"><span id="pfFuerza"></span></div>
+                        <span class="pf-ayuda" id="pfFuerzaTexto">Mínimo 8 caracteres, con letras y números.</span>
+                    </div>
+                    <div class="pf-campo">
+                        <label for="pfConfirmar">Repite la nueva contraseña</label>
+                        <input id="pfConfirmar" name="passwordConfirmar" type="password" autocomplete="new-password" required class="@(Model.CampoError == "PasswordConfirmar" ? "error" : "")" />
+                    </div>
+                    <div class="pf-pie"><button type="submit" class="pf-btn"><i class="bi bi-key"></i> Cambiar contraseña</button></div>
+                </form>
+            </section>
+        </div>
+    </div>
+</div>
+
+<script>
+    (function () {
+        // Foto: se recorta cuadrada y se achica a 512 px en el navegador antes de subirla.
+        const input = document.getElementById('inputFoto');
+        const form = document.getElementById('formFoto');
+        if (input && form) input.addEventListener('change', function () {
+            const f = input.files && input.files[0];
+            if (!f) return;
+            if (!/^image\/(jpeg|png|webp)$/.test(f.type)) { alert('La foto debe ser JPG, PNG o WEBP.'); input.value = ''; return; }
+            const img = new Image();
+            img.onload = function () {
+                const lado = Math.min(img.naturalWidth, img.naturalHeight);
+                const destino = Math.min(512, lado);
+                const c = document.createElement('canvas'); c.width = c.height = destino;
+                c.getContext('2d').drawImage(img, (img.naturalWidth - lado) / 2, (img.naturalHeight - lado) / 2, lado, lado, 0, 0, destino, destino);
+                c.toBlob(function (blob) {
+                    if (blob) {
+                        const dt = new DataTransfer();
+                        dt.items.add(new File([blob], 'foto.jpg', { type: 'image/jpeg' }));
+                        input.files = dt.files;
+                    }
+                    URL.revokeObjectURL(img.src);
+                    form.submit();
+                }, 'image/jpeg', 0.88);
+            };
+            img.onerror = function () { form.submit(); };
+            img.src = URL.createObjectURL(f);
+        });
+
+        // Indicador simple de la contraseña nueva.
+        const nueva = document.getElementById('pfNueva');
+        const barra = document.getElementById('pfFuerza');
+        const texto = document.getElementById('pfFuerzaTexto');
+        if (nueva) nueva.addEventListener('input', function () {
+            const v = nueva.value;
+            let pts = 0;
+            if (v.length >= 8) pts++;
+            if (/[a-zA-Z]/.test(v) && /\d/.test(v)) pts++;
+            if (v.length >= 12) pts++;
+            if (/[^a-zA-Z0-9]/.test(v)) pts++;
+            const niveles = [['0%', ''], ['30%', 'Muy corta'], ['55%', 'Aceptable'], ['80%', 'Buena'], ['100%', 'Muy buena']];
+            const n = v.length === 0 ? 0 : Math.max(1, pts);
+            barra.style.width = niveles[n][0];
+            barra.dataset.nivel = n;
+            texto.textContent = v.length === 0 ? 'Mínimo 8 caracteres, con letras y números.' : niveles[n][1] + (pts < 2 ? ' · usa al menos 8 caracteres con letras y números' : '');
+        });
+
+        // Lleva a la sección recién guardada.
+        const sec = document.querySelector('.pf').dataset.seccion;
+        const campoError = document.querySelector('.pf input.error');
+        if (campoError) { campoError.focus(); }
+        else if (sec && document.getElementById(sec)) { document.getElementById(sec).scrollIntoView({ block: 'start' }); }
+    })();
+</script>

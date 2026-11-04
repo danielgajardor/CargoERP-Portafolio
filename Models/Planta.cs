@@ -34,6 +34,16 @@ namespace AtilsonCargoSpa.Models
         [StringLength(100)]
         public string? UsuarioModificador { get; set; }
 
+        // Portal (oct-2026): planta registrada por el cliente y su validación por Atilson.
+        public bool RegistradaPorCliente { get; set; }
+
+        public bool Validada { get; set; } = true;
+
+        public DateTime? FechaValidacion { get; set; }
+
+        [StringLength(100)]
+        public string? UsuarioValidacion { get; set; }
+
         // --- MAGIA ATILSON: Propiedades de Navegación ---
         [ForeignKey("IdCiudad")]
         public virtual Ciudade Ciudad { get; set; } = null!;

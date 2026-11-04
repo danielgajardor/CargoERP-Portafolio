@@ -1,0 +1,251 @@
+/* =========================================================================
+   Piezas comunes del ERP (oct-2026)
+   1. Avisos flotantes de guardado (_AvisosFlash.cshtml)
+   2. Buscador en listas desplegables largas (buscador-selects.js + Select2)
+   ========================================================================= */
+
+/* ---------- 1. Avisos ---------- */
+.avisos-flash {
+    position: fixed;
+    top: 18px;
+    right: 18px;
+    z-index: 2100;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    width: min(380px, calc(100vw - 32px));
+    pointer-events: none;
+}
+
+.aviso-flash {
+    pointer-events: auto;
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 14px 14px 14px 16px;
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-left-width: 4px;
+    border-radius: 10px;
+    box-shadow: 0 12px 30px -12px rgba(15, 23, 42, .35);
+    color: #0f172a;
+    font-size: 13px;
+    line-height: 1.4;
+    animation: aviso-entra .22s ease-out;
+}
+
+.aviso-flash.saliendo { opacity: 0; transform: translateX(16px); transition: all .2s ease-in; }
+.aviso-ok { border-left-color: #16a34a; }
+.aviso-error { border-left-color: #dc2626; }
+.aviso-info { border-left-color: #2563eb; }
+.aviso-icono { font-size: 18px; line-height: 1.1; margin-top: 1px; }
+.aviso-ok .aviso-icono { color: #16a34a; }
+.aviso-error .aviso-icono { color: #dc2626; }
+.aviso-info .aviso-icono { color: #2563eb; }
+.aviso-cuerpo { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.aviso-cuerpo strong { font-size: 13px; font-weight: 800; }
+.aviso-cuerpo span { color: #334155; overflow-wrap: anywhere; }
+.aviso-cerrar {
+    border: 0;
+    background: transparent;
+    color: #64748b;
+    font-size: 20px;
+    line-height: 1;
+    padding: 0 2px;
+    cursor: pointer;
+}
+.aviso-cerrar:hover { color: #0f172a; }
+
+@keyframes aviso-entra {
+    from { opacity: 0; transform: translateY(-8px); }
+    to { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .aviso-flash { animation: none; }
+    .aviso-flash.saliendo { transition: none; }
+}
+
+/* ---------- 2. Buscador en listas largas ----------
+   Solo afecta a las listas que activa buscador-selects.js (clase bsq-auto); las que
+   cada pantalla configura por su cuenta conservan su estilo. */
+.select2-container.bsq-auto { max-width: 100%; }
+
+.select2-container.bsq-auto .select2-selection--single {
+    height: 36px;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    background: #fff;
+}
+
+.select2-container.bsq-auto .select2-selection--single .select2-selection__rendered {
+    line-height: 34px;
+    padding-left: 10px;
+    padding-right: 28px;
+    color: #0f172a;
+    font-size: 13px;
+}
+
+.select2-container.bsq-auto .select2-selection--single .select2-selection__placeholder { color: #94a3b8; }
+.select2-container.bsq-auto .select2-selection--single .select2-selection__arrow { height: 34px; }
+
+.select2-container.bsq-auto.select2-container--focus .select2-selection--single,
+.select2-container.bsq-auto.select2-container--open .select2-selection--single {
+    border-color: #6d2d9e;
+    box-shadow: 0 0 0 3px rgba(109, 45, 158, .12);
+}
+
+.select2-container.bsq-auto.select2-container--disabled .select2-selection--single { background: #f1f5f9; }
+
+/* Variante subrayada para formularios con .input-modern (maestros) */
+.select2-container.bsq-modern .select2-selection--single {
+    border: 0;
+    border-bottom: 1px solid #cbd5e1;
+    border-radius: 0;
+    background: transparent;
+}
+.select2-container.bsq-modern .select2-selection--single .select2-selection__rendered { padding-left: 0; }
+.select2-container.bsq-modern.select2-container--focus .select2-selection--single,
+.select2-container.bsq-modern.select2-container--open .select2-selection--single {
+    box-shadow: 0 1px 0 0 #6d2d9e;
+    border-bottom-color: #6d2d9e;
+}
+
+/* Variante compacta para .form-select-sm */
+.select2-container.bsq-sm .select2-selection--single { height: 31px; }
+.select2-container.bsq-sm .select2-selection--single .select2-selection__rendered { line-height: 29px; font-size: 12px; }
+.select2-container.bsq-sm .select2-selection--single .select2-selection__arrow { height: 29px; }
+
+.select2-dropdown.bsq-dropdown {
+    border-color: #cbd5e1;
+    border-radius: 8px;
+    box-shadow: 0 14px 30px -14px rgba(15, 23, 42, .35);
+    overflow: hidden;
+    font-size: 13px;
+    z-index: 2060;
+}
+.select2-dropdown.bsq-dropdown .select2-search--dropdown { padding: 8px; }
+.select2-dropdown.bsq-dropdown .select2-search__field {
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    padding: 6px 10px;
+    font-size: 13px;
+}
+.select2-dropdown.bsq-dropdown .select2-search__field:focus { outline: none; border-color: #6d2d9e; }
+.select2-dropdown.bsq-dropdown .select2-results__option { padding: 7px 10px; }
+.select2-dropdown.bsq-dropdown .select2-results__option--highlighted.select2-results__option--selectable { background: #6d2d9e; }
+.select2-dropdown.bsq-dropdown .bsq-coincide { font-weight: 800; text-decoration: underline; text-underline-offset: 2px; }
+
+/* ---------- 3. Ventanas (modales) con la vista al 90% ----------
+   El layout aplica zoom 0.9 al <html>. Bootstrap dibuja el fondo oscuro de los modales
+   con width:100vw / height:100vh, y con ese zoom solo cubría el 90% de la pantalla
+   (quedaba una franja sin oscurecer a la derecha y abajo). Se compensa dividiendo por
+   el zoom. El fondo es azul pizarra con un leve desenfoque, en vez de negro plano. */
+html[data-escala]:not([data-escala="1"]) .modal-backdrop,
+html[data-escala]:not([data-escala="1"]) .offcanvas-backdrop {
+    width: calc(100vw / var(--escala, 1));
+    height: calc(100vh / var(--escala, 1));
+}
+
+html[data-escala]:not([data-escala="1"]) .main-content {
+    min-height: calc(100vh / var(--escala, 1));
+}
+
+.modal-backdrop {
+    background-color: #0f172a;
+}
+
+.modal-backdrop.show {
+    opacity: .55;
+}
+
+@supports ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
+    .modal-backdrop.show {
+        -webkit-backdrop-filter: blur(2px);
+        backdrop-filter: blur(2px);
+    }
+}
+
+body.swal2-shown > .swal2-container.swal2-backdrop-show {
+    background: rgba(15, 23, 42, .55);
+}
+
+/* ---------- 4. Ventana "Reportar extracosto" (Operaciones) ---------- */
+.ext-modal .modal-content { border-radius: 16px; overflow: hidden; box-shadow: 0 24px 60px rgba(15, 23, 42, .28); }
+.ext-modal__cab { background: #0f172a; color: #fff; border: 0; padding: 18px 22px; align-items: flex-start; }
+.ext-modal__eyebrow { display: inline-block; font-size: 10px; font-weight: 800; letter-spacing: 1.2px; text-transform: uppercase; color: #fca5a5; margin-bottom: 2px; }
+.ext-modal__cab .modal-title { font-size: 16px; font-weight: 800; color: #fff; margin: 0; }
+.ext-modal__cab .modal-title i { color: #f87171; margin-right: 6px; }
+.ext-modal__cab p { font-size: 11.5px; color: #94a3b8; margin-top: 2px; }
+.ext-modal__cab p strong { color: #fff; }
+.ext-modal__cuerpo { padding: 18px 22px 8px; background: #fff; }
+.ext-modal__pie { background: #f8fafc; border-top: 1px solid #e2e8f0; padding: 12px 22px; }
+.ext-paso { display: flex; gap: 14px; padding-bottom: 14px; margin-bottom: 14px; border-bottom: 1px dashed #e2e8f0; }
+.ext-paso:last-of-type { border-bottom: 0; }
+.ext-paso__num {
+    flex: 0 0 26px; height: 26px; border-radius: 50%; background: #f1f5f9; color: #475569;
+    font-size: 12px; font-weight: 800; display: flex; align-items: center; justify-content: center; margin-top: 18px;
+}
+.ext-paso__cont { flex: 1; min-width: 0; }
+.ext-label { display: block; font-size: 10.5px; font-weight: 800; letter-spacing: .5px; text-transform: uppercase; color: #64748b; margin-bottom: 5px; }
+.ext-opcional { font-weight: 600; text-transform: none; letter-spacing: 0; color: #94a3b8; }
+.ext-ayuda { display: block; font-size: 10.5px; color: #94a3b8; margin-top: 4px; line-height: 1.35; }
+.ext-servicios { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+@media (max-width: 575px) { .ext-servicios { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.ext-servicio {
+    display: flex; align-items: center; justify-content: center; gap: 6px; height: 38px;
+    border: 1.5px solid #e2e8f0; border-radius: 10px; background: #fff; color: #334155;
+    font-size: 12.5px; font-weight: 700; transition: border-color .15s, background .15s, color .15s;
+}
+.ext-servicio:hover { border-color: #c4b5fd; background: #faf5ff; }
+.ext-servicio.activo { border-color: #6d2d9e; background: #6d2d9e; color: #fff; box-shadow: 0 4px 12px rgba(109, 45, 158, .25); }
+.ext-servicio:focus-visible { outline: 2px solid #6d2d9e; outline-offset: 2px; }
+.ext-nuevo { margin-top: 10px; padding: 10px 12px; border-radius: 10px; background: #faf5ff; border: 1px solid #e9d5ff; }
+.ext-dinamica { margin-top: 10px; padding: 10px 12px; border-radius: 10px; background: #f0f9ff; border: 1px solid #bae6fd; }
+.ext-moneda { flex: 0 0 82px !important; max-width: 82px; }
+.ext-previa { font-size: 12px; line-height: 1.5; color: #334155; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 10px 12px; margin-bottom: 10px; }
+.ext-previa:empty { display: none; }
+.ext-previa i { color: #6d2d9e; }
+.ext-previa__ref { margin-bottom: 4px; color: #15803d; }
+.ext-previa__ref i { color: #15803d; }
+.ext-error { font-size: 12.5px; font-weight: 600; color: #b91c1c; background: #fef2f2; border: 1px solid #fecaca; border-radius: 10px; padding: 8px 12px; margin-bottom: 10px; }
+.ext-modal .select2-container { width: 100% !important; }
+
+/* ==========================================================
+   CELULAR Y TABLET (nov-2026): el menú se esconde a la izquierda y se abre
+   con el botón de la barra superior. El contenido usa todo el ancho.
+   ========================================================== */
+.barra-movil, .menu-movil-fondo { display: none; }
+@media (max-width: 991.98px) {
+    .sidebar { width: 272px !important; transform: translateX(-102%); transition: transform .25s ease; }
+    body.menu-movil-abierto .sidebar { transform: none; box-shadow: 0 0 60px rgba(2,6,23,.45); }
+    .main-content, body.sidebar-collapsed .main-content { margin-left: 0 !important; min-width: 0; }
+    .main-content > .contenido-pagina { padding: 14px !important; }
+    .barra-movil {
+        display: flex; align-items: center; gap: 12px; position: sticky; top: 0; z-index: 900;
+        background: var(--atilson-dark); padding: 10px 14px; box-shadow: 0 2px 12px rgba(2,6,23,.25);
+    }
+    .barra-movil button { background: rgba(255,255,255,.08); border: 0; color: #fff; width: 40px; height: 40px; border-radius: 10px; font-size: 22px; display: grid; place-items: center; }
+    .barra-movil img { height: 28px; width: auto; }
+    .barra-movil .titulo-movil { color: #cbd5e1; font-size: 14px; font-weight: 600; margin-left: auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 45vw; }
+    body.menu-movil-abierto .menu-movil-fondo { display: block; position: fixed; inset: 0; background: rgba(15,23,42,.55); z-index: 999; }
+    /* En el celular el menú abierto siempre muestra los textos. */
+    body.sidebar-collapsed .sidebar .nav-text, body.sidebar-collapsed .sidebar .sidebar-title,
+    body.sidebar-collapsed .sidebar .brand-logo-link, body.sidebar-collapsed .sidebar .user-info { display: initial !important; }
+    /* Tablas anchas: se deslizan dentro de su espacio en vez de ensanchar la página. */
+    .main-content table { display: block; overflow-x: auto; max-width: 100%; }
+    .main-content .table-responsive table { display: table; }
+    .main-content img, .main-content iframe { max-width: 100%; }
+}
+@media (prefers-reduced-motion: reduce) { .sidebar { transition: none; } }
+@media (max-width: 991.98px) {
+    /* Barras de pestañas y filtros: se deslizan de lado en vez de ensanchar la página. */
+    .contenido-pagina .nav-tabs, .contenido-pagina .nav-pills, .contenido-pagina .quick-filters, .contenido-pagina .workspace-nav {
+        flex-wrap: nowrap; overflow-x: auto; overflow-y: hidden; max-width: 100%; scrollbar-width: thin;
+    }
+    .contenido-pagina .nav-tabs > *, .contenido-pagina .nav-pills > * { flex: none; }
+    /* Filas de botones y filtros: bajan a la línea siguiente. */
+    .contenido-pagina .d-flex.gap-1, .contenido-pagina .d-flex.gap-2, .contenido-pagina .d-flex.gap-3, .contenido-pagina .btn-toolbar { flex-wrap: wrap; }
+    .contenido-pagina .row { --bs-gutter-x: 1rem; }
+    .contenido-pagina .modal-dialog { margin: 8px; }
+}

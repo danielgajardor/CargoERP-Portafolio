@@ -1,0 +1,82 @@
+@page
+@model AtilsonCargoSpa.Pages.App.Ciudades.IndexModel
+@using AtilsonCargoSpa.Services
+@{
+    ViewData["Title"] = "Maestro de Ciudades";
+}
+<link rel="stylesheet" href="~/css/maestros.css" asp-append-version="true" />
+
+<div class="container-fluid py-4 mx">
+    <header class="mx-cabecera">
+        <div>
+            <div class="mx-miga">Maestros</div>
+            <h1 class="mx-titulo">Ciudades</h1>
+            <p class="mx-subtitulo">Ciudades que usan depósitos, plantas, clientes y las tarifas de transporte (origen y destino de cada tramo).</p>
+        </div>
+        <div class="mx-acciones">
+            <a asp-page="./Edit" class="mx-btn mx-btn-primario"><i class="bi bi-plus-lg"></i> Nueva ciudad</a>
+        </div>
+    </header>
+
+    <div class="mx-barra">
+        <div class="mx-buscar">
+            <i class="bi bi-search" aria-hidden="true"></i>
+            <input type="search" data-mx-filtro value="@Model.Q" placeholder="Buscar ciudad o país…" aria-label="Buscar ciudad" autocomplete="off" />
+        </div>
+        <div class="mx-filtro-extra">
+            <select data-mx-filtro-extra data-buscador="si" aria-label="Filtrar por país">
+                <option value="">Todos los países</option>
+                @foreach (var p in Model.OpcionesPais)
+                {
+                    <option value="@p.Valor" selected="@(Model.F == p.Valor)">@p.Texto</option>
+                }
+            </select>
+        </div>
+        <span class="mx-total" data-mx-total>@Model.Filas.Count registros</span>
+    </div>
+
+    <div class="mx-tabla-wrap">
+        <table class="mx-tabla" data-mx-tabla>
+            <thead>
+                <tr>
+                    <th>Ciudad</th>
+                    <th>País</th>
+                    <th class="text-end">Depósitos</th>
+                    <th class="text-end">Plantas</th>
+                    <th class="text-end">Tarifas de transporte</th>
+                    <th>Última modificación</th>
+                    <th class="mx-col-acciones"><span class="visually-hidden">Acciones</span></th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var f in Model.Filas)
+                {
+                    var c = f.Ciudad;
+                    <tr data-mx-texto="@c.Nombre @f.Pais" data-mx-extra="@c.IdPais" class="@(Model.Resaltar == c.Id ? "mx-resaltado" : "")">
+                        <td><a asp-page="./Edit" asp-route-id="@c.Id" class="mx-nombre text-decoration-none">@c.Nombre</a></td>
+                        <td>@f.Pais</td>
+                        <td class="text-end">@(f.Depositos == 0 ? "—" : f.Depositos.ToString())</td>
+                        <td class="text-end">@(f.Plantas == 0 ? "—" : f.Plantas.ToString())</td>
+                        <td class="text-end">@(f.Tarifas == 0 ? "—" : f.Tarifas.ToString())</td>
+                        <td class="mx-mod">
+                            @(string.IsNullOrWhiteSpace(c.UsuarioModificador) ? "—" : c.UsuarioModificador)
+                            <small>@MaestrosAuditoria.FormatoFecha(c.FechaModificacion)</small>
+                        </td>
+                        <td class="mx-col-acciones">
+                            <a asp-page="./Edit" asp-route-id="@c.Id" class="mx-btn mx-btn-secundario mx-btn-sm"><i class="bi bi-pencil"></i> Editar</a>
+                        </td>
+                    </tr>
+                }
+                <tr data-mx-sin-coincidencias hidden><td colspan="7" class="mx-vacio"><i class="bi bi-search"></i>Ninguna ciudad coincide con la búsqueda. Si falta, créala con «Nueva ciudad».</td></tr>
+                @if (!Model.Filas.Any())
+                {
+                    <tr><td colspan="7" class="mx-vacio"><i class="bi bi-geo"></i>No hay ciudades registradas.</td></tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+@section Scripts {
+    <script src="~/js/maestros.js" asp-append-version="true"></script>
+}

@@ -1,0 +1,22 @@
+@model string
+@* Navegación entre las páginas de Finanzas (oct-2026). Model = clave de la página activa. *@
+@{
+    var items = new[]
+    {
+        (Clave: "MainBoard", Pagina: "/Finanzas/Index", Icono: "bi-grid-1x2-fill", Texto: "Main Board"),
+        (Clave: "ControlFinanciero", Pagina: "/Finanzas/ControlFinanciero", Icono: "bi-sliders", Texto: "Control Financiero"),
+        (Clave: "OrdenesCompra", Pagina: "/Finanzas/OrdenesCompra", Icono: "bi-receipt", Texto: "Órdenes de Compra"),
+        (Clave: "Facturacion", Pagina: "/Finanzas/Facturacion", Icono: "bi-file-earmark-spreadsheet-fill", Texto: "Facturación"),
+        (Clave: "Cobranza", Pagina: "/Finanzas/Cobranza", Icono: "bi-wallet2", Texto: "Cobranza"),
+        (Clave: "ConsolidadoCliente", Pagina: "/Finanzas/ConsolidadoCliente", Icono: "bi-person-lines-fill", Texto: "Consolidado Cliente")
+    };
+}
+<div class="d-flex mb-4">
+    <nav class="workspace-nav segmented-nav" aria-label="Secciones de Finanzas">
+        @foreach (var it in items)
+        {
+            bool activo = it.Clave == Model;
+            <a asp-page="@it.Pagina" class="ws-btn segmented-nav__link @(activo ? "active" : "")" aria-current="@(activo ? "page" : null)"><i class="bi @it.Icono"></i> @it.Texto</a>
+        }
+    </nav>
+</div>

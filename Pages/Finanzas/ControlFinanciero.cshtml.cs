@@ -20,14 +20,22 @@ namespace AtilsonCargoSpa.Pages.Finanzas
 
         private readonly FinanzasSyncService _sync;
 
-        // Valor esperado en la factura AGA: Marítimo exento (neto); Gate y el resto = neto + IVA.
-        private static decimal ValorCompararAga(TransaccionesFinanciera tx)
+        // Valor esperado en la factura: neto + IVA (desde oct-2026 también todo lo Marítimo).
+        // El rebate Collect va sin IVA (devolución de flete).
+        // Flete Marítimo, Roleo, Cancelación y No Show: siempre en USD y sin IVA.
+        public static bool EsMaritimoUsdSinIva(string? concepto)
         {
-            string g = (tx.GrupoCobro ?? "").ToUpper();
-            bool esGate = g.Contains("DEPÓSITO") || g.Contains("DEPOSITO") || g.Contains("GATE");
-            bool esMar = g.Contains("MARÍTIMO") || g.Contains("MARITIMO");
-            return (esMar && !esGate) ? tx.MontoNeto : Math.Round(tx.MontoNeto * 1.19m, 0);
+            string c = (concepto ?? "").ToUpperInvariant();
+            return c.StartsWith("FLETE MARÍTIMO") || c.StartsWith("FLETE MARITIMO")
+                || c.StartsWith("ROLEO MARÍTIMO") || c.StartsWith("ROLEO MARITIMO")
+                || c.StartsWith("CANCELACIÓN / NO SHOW") || c.StartsWith("CANCELACION / NO SHOW");
         }
+
+        private static decimal ValorCompararAga(TransaccionesFinanciera tx)
+            => (EsMaritimoUsdSinIva(tx.Concepto)
+                || ((tx.Concepto ?? "").StartsWith("Rebate Marítimo", StringComparison.OrdinalIgnoreCase) && tx.IvaExento != false))
+                ? tx.MontoNeto
+                : Math.Round(tx.MontoNeto * 1.19m, tx.Moneda == "CLP" ? 0 : 2);
 
         private static decimal TolAga(TransaccionesFinanciera tx) => tx.Moneda == "CLP" ? 1m : 0.01m;
 
@@ -40,9 +48,43 @@ namespace AtilsonCargoSpa.Pages.Finanzas
 
         public List<TarifaGate> ComponentesGate { get; set; } = new();
 
-        
+        // Conceptos marcados "Servicio Gratuito" en TarifasClientes (Comercial),
+        // agrupados por cliente — mismo patrón que usa AcuerdosOperativosModel,
+        // para saber si un Ingreso en $0 es un ajuste real pendiente o un $0
+        // intencional por tarifa plana paquetizada (ej. Promar).
+        public Dictionary<int, List<string>> TarifasGratuitasPorCliente { get; set; } = new();
+
+        public static bool ConceptoCubiertoPorTarifaPlana(string? conceptoCompleto, List<string> conceptosGratuitos)
+        {
+            if (conceptosGratuitos == null || !conceptosGratuitos.Any() || string.IsNullOrWhiteSpace(conceptoCompleto)) return false;
+            string baseConcepto = System.Text.RegularExpressions.Regex.Replace(conceptoCompleto, @"\s*\(U\d+\)", "").Trim().ToUpper();
+            return conceptosGratuitos.Any(c => !string.IsNullOrWhiteSpace(c) &&
+                (baseConcepto.Contains(c.ToUpper()) || c.ToUpper().Contains(baseConcepto)));
+        }
 
         public IList<Operacione> Operaciones { get; set; } = default!;
+
+        // Equivalencia en CLP (oct-2026): dólar observado y UF del día (Banco Central, con
+        // respaldo si no responde). Solo para mostrar referencias y totales consolidados;
+        // no cambia ningún monto guardado.
+        public decimal DolarHoy { get; set; }
+        public decimal UfHoy { get; set; }
+        public AtilsonCargoSpa.Services.IndicadorValor? DolarInfo { get; set; }
+        public AtilsonCargoSpa.Services.IndicadorValor? UfInfo { get; set; }
+
+        // Nombre de cada agencia de aduanas (por Id), para el proveedor de las filas
+        // documentales cuando la navegación no viene cargada.
+        public Dictionary<int, string> NombresAgencias { get; set; } = new();
+
+        // Traspaso Ops -> Finanzas (oct-2026): filas que cambiaron entre la finalización
+        // anterior y la última (solo bookings finalizados más de una vez).
+        public Dictionary<int, List<string>> CambiosTraspaso { get; set; } = new();
+        /// <summary>Respaldo adjunto a la última reapertura de cada operación reabierta.</summary>
+        public Dictionary<int, (string Ruta, string Nombre)> RespaldosReapertura { get; set; } = new();
+
+        // ?abrir=ID desde el Main Board: despliega ese booking al cargar.
+        [BindProperty(SupportsGet = true)]
+        public int? Abrir { get; set; }
 
         public async Task<IActionResult> OnPostGuardarComponentesGateAsync(int transaccionId, List<string> componentes, string todos)
         {
@@ -77,6 +119,13 @@ namespace AtilsonCargoSpa.Pages.Finanzas
         }
         public async Task OnGetAsync()
         {
+            if (HttpContext.RequestServices.GetService(typeof(AtilsonCargoSpa.Services.IndicadoresEconomicosService)) is AtilsonCargoSpa.Services.IndicadoresEconomicosService ind)
+            {
+                DolarInfo = await ind.ObtenerDolarAsync();
+                UfInfo = await ind.ObtenerUfAsync();
+                DolarHoy = DolarInfo.Valor;
+                UfHoy = UfInfo.Valor;
+            }
             // Se restauran los Include completos: la pestaña Egresos sigue en línea
             // (no vía AJAX/partial), así que necesita las mismas navegaciones de
             // siempre para resolver el nombre del proveedor por categoría.
@@ -90,17 +139,37 @@ namespace AtilsonCargoSpa.Pages.Finanzas
     .Include(o => o.OperacionesTerrestres)
     .Include(o => o.OperacionesAlmacenamientos)
     .ThenInclude(a => a.IdProveedorNavigation)
+    .Include(o => o.Unidadestecnicas)
     .Include(o => o.TransaccionesFinancieras)
     .ThenInclude(t => t.IdProveedorNavigation)
     .OrderByDescending(o => o.Id)
     .ToListAsync();
 
-            ComponentesGate = await _context.TarifasGate
-    .AsNoTracking()
-    .Where(t => t.EsActiva && t.Componente != null && t.IdNaviera != null)
-    .ToListAsync();
-        }
+            // Primero lo que Operaciones acaba de traspasar (NUEVO) y lo reabierto.
+            Operaciones = Operaciones
+                .OrderBy(o => TraspasoFinanzas.PrioridadFinanzas(o))
+                .ThenByDescending(o => o.Id)
+                .ToList();
+            CambiosTraspaso = await new TraspasoFinanzasService(_context).CambiosUltimaFinalizacionAsync(
+                Operaciones.Where(o => o.VecesFinalizadaTarea > 1).Select(o => o.Id));
+            RespaldosReapertura = await new TraspasoFinanzasService(_context).RespaldosUltimaReaperturaAsync(
+                Operaciones.Where(TraspasoFinanzas.EstaReabierta).Select(o => o.Id));
 
+            NombresAgencias = await _context.AgenciasAduanas.AsNoTracking()
+                .Where(a => a.NombreAgencia != null)
+                .ToDictionaryAsync(a => a.Id, a => a.NombreAgencia!);
+
+            ComponentesGate = await _context.TarifasGate
+.AsNoTracking()
+.Where(t => t.EsActiva && t.Componente != null && t.IdNaviera != null)
+.ToListAsync();
+
+            TarifasGratuitasPorCliente = await _context.TarifasClientes
+    .AsNoTracking()
+    .Where(t => t.EsActiva && t.EsServicioGratuito && t.IdCliente != null)
+    .GroupBy(t => t.IdCliente!.Value)
+    .ToDictionaryAsync(g => g.Key, g => g.Select(t => t.Concepto!).ToList());
+        }
         public async Task<IActionResult> OnGetEgresosPartialAsync()
         {
             var operacionesEgresos = await _context.Operaciones
@@ -178,6 +247,43 @@ namespace AtilsonCargoSpa.Pages.Finanzas
             return RedirectToPage("./ControlFinanciero");
         }
 
+        // "¿Por qué no hay tarifa?" en un flete terrestre sin valor: corre el mismo cruce que
+        // FinanzasSync y devuelve el detalle (transportista, tramo y tarifas que no calzan).
+        public async Task<IActionResult> OnGetDiagnosticoTransporteAsync(int idOperacion, int? idUnidad)
+        {
+            var op = await _context.Operaciones.AsNoTracking()
+                .Include(o => o.OperacionesTerrestres)
+                .FirstOrDefaultAsync(o => o.Id == idOperacion);
+            if (op == null) return new JsonResult(new { ok = false, lineas = new[] { "No se encontró la operación." } });
+            var terr = op.OperacionesTerrestres.Where(t => t.IdUnidadTecnica == idUnidad).OrderBy(t => t.Id).FirstOrDefault();
+            if (terr == null)
+                return new JsonResult(new { ok = false, lineas = new[] { "Este contenedor no tiene datos de transporte guardados (pestaña Transporte del Detalle)." } });
+            var res = await AtilsonCargoSpa.Helpers.TarifaTransporteHelper.BuscarAsync(_context, terr, op.IdTipoCarga,
+                terr.DepositoRetiro, terr.PlantaCarga, terr.PuertoEntrega, DateTime.Now);
+            var lineas = new List<string>();
+            if (res.Tarifa != null)
+            {
+                lineas.Add($"Sí hay tarifa: {res.NombreProveedor}, {res.Tarifa.IdCiudadOrigenNavigation?.Nombre} → {res.Tarifa.IdCiudadPlantaNavigation?.Nombre} → {res.Tarifa.IdCiudadDestinoNavigation?.Nombre}, $ {res.Tarifa.ValorNeto:N0}.");
+                lineas.Add("Usa \"Aplicar tarifa\" para recalcular este booking en Finanzas.");
+            }
+            lineas.AddRange(res.Diagnostico);
+            return new JsonResult(new { ok = res.Tarifa != null, lineas });
+        }
+
+        // Recalcula las filas financieras de un booking (botón "Aplicar tarifa" del diagnóstico).
+        public async Task<IActionResult> OnPostRecalcularOperacionAsync(int idOperacion)
+        {
+            await _sync.SincronizarAsync(idOperacion, User.Identity?.Name ?? "Finanzas");
+            return new JsonResult(new { success = true });
+        }
+
+        // Finanzas abrió (desplegó) el booking: deja de verse como NUEVO / reabierta sin ver.
+        public async Task<IActionResult> OnPostMarcarVistoTraspasoAsync(int id)
+        {
+            bool ok = await new TraspasoFinanzasService(_context).MarcarVistoAsync(id, User.Identity?.Name);
+            return new JsonResult(new { success = ok });
+        }
+
         public async Task<IActionResult> OnPostGuardarNumeroDocAsync(int transaccionId, string numeroDoc)
         {
             if (transaccionId > 0 && !string.IsNullOrWhiteSpace(numeroDoc))
@@ -196,7 +302,7 @@ namespace AtilsonCargoSpa.Pages.Finanzas
         public async Task<IActionResult> OnPostEmitirNotaCobroAsync(int operacionId, List<int> idsExentos)
         {
             bool tienePendientes = await _context.TransaccionesFinancieras
-                .AnyAsync(t => t.IdOperacion == operacionId && t.TipoMovimiento == "INGRESO" && t.MontoNeto == 0m && !t.TarifaManual);
+                .AnyAsync(t => t.IdOperacion == operacionId && t.TipoMovimiento == "INGRESO" && t.MontoNeto == 0m && !t.TarifaManual && t.EstadoFila != "NO FACTURABLE" && (t.JustificacionManual == null || !t.JustificacionManual.StartsWith("Sin costo")));
 
             bool tieneIncompletos = await _context.TransaccionesFinancieras
                 .AnyAsync(t => t.IdOperacion == operacionId && t.TipoMovimiento == "INGRESO" &&
@@ -309,7 +415,7 @@ namespace AtilsonCargoSpa.Pages.Finanzas
                     {
                         if (!(transaccion.ConfirmadoAga && transaccion.ValorAga.HasValue))
                         {
-                            TempData["ErrorMsg"] = "No se puede confirmar el pago: falta verificar el valor de la factura AGA (confirmar o registrar la discrepancia).";
+                            TempData["ErrorMsg"] = "No se puede confirmar el pago: falta verificar el valor de la factura AGA (confirmar o ingresar el Valor Actualizado IVA Incluido).";
                             return RedirectToPage("./ControlFinanciero");
                         }
 

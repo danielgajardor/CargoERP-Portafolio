@@ -21,6 +21,7 @@ namespace AtilsonCargoSpa.Models
         public int? IdProveedor { get; set; }
         public int? IdCliente { get; set; }
         public decimal MontoNeto { get; set; }
+        public decimal ProfitHandling { get; set; }
         public string Moneda { get; set; } = null!;
         public decimal? TipoCambio { get; set; }
 

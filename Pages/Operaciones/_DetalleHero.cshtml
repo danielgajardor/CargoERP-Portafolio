@@ -1,0 +1,441 @@
+@model AtilsonCargoSpa.Pages.Operaciones.DetalleModel
+@using System.Globalization
+@functions {
+    private static string Relativo(DateTime fecha, DateTime ahora)
+    {
+        var ts = fecha - ahora;
+        bool futuro = ts.TotalSeconds >= 0;
+        ts = ts.Duration();
+        string s = ts.TotalDays >= 1 ? $"{(int)ts.TotalDays}d {ts.Hours}h"
+                 : ts.TotalHours >= 1 ? $"{(int)ts.TotalHours}h {ts.Minutes}m"
+                 : $"{Math.Max(1, ts.Minutes)}m";
+        return futuro ? $"en {s}" : $"hace {s}";
+    }
+
+    private static string Urgencia(DateTime fecha, DateTime ahora)
+    {
+        var h = (fecha - ahora).TotalHours;
+        if (h < 0) return "past";
+        if (h <= 24) return "crit";
+        if (h <= 72) return "warn";
+        return "ok";
+    }
+}
+@{
+    var op = Model.Op;
+    var ahora = DateTime.Now;
+    var reqTareaDt = AtilsonCargoSpa.Services.TraspasoFinanzas.EvaluarRequisitos(op);
+    bool tareaFinalizadaDt = AtilsonCargoSpa.Services.TraspasoFinanzas.EstaFinalizada(op);
+    bool tareaReabiertaDt = AtilsonCargoSpa.Services.TraspasoFinanzas.EstaReabierta(op);
+    var es = new CultureInfo("es-CL");
+    string booking = op.NumeroBooking ?? "S/N";
+    bool esImpo = new[] { 8, 9, 10, 11, 12, 13, 14 }.Contains(op.IdTipoServicio ?? 0);
+    var tMain = op.OperacionesTerrestres?.FirstOrDefault(x => x.IdUnidadTecnica == null);
+
+    // Avance por módulo (calculado en Detalle.cshtml, mismo criterio que los anillos de las pestañas)
+    int pctMar = ViewData["DtPctMar"] as int? ?? 0;
+    int pctTer = ViewData["DtPctTer"] as int? ?? 0;
+    int pctDoc = ViewData["DtPctDoc"] as int? ?? 0;
+    int pctGate = ViewData["DtPctGate"] as int? ?? 0;
+
+    var modulos = new List<(string Label, string Icon, int Pct, string Target)>();
+    if (Model.ReqMaritimo) modulos.Add(("Marítimo", "bi-water", pctMar, "#det-maritimo"));
+    if (Model.ReqTerrestre) modulos.Add(("Transporte", "bi-truck", pctTer, "#det-transporte"));
+    if (Model.ReqDocumental) modulos.Add(("Documental", "bi-file-earmark-check", pctDoc, "#det-documental"));
+    modulos.Add(("Gate Out / In", "bi-box-arrow-right", pctGate, "#det-gate"));
+    int pctGlobal = Model.OperacionCerrada ? 100 : (modulos.Any() ? (int)Math.Round(modulos.Average(m => m.Pct)) : 0);
+
+    // Avance del viaje marítimo
+    int pctViaje = 0;
+    if (Model.OperacionCerrada) pctViaje = 100;
+    else if (op.EtdPol.HasValue && op.EtaPod.HasValue && ahora > op.EtdPol.Value)
+    {
+        var totalH = (op.EtaPod.Value - op.EtdPol.Value).TotalHours;
+        pctViaje = (totalH <= 0 || ahora >= op.EtaPod.Value) ? 100 : (int)Math.Round((ahora - op.EtdPol.Value).TotalHours / totalH * 100);
+    }
+    string pol = op.IdPuertoOrigenNavigation?.NombrePuerto ?? "Por definir";
+    string pod = op.IdPuertoDestinoNavigation?.NombrePuerto ?? "Por definir";
+    string? terminal = tMain?.TerminalTerrestreStr;
+
+    // Ventanas críticas
+    var hitos = new List<(string Label, DateTime? Fecha, string Icon)>();
+    if (Model.ReqTerrestre && !esImpo) hitos.Add(("Presentación planta", tMain?.FechaCarga, "bi-truck"));
+    if (Model.ReqMaritimo)
+    {
+        hitos.Add(("Stacking IN", op.FechaStacking, "bi-door-open"));
+        hitos.Add(("Cierre stacking", op.CutOffMatriz, "bi-door-closed"));
+        if (op.LateArrival.HasValue || op.ElarDate.HasValue)
+        {
+            hitos.Add(("Late Arrival", op.LateArrival, "bi-clock-history"));
+            hitos.Add(("ELAR", op.ElarDate, "bi-clock-fill"));
+        }
+        hitos.Add(("Zarpe (ETD)", op.EtdPol, "bi-water"));
+        hitos.Add(("Arribo (ETA)", op.EtaPod, "bi-geo-alt"));
+    }
+    if (Model.ReqTerrestre && esImpo) hitos.Add(("Entrega planta", tMain?.FechaCarga, "bi-truck"));
+
+    var proximo = hitos.Where(h => h.Fecha.HasValue && h.Fecha.Value > ahora).OrderBy(h => h.Fecha!.Value).FirstOrDefault();
+    bool hayProximo = proximo.Fecha.HasValue;
+
+    // Contadores
+    int nCont = 1 + (op.Unidadestecnicas?.Count ?? 0);
+    var extras = op.ExtracostosOperacions?.OrderByDescending(e => e.FechaCreacion).ToList() ?? new List<AtilsonCargoSpa.Models.ExtracostosOperacion>();
+    var roleos = op.RoleosCancelaciones?.ToList() ?? new List<AtilsonCargoSpa.Models.RoleoCancelacion>();
+    int nRoleosPend = roleos.Count(r => r.DatosNuevosPendientes || r.PenalidadConfirmada == "POR_DETERMINAR");
+    bool roleoCliente = roleos.Any(r => r.SolicitadoPorCliente && !r.Atendido);
+
+    string[]? ultima = (op.HistorialCorreos ?? "").Split('\n', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault()?.Split('|');
+
+    string estTrans = !string.IsNullOrWhiteSpace(op.Transbordo) ? AtilsonCargoSpa.Helpers.TransbordoHelpers.EstadoTransbordo(op.GestionTransbordo) : "";
+
+    // Qué conceptos exactos están sin tarifar (para que el chip "Tarifa pendiente" diga de qué se trata)
+    string[] conceptosTarifa = { "Flete Marítimo", "Gate OUT Contenedor", "Gate IN Contenedor", "Servicio Courier" };
+    var pendientesTarifa = conceptosTarifa.Where(c => Model.HayTarifaPendiente(op, c)).ToList();
+    bool tarifaPend = pendientesTarifa.Any();
+
+    // "EXP INTEGRAL" / "IMP MAR + TER" ya repite Exportación/Importación, que el chip de flujo ya indica
+    string servicioCorto = (Model.NombreServicio.StartsWith("EXP ") || Model.NombreServicio.StartsWith("IMP "))
+        ? Model.NombreServicio.Substring(4) : Model.NombreServicio;
+
+    string shipSvg = "<svg viewBox=\"0 0 24 24\" width=\"1em\" height=\"1em\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M3 14h18l-2.2 4.4a2 2 0 0 1-1.8 1.1H7a2 2 0 0 1-1.8-1.1z\"/><path d=\"M6 14V9h4v5\"/><path d=\"M10 14v-3h4v3\"/><path d=\"M14 14V7h4v7\"/></svg>";
+}
+
+<!-- El panel de avance arranca siempre minimizado (se despliega a pedido); se agrega
+     por script, antes de pintar el hero, para que no haya parpadeo de "expandido". -->
+<script>
+    (function () {
+        var root = document.querySelector('.dt-premium');
+        if (root) root.classList.add('dt-dash-collapsed');
+    })();
+</script>
+
+<!-- =========================================================
+     HERO DE OPERACIÓN
+     ========================================================= -->
+<section class="dt-hero">
+    <div class="dt-hero-top">
+        <nav class="dt-crumbs" aria-label="Ruta">
+            <a asp-page="./Index"><i class="bi bi-grid-1x2"></i> Main Board</a>
+            <i class="bi bi-chevron-right"></i>
+            <span>Operación</span>
+            <i class="bi bi-chevron-right"></i>
+            <span class="mono">@booking</span>
+        </nav>
+        <div class="dt-hero-actions">
+            <button type="button" class="dt-hbtn" id="dtDashToggle" aria-expanded="false" aria-controls="dtDashBody dtDashRoute dtDashStrip dtDashTimeline" title="Mostrar u ocultar el panel de avance">
+                <i class="bi bi-arrows-expand"></i><span>Ver panel completo</span>
+            </button>
+            <button type="button" class="dt-hbtn" data-copy="@booking" title="Copiar booking"><i class="bi bi-clipboard"></i><span>Copiar</span></button>
+            <button type="button" class="dt-hbtn" id="btnDatosEmbarqueDet" title="Booking, N° instructivo, Naviera, Nave y Propietario de Contrato" onclick="editarEmbarqueDetalle(this)"
+                    data-id="@op.Id" data-booking="@op.NumeroBooking" data-instructivo="@op.NumeroInstructivo" data-naviera="@op.IdNaviera" data-nave="@op.Nave"
+                    data-prop="@AtilsonCargoSpa.Models.Operacione.NormalizarPropietarioContrato(op.PropietarioContrato)" data-prop-otro="@op.PropietarioContratoOtro"
+                    data-commodity="@(AtilsonCargoSpa.Helpers.CommodityHelper.Normalizar(op.Commodity))" data-cond-pago="@op.CondicionPago">
+                <i class="bi bi-pencil-square"></i><span>Datos del embarque</span>
+            </button>
+            <button type="button" class="dt-hbtn" data-goto-tab="#det-historial"><i class="bi bi-clock-history"></i><span>Historial</span></button>
+            @if (tareaFinalizadaDt)
+            {
+                <button type="button" class="dt-hbtn" style="color:#c2410c;" onclick="abrirReabrirTarea(@op.Id, '@booking', event)" title="Reabrir para corregir costos o cobros"><i class="bi bi-arrow-counterclockwise"></i><span>Reabrir operación</span></button>
+            }
+            else
+            {
+                <button type="button" class="dt-hbtn" @(reqTareaDt.Cumple ? "" : "disabled") style="@(reqTareaDt.Cumple ? "color:#15803d;" : "opacity:.55;cursor:not-allowed;")" onclick="finalizarTarea(@op.Id, '@booking', event)" title="@(reqTareaDt.Cumple ? "Traspasar el booking a Finanzas" : "Falta: " + reqTareaDt.Resumen)"><i class="bi bi-flag-fill"></i><span>Finalizar tarea</span></button>
+            }
+            <button type="button" class="dt-hbtn dt-hbtn-accent" onclick="abrirModalExtracostosDetalle(@op.Id, '@booking', @(Convert.ToInt32(op.IdNaviera)))"><i class="bi bi-plus-lg"></i><span>Extracosto</span></button>
+        </div>
+    </div>
+
+    <div class="dt-hero-main">
+        <div class="dt-hero-id">
+            <div class="dt-tags">
+                <span class="dt-flow @(esImpo ? "impo" : "expo")"><i class="bi @(esImpo ? "bi-box-arrow-in-down" : "bi-box-arrow-up")"></i> @(esImpo ? "Importación" : "Exportación")</span>
+                <span class="dt-tag">@servicioCorto</span>
+                @if (!string.IsNullOrWhiteSpace(op.EstadoWorkflow))
+                {
+                    <span class="dt-tag dt-tag-live">@op.EstadoWorkflow</span>
+                }
+            </div>
+
+            <h1 class="dt-booking mono">@booking</h1>
+
+            <div class="dt-client">
+                <i class="bi bi-buildings"></i> @(op.IdClienteNavigation?.RazonSocial ?? "Cliente sin asignar")
+                <span class="dt-sep">·</span>
+                <button type="button" class="dt-instructivo @(string.IsNullOrWhiteSpace(op.NumeroInstructivo) ? "vacio" : "")" onclick="document.getElementById('btnDatosEmbarqueDet').click()" title="Editar N° de instructivo">
+                    @if (string.IsNullOrWhiteSpace(op.NumeroInstructivo))
+                    {
+                        <span>Sin N° de instructivo</span>
+                    }
+                    else
+                    {
+                        <span>Instructivo <b class="mono">@op.NumeroInstructivo</b></span>
+                    }
+                    <i class="bi bi-pencil"></i>
+                </button>
+            </div>
+
+            <div class="dt-chips">
+                <div class="dt-chips-facts">
+                    <span class="dt-chip"><i class="bi bi-boxes"></i> @nCont contenedor@(nCont == 1 ? "" : "es")</span>
+                    <span class="dt-chip"><i class="bi bi-box"></i> @(op.TipoContenedor ?? "Equipo S/N")</span>
+                    <span class="dt-chip"><i class="bi bi-basket"></i> @(op.Commodity ?? "General")</span>
+                    @if (op.IdNavieraNavigation != null)
+                    {
+                        <span class="dt-chip"><i class="bi bi-flag"></i> @op.IdNavieraNavigation.NombreNaviera</span>
+                    }
+                    <span class="dt-chip"><i class="bi bi-water"></i> @(string.IsNullOrWhiteSpace(op.Nave) ? "Nave por confirmar" : op.Nave)</span>
+                    @if (!string.IsNullOrWhiteSpace(op.PropietarioContrato))
+                    {
+                        <span class="dt-chip" title="Propietario de Contrato"><i class="bi bi-file-earmark-person"></i> Contrato: @op.PropietarioContratoTexto</span>
+                    }
+                    else
+                    {
+                        <span class="dt-chip dt-chip-warn" title="Propietario de Contrato"><i class="bi bi-file-earmark-person"></i> Sin propietario de contrato</span>
+                    }
+                </div>
+                @if (!string.IsNullOrWhiteSpace(op.Transbordo) || !string.IsNullOrWhiteSpace(op.EstadoLar) || op.GateBloqueado || tarifaPend || roleoCliente)
+                {
+                    <div class="dt-chips-alerts">
+                        @if (!string.IsNullOrWhiteSpace(op.Transbordo))
+                        {
+                            string clsT = estTrans switch { "RESUELTO" => "ok", "VENCIDO" => "bad", "CRITICO" => "warn", _ => "info" };
+                            <span class="dt-chip dt-chip-@clsT" data-goto-tab="#det-maritimo"><i class="bi bi-arrow-left-right"></i> Transbordo @op.Transbordo</span>
+                        }
+                        @if (!string.IsNullOrWhiteSpace(op.EstadoLar))
+                        {
+                            <span class="dt-chip dt-chip-warn" data-goto-tab="#det-lar"><i class="bi bi-clock-history"></i> @op.EstadoLar</span>
+                        }
+                        @if (op.GateBloqueado)
+                        {
+                            <span class="dt-chip dt-chip-warn" data-goto-tab="#det-gate"><i class="bi bi-lock-fill"></i> Gate bloqueado</span>
+                        }
+                        @if (tarifaPend)
+                        {
+                            <button type="button" class="dt-chip dt-chip-bad" data-tarifa-detalle="@string.Join("|", pendientesTarifa)"><i class="bi bi-exclamation-octagon"></i> Tarifa pendiente</button>
+                        }
+                        @if (roleoCliente)
+                        {
+                            <span class="dt-chip dt-chip-warn" data-goto-tab="#det-maritimo"><i class="bi bi-person-exclamation"></i> Solicitud del cliente</span>
+                        }
+                    </div>
+                }
+            </div>
+        </div>
+
+        <div class="dt-hero-progress" id="dtDashBody">
+            <div class="dt-ring" data-pct="@pctGlobal">
+                <div class="dt-ring-in">
+                    <b>@pctGlobal%</b>
+                    <span>Avance</span>
+                </div>
+            </div>
+            <div class="dt-mods">
+                @foreach (var m in modulos)
+                {
+                    <button type="button" class="dt-mod" data-goto-tab="@m.Target">
+                        <span class="dt-mod-top">
+                            <span><i class="bi @m.Icon"></i> @m.Label</span>
+                            <b>@m.Pct%</b>
+                        </span>
+                        <span class="dt-mod-bar"><span class="@(m.Pct >= 100 ? "full" : "")" data-w="@m.Pct"></span></span>
+                    </button>
+                }
+            </div>
+        </div>
+    </div>
+
+    @if (Model.ReqMaritimo)
+    {
+        <div class="dt-route" id="dtDashRoute">
+            <div class="dt-port">
+                <span class="dt-port-lbl">POL · Origen</span>
+                <b title="@pol">@pol</b>
+                <span class="mono">ETD @(op.EtdPol?.ToString("dd MMM yyyy", es) ?? "por confirmar")</span>
+                @if (!string.IsNullOrWhiteSpace(terminal) && terminal != "-")
+                {
+                    <span class="dt-term">Terminal @terminal</span>
+                }
+            </div>
+            <div class="dt-track" aria-label="Avance del viaje @pctViaje%">
+                <span class="dt-track-dot start"></span>
+                <span class="dt-track-fill" data-w="@pctViaje"></span>
+                <span class="dt-track-ship" data-left="@pctViaje">@Html.Raw(shipSvg)</span>
+                <span class="dt-track-dot end"></span>
+                <span class="dt-track-lbl">@(op.Nave ?? "Nave por confirmar") · @pctViaje%</span>
+            </div>
+            <div class="dt-port end">
+                <span class="dt-port-lbl">POD · Destino</span>
+                <b title="@pod">@pod</b>
+                <span class="mono">ETA @(op.EtaPod?.ToString("dd MMM yyyy", es) ?? "por confirmar")</span>
+            </div>
+        </div>
+    }
+</section>
+
+<!-- =========================================================
+     INDICADORES
+     ========================================================= -->
+<section class="dt-strip" id="dtDashStrip">
+    @if (hayProximo)
+    {
+        string urg = Urgencia(proximo.Fecha!.Value, ahora);
+        <div class="dt-stat dt-stat-next is-@urg">
+            <span class="dt-stat-lbl"><i class="bi @proximo.Icon"></i> Próximo hito</span>
+            <b class="dt-stat-val" data-deadline="@proximo.Fecha.Value.ToString("yyyy-MM-ddTHH:mm:ss", CultureInfo.InvariantCulture)">@Relativo(proximo.Fecha.Value, ahora)</b>
+            <span class="dt-stat-sub">@proximo.Label · <span class="mono">@proximo.Fecha.Value.ToString("dd MMM, HH:mm", es)</span></span>
+        </div>
+    }
+    else
+    {
+        <div class="dt-stat dt-stat-next is-ok">
+            <span class="dt-stat-lbl"><i class="bi bi-calendar-check"></i> Próximo hito</span>
+            <b class="dt-stat-val">@(Model.OperacionCerrada ? "Cerrada" : "Sin fechas")</b>
+            <span class="dt-stat-sub">@(Model.OperacionCerrada ? "Ciclo logístico completo" : "No hay ventanas futuras registradas")</span>
+        </div>
+    }
+
+    <div class="dt-stat">
+        <span class="dt-stat-lbl"><i class="bi bi-boxes"></i> Contenedores</span>
+        <b class="dt-stat-val">@nCont</b>
+        <span class="dt-stat-sub mono">@(op.NumeroContenedor ?? "Principal por asignar")@(nCont > 1 ? $" +{nCont - 1}" : "")</span>
+    </div>
+
+    <button type="button" class="dt-stat dt-stat-btn" data-goto-tab="#det-extracostos">
+        <span class="dt-stat-lbl"><i class="bi bi-wallet2"></i> Extracostos</span>
+        <b class="dt-stat-val @(extras.Any() ? "is-bad" : "is-good")">@extras.Count</b>
+        <span class="dt-stat-sub">@(extras.Any() ? $"Último: {extras.First().TipoCosto}" : "Operación limpia")</span>
+    </button>
+
+    <button type="button" class="dt-stat dt-stat-btn" data-goto-tab="#det-maritimo">
+        <span class="dt-stat-lbl"><i class="bi bi-arrow-repeat"></i> Roleos / Cancelaciones</span>
+        <b class="dt-stat-val @(nRoleosPend > 0 ? "is-warn" : "")">@roleos.Count</b>
+        <span class="dt-stat-sub">@(nRoleosPend > 0 ? $"{nRoleosPend} por resolver" : "Sin pendientes")</span>
+    </button>
+</section>
+
+@if (hitos.Any())
+{
+    <section class="dt-timeline" id="dtDashTimeline">
+        <div class="dt-timeline-head">
+            <span class="dt-timeline-title"><i class="bi bi-calendar2-week"></i> Línea de Tiempo</span>
+            @if (ultima != null && ultima.Length >= 4)
+            {
+                <span class="dt-last" title="@ultima[3]"><i class="bi bi-activity"></i> Última actividad: <b>@ultima[1]</b> · @ultima[0] · @ultima[2]</span>
+            }
+        </div>
+        <div class="dt-tl">
+            @foreach (var h in hitos)
+            {
+                string st = !h.Fecha.HasValue ? "none"
+                          : h.Fecha.Value <= ahora ? "done"
+                          : (hayProximo && h.Label == proximo.Label ? "next" : "future");
+                <div class="dt-tl-item is-@st">
+                    <div class="dt-tl-dot"><i class="bi @(st == "done" ? "bi-check-lg" : h.Icon)"></i></div>
+                    <span class="dt-tl-lbl">@h.Label</span>
+                    <span class="dt-tl-date mono">@(h.Fecha?.ToString("dd MMM · HH:mm", es) ?? "Sin fecha")</span>
+                    @if (st == "next")
+                    {
+                        <span class="dt-tl-rel" data-deadline="@h.Fecha!.Value.ToString("yyyy-MM-ddTHH:mm:ss", CultureInfo.InvariantCulture)">@Relativo(h.Fecha.Value, ahora)</span>
+                    }
+                </div>
+            }
+        </div>
+    </section>
+}
+
+@* Traspaso Ops -> Finanzas (oct-2026) *@
+<div data-tarea-booking="@booking" class="d-none"></div>
+@if (tareaFinalizadaDt)
+{
+    <div class="dt-tarea dt-tarea--fin">
+        <div class="dt-tarea__ico"><i class="bi bi-check2-circle"></i></div>
+        <div class="dt-tarea__txt">
+            <b>Tarea finalizada · traspasada a Finanzas</b>
+            <span>Los cambios de costos y cobros están bloqueados. Para corregir algo (p. ej. una corrección de BL), reabre la operación.</span>
+            <div class="dt-tarea__meta">
+                Finalizada por @(op.UsuarioFinalizacionTarea ?? "-") el @(op.FechaFinalizacionTarea?.ToString("dd/MM/yyyy HH:mm"))
+                @if (op.FechaVistoFinanzas.HasValue && op.FechaVistoFinanzas >= op.FechaFinalizacionTarea)
+                {
+                    <text> · Vista por Finanzas (@op.UsuarioVistoFinanzas, @op.FechaVistoFinanzas.Value.ToString("dd/MM HH:mm"))</text>
+                }
+                else
+                {
+                    <text> · Finanzas aún no la abre</text>
+                }
+            </div>
+        </div>
+        <button type="button" class="dt-tarea__btn" onclick="abrirReabrirTarea(@op.Id, '@booking', event)"><i class="bi bi-arrow-counterclockwise me-1"></i> Reabrir operación</button>
+    </div>
+}
+else if (tareaReabiertaDt)
+{
+    <div class="dt-tarea dt-tarea--reab">
+        <div class="dt-tarea__ico"><i class="bi bi-arrow-counterclockwise"></i></div>
+        <div class="dt-tarea__txt">
+            <b>Operación reabierta · @op.MotivoReaperturaTarea</b>
+            <span>Finanzas la ve como REABIERTA. Cuando termines los cambios, vuelve a finalizar la tarea.</span>
+            @if (Model.RespaldoReapertura is { } respDt)
+            {
+                <span><a class="tf-respaldo-link" href="@respDt.Ruta" target="_blank" rel="noopener" title="Abrir el respaldo adjunto al reabrir"><i class="bi bi-paperclip"></i> @respDt.Nombre</a></span>
+            }
+            <div class="dt-tarea__meta">Reabierta por @(op.UsuarioReaperturaTarea ?? "-") el @(op.FechaReaperturaTarea?.ToString("dd/MM/yyyy HH:mm"))@(reqTareaDt.Cumple ? "" : " · Falta: " + reqTareaDt.Resumen)</div>
+        </div>
+        <button type="button" class="dt-tarea__btn dt-tarea__btn--ok" @(reqTareaDt.Cumple ? "" : "disabled") onclick="finalizarTarea(@op.Id, '@booking', event)"><i class="bi bi-flag-fill me-1"></i> Finalizar tarea</button>
+    </div>
+}
+else if (reqTareaDt.Cumple && !reqTareaDt.SinRequisitos)
+{
+    <div class="dt-tarea dt-tarea--lista">
+        <div class="dt-tarea__ico"><i class="bi bi-flag"></i></div>
+        <div class="dt-tarea__txt">
+            <b>Lista para finalizar la tarea</b>
+            <span>@string.Join(" · ", reqTareaDt.Cumplidos). Al finalizar, Finanzas recibe el booking como NUEVO.</span>
+        </div>
+        <button type="button" class="dt-tarea__btn dt-tarea__btn--ok" onclick="finalizarTarea(@op.Id, '@booking', event)"><i class="bi bi-flag-fill me-1"></i> Finalizar tarea</button>
+    </div>
+}
+
+@if (Model.OperacionCerrada)
+{
+    <div class="dt-closed">
+        <div class="dt-closed-ico"><i class="bi bi-check2-all"></i></div>
+        <div>
+            <b>Operación cerrada · Vacío devuelto</b>
+            <span>
+                El contenedor fue retirado y el ciclo logístico está completo.
+                @if (Model.FechaCierreMasReciente.HasValue)
+                {
+                    <text>Último retiro: <strong class="mono">@Model.FechaCierreMasReciente.Value.ToString("dd/MM/yyyy HH:mm")</strong>.</text>
+                }
+            </span>
+        </div>
+    </div>
+}
+
+@* Opciones para el editor "Datos del embarque" (operaciones-detalle.js) *@
+<template id="tplNavierasDet">
+    @if (ViewData["IdNaviera"] is Microsoft.AspNetCore.Mvc.Rendering.SelectList navierasDet)
+    {
+        foreach (var nav in navierasDet)
+        {
+            <option value="@nav.Value">@nav.Text</option>
+        }
+    }
+</template>
+<template id="tplCommoditiesDet">
+    @{ var comActualDet = AtilsonCargoSpa.Helpers.CommodityHelper.Normalizar(op.Commodity); }
+    @if (comActualDet != null && !AtilsonCargoSpa.Helpers.CommodityHelper.Lista.Contains(comActualDet))
+    {
+        <option value="@comActualDet">@comActualDet</option>
+    }
+    @foreach (var com in AtilsonCargoSpa.Helpers.CommodityHelper.Lista)
+    {
+        <option value="@com">@com</option>
+    }
+</template>
+<template id="tplPropietariosDet">
+    @foreach (var opc in AtilsonCargoSpa.Models.Operacione.OpcionesPropietarioContrato)
+    {
+        <option value="@opc.Valor">@opc.Texto</option>
+    }
+</template>

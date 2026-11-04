@@ -34,6 +34,7 @@ public partial class Cliente
 
     public bool SuscripcionCobranzaActiva { get; set; }
 
+    public bool EsClienteEspecial { get; set; }
     public virtual Ciudade? IdCiudadNavigation { get; set; }
 
     public virtual ICollection<Operacione> Operaciones { get; set; } = new List<Operacione>();
