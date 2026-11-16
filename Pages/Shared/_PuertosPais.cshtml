@@ -1,0 +1,10 @@
+@inject AtilsonCargoSpa.Models.AtilsonContext PuertosDb
+@*
+    País de cada puerto (por Id y por nombre) para la regla de ruta POL → POD de
+    wwwroot/js/ruta-paises.js, en las listas cuyas opciones no traen data-pais
+    (p. ej. las de Comercial, que guardan el nombre del puerto).
+*@
+@{
+    var mapaPaises = await AtilsonCargoSpa.Helpers.PuertosHelper.MapaPaisesAsync(PuertosDb);
+}
+<script>window.PuertosPais = { porId: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(mapaPaises.PorId)), porNombre: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(mapaPaises.PorNombre)) };</script>

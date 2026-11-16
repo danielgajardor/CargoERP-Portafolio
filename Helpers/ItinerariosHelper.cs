@@ -47,6 +47,64 @@ namespace AtilsonCargoSpa.Helpers
             return await q.OrderBy(i => i.Etd).ThenBy(i => i.Eta).Take(max).ToListAsync();
         }
 
+        // Salida del maestro que corresponde a la nave elegida en Operaciones (nov-2026). Primero
+        // el Id que mandó el formulario, si coincide con el texto "NAVE / VIAJE"; si no (Id vacío
+        // o desfasado), la única salida activa con esa nave y viaje de la misma naviera. Si no hay
+        // una sola, null: la nave queda como texto, como antes del maestro.
+        public static async Task<int?> ResolverSalidaAsync(AtilsonContext context, int? idPropuesto, string? nave, int? idNaviera)
+        {
+            if (string.IsNullOrWhiteSpace(nave)) return null;
+            string texto = nave.Trim();
+            if (idPropuesto != null)
+            {
+                var s = await context.ItinerariosNaves.AsNoTracking().FirstOrDefaultAsync(i => i.Id == idPropuesto.Value);
+                if (s != null && string.Equals(s.NaveViaje, texto, StringComparison.OrdinalIgnoreCase)) return s.Id;
+            }
+            int sep = texto.LastIndexOf(" / ", StringComparison.Ordinal);
+            if (sep <= 0) return null;
+            string naveParte = texto[..sep].Trim().ToUpper(), viajeParte = texto[(sep + 3)..].Trim().ToUpper();
+            var ids = await context.ItinerariosNaves.AsNoTracking()
+                .Where(i => i.Activo && i.Nave == naveParte && i.NumeroViaje == viajeParte && (idNaviera == null || i.IdNaviera == idNaviera))
+                .Select(i => i.Id).Take(2).ToListAsync();
+            return ids.Count == 1 ? ids[0] : null;
+        }
+
+        // Cuando la nave del booking cambia por otro camino que no es el select de Nave / Viaje
+        // (roleo, edición desde el Main Board, pantallas antiguas), el vínculo con la salida del
+        // maestro se vuelve a calcular: se conserva solo si sigue siendo la misma nave y viaje.
+        // Si no, la salida anterior registraría su zarpe en un booking que ya no va en ella.
+        public static async Task AlinearConNaveAsync(AtilsonContext context, Operacione op)
+        {
+            if (op.IdItinerario == null && string.IsNullOrWhiteSpace(op.Nave)) return;
+            int? salidaAnterior = op.IdItinerario;
+            DateTime? etdRealAnterior = op.EtdReal;
+            op.IdItinerario = await ResolverSalidaAsync(context, op.IdItinerario, op.Nave, op.IdNaviera > 0 ? op.IdNaviera : null);
+            await AjustarZarpeAlCambiarSalidaAsync(context, op, salidaAnterior, etdRealAnterior);
+        }
+
+        // Zarpe efectivo cuando el booking cambia de salida (roleo o corrección de la nave): el
+        // ETD Real que se había copiado del zarpe de la salida anterior se quita, porque el
+        // contenedor no fue en esa nave; y si la nueva salida ya zarpó, se copia su zarpe (la
+        // misma regla que al registrarlo en Itinerarios). Un ETD Real escrito a mano en la misma
+        // edición no se toca. Se compara por fecha: Marítimo guarda el ETD Real sin hora.
+        public static async Task AjustarZarpeAlCambiarSalidaAsync(AtilsonContext context, Operacione op, int? salidaAnterior, DateTime? etdRealAnterior)
+        {
+            if (op.IdItinerario == salidaAnterior) return;
+            if (op.EtdReal?.Date != etdRealAnterior?.Date) return;
+            if (op.EtdReal != null && salidaAnterior != null)
+            {
+                var zarpeAnterior = await context.ItinerariosNaves.AsNoTracking()
+                    .Where(i => i.Id == salidaAnterior.Value).Select(i => i.ZarpeEfectivo).FirstOrDefaultAsync();
+                if (zarpeAnterior != null && zarpeAnterior.Value.Date == op.EtdReal.Value.Date) op.EtdReal = null;
+            }
+            if (op.EtdReal == null && op.IdItinerario != null)
+            {
+                var zarpeNuevo = await context.ItinerariosNaves.AsNoTracking()
+                    .Where(i => i.Id == op.IdItinerario.Value).Select(i => i.ZarpeEfectivo).FirstOrDefaultAsync();
+                if (zarpeNuevo != null) op.EtdReal = zarpeNuevo;
+            }
+        }
+
         // Lunes de la semana de una fecha (semana Lun-Dom, como en Chile).
         public static DateOnly InicioSemana(DateOnly fecha)
         {

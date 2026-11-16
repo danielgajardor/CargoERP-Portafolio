@@ -127,11 +127,14 @@
             </button>
             <button type="button" class="dt-hbtn" data-copy="@booking" title="Copiar booking"><i class="bi bi-clipboard"></i><span>Copiar</span></button>
             <button type="button" class="dt-hbtn" id="btnDatosEmbarqueDet" title="Booking, N° instructivo, Naviera, Nave y Propietario de Contrato" onclick="editarEmbarqueDetalle(this)"
-                    data-id="@op.Id" data-booking="@op.NumeroBooking" data-instructivo="@op.NumeroInstructivo" data-naviera="@op.IdNaviera" data-nave="@op.Nave"
+                    data-id="@op.Id" data-booking="@op.NumeroBooking" data-instructivo="@op.NumeroInstructivo" data-naviera="@op.IdNaviera" data-nave="@op.Nave" data-id-itinerario="@op.IdItinerario" data-pol="@op.IdPuertoOrigen" data-pod="@op.IdPuertoDestino"
                     data-prop="@AtilsonCargoSpa.Models.Operacione.NormalizarPropietarioContrato(op.PropietarioContrato)" data-prop-otro="@op.PropietarioContratoOtro"
                     data-commodity="@(AtilsonCargoSpa.Helpers.CommodityHelper.Normalizar(op.Commodity))" data-cond-pago="@op.CondicionPago">
                 <i class="bi bi-pencil-square"></i><span>Datos del embarque</span>
             </button>
+            @* Enviar / reenviar la confirmación del booking con la vista previa editable del Main Board (nov-2026). *@
+            <a class="dt-hbtn" href="/Operaciones/Index?correoBooking=@op.Id" title="Previsualizar, editar y enviar la confirmación del booking al cliente"
+               style="text-decoration:none;"><i class="bi bi-envelope-paper"></i><span>@(op.CorreoClienteEnviado == true ? $"Booking enviado (V{op.VersionCorreo ?? 1})" : "Enviar Booking")</span></a>
             <button type="button" class="dt-hbtn" data-goto-tab="#det-historial"><i class="bi bi-clock-history"></i><span>Historial</span></button>
             @if (tareaFinalizadaDt)
             {

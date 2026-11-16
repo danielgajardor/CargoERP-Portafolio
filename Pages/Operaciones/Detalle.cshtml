@@ -9,6 +9,7 @@
 
 <link rel="stylesheet" href="~/css/operaciones-detalle.css" asp-append-version="true" />
 <link rel="stylesheet" href="~/css/detalle-premium.css" asp-append-version="true" />
+<link rel="stylesheet" href="~/css/documental-panel.css" asp-append-version="true" />
 <link rel="stylesheet" href="~/css/emision-bl.css" asp-append-version="true" />
 
 <div class="container-fluid py-4 dt-premium" style="max-width: 1500px;" data-op-id="@Model.Op.Id">
@@ -31,6 +32,8 @@
          data-numero-sello="@(Model.Op.NumeroSello ?? "")"
          data-aplica-sernapesca="@(Model.Op.OperacionesDocumentales.FirstOrDefault(x => x.IdUnidadTecnica == null)?.AplicaSernapesca == true ? "true" : "false")"
          data-puerto-origen="@(Model.Op.IdPuertoOrigenNavigation?.NombrePuerto ?? "")"
+         data-puerto-destino="@(Model.Op.IdPuertoDestinoNavigation?.NombrePuerto ?? "")"
+         data-correo-agencia="@(Model.Op.OperacionesDocumentales.FirstOrDefault(x => x.IdUnidadTecnica == null)?.IdAgenciaAduanaNavigation?.CorreoContacto ?? "")"
          data-nave="@(Model.Op.Nave ?? "")"
          data-naviera="@(Model.Op.IdNavieraNavigation?.NombreNaviera ?? "")"
          data-tipo-contenedor="@(Model.Op.TipoContenedor ?? "")"
@@ -307,7 +310,17 @@
                             </div>
                             <div class="col-md-3">
                                 <label class="mod-label">Nave / Viaje</label>
-                                <input type="text" name="Nave" class="form-control inline-field text-uppercase" value="@op.Nave" readonly />
+                                @* nov-2026: se elige del maestro de itinerarios, filtrada por naviera, POL y POD. *@
+                                <select name="Nave" class="form-select inline-field select2-enable js-nave-itinerario" id="detNave-@op.Id" disabled
+                                        data-id-itinerario="detIdItinerario-@op.Id">
+                                    <option value="">-- Seleccionar nave / viaje --</option>
+                                    @if (!string.IsNullOrWhiteSpace(op.Nave))
+                                    {
+                                        <option value="@op.Nave" selected>@op.Nave</option>
+                                    }
+                                </select>
+                                <input type="hidden" name="IdItinerario" id="detIdItinerario-@op.Id" value="@op.IdItinerario" />
+                                <div class="naves-hint edit-only-inline" id="detNaveHint-@op.Id" aria-live="polite"></div>
                             </div>
                             <div class="col-md-3">
                                 <label class="mod-label">Condición Tarifa</label>
@@ -387,13 +400,13 @@
                             <div class="op-route-edit-stop">
                                 <div class="op-route-edit-eyebrow"><i class="bi bi-box-arrow-up-right"></i> Origen (POL)</div>
                                 <label class="mod-label">Puerto</label>
-                                <select name="IdPuertoOrigen" class="form-select inline-field select2-enable" disabled>
+                                <select name="IdPuertoOrigen" class="form-select inline-field select2-enable" data-ruta="pol" disabled>
                                     <option value="">-- Seleccionar --</option>
                                     @if (ViewData["PuertosList"] != null)
                                     {
                                         foreach (var pto in ((IEnumerable<AtilsonCargoSpa.Models.Puerto>)ViewData["PuertosList"]).GroupBy(p => p.NombrePuerto).Select(g => g.First()))
                                         {
-                                            <option value="@pto.Id" selected="@(op.IdPuertoOrigen == pto.Id ? "selected" : null)">@pto.NombrePuerto</option>
+                                            <option value="@pto.Id" data-pais="@pto.Pais" selected="@(op.IdPuertoOrigen == pto.Id ? "selected" : null)">@pto.NombrePuerto</option>
                                         }
                                     }
                                 </select>
@@ -420,13 +433,13 @@
                             <div class="op-route-edit-stop">
                                 <div class="op-route-edit-eyebrow"><i class="bi bi-box-arrow-in-down-left"></i> Destino (POD)</div>
                                 <label class="mod-label">Puerto</label>
-                                <select name="IdPuertoDestino" class="form-select inline-field select2-enable" disabled>
+                                <select name="IdPuertoDestino" class="form-select inline-field select2-enable" data-ruta="pod" disabled>
                                     <option value="">-- Seleccionar --</option>
                                     @if (ViewData["PuertosList"] != null)
                                     {
                                         foreach (var pto in ((IEnumerable<AtilsonCargoSpa.Models.Puerto>)ViewData["PuertosList"]).GroupBy(p => p.NombrePuerto).Select(g => g.First()))
                                         {
-                                            <option value="@pto.Id" selected="@(op.IdPuertoDestino == pto.Id ? "selected" : null)">@pto.NombrePuerto</option>
+                                            <option value="@pto.Id" data-pais="@pto.Pais" selected="@(op.IdPuertoDestino == pto.Id ? "selected" : null)">@pto.NombrePuerto</option>
                                         }
                                     }
                                 </select>
@@ -451,12 +464,12 @@
                                 <input type="datetime-local" name="FechaStacking" class="form-control inline-field" value="@(op.FechaStacking?.ToString("yyyy-MM-ddTHH:mm"))" readonly />
                             </div>
                             <div class="op-window-item op-window-item--danger">
-                                <label class="op-window-eyebrow"><i class="bi bi-door-closed"></i> Stacking OUT (Cierre)</label>
-                                <input type="datetime-local" name="CutOffMatriz" class="form-control inline-field fw-bold" value="@(op.CutOffMatriz?.ToString("yyyy-MM-ddTHH:mm"))" readonly />
+                                <label class="op-window-eyebrow"><i class="bi bi-door-closed"></i> Stacking OUT (Cierre@(AtilsonCargoSpa.Services.FechasNave.LarEnTramite(op) ? " · LAR" : ""))</label>
+                                <input type="datetime-local" name="LateArrival" class="form-control inline-field fw-bold" value="@(op.LateArrival?.ToString("yyyy-MM-ddTHH:mm"))" readonly />
                             </div>
-                            <div class="op-window-item op-window-item--warning">
-                                <label class="op-window-eyebrow"><i class="bi bi-clock-history"></i> Late Arrival Inicio</label>
-                                <input type="datetime-local" name="LateArrival" class="form-control inline-field" value="@(op.LateArrival?.ToString("yyyy-MM-ddTHH:mm"))" readonly />
+                            <div class="op-window-item">
+                                <label class="op-window-eyebrow"><i class="bi bi-file-earmark-text"></i> Corte documental (Matriz)</label>
+                                <input type="datetime-local" name="CutOffMatriz" class="form-control inline-field" value="@(op.CutOffMatriz?.ToString("yyyy-MM-ddTHH:mm"))" readonly />
                             </div>
                             <div class="op-window-item op-window-item--warning">
                                 <label class="op-window-eyebrow"><i class="bi bi-clock-fill"></i> Late Arrival Término</label>
@@ -470,7 +483,7 @@
                         <div class="form-subcard mt-3">
                             <div class="d-flex justify-content-between align-items-center mb-2">
                                 <span class="mod-label m-0"><i class="bi bi-exclamation-diamond me-1"></i> Roleo / Cancelación / No Show</span>
-                                <button type="button" class="btn btn-sm btn-outline-dark fw-bold py-1 px-3" style="font-size:10px;" onclick="registrarRoleoCancelacionDetalle(@op.Id, '@op.TipoTarifaMaritima', '@(op.IdNavieraNavigation?.NombreNaviera)', @(op.IdNavieraNavigation?.DiasPenalidadRoleo ?? 7), '@(op.IdNavieraNavigation?.PenalidadRoleoSiempreAplica == true ? "true" : "false")', @(1 + (op.Unidadestecnicas?.Count ?? 0)), '@(op.EtdPol?.ToString("yyyy-MM-ddTHH:mm"))', '@(op.IdNavieraNavigation?.MontoPenalidadRoleoUsd?.ToString(System.Globalization.CultureInfo.InvariantCulture))')">
+                                <button type="button" class="btn btn-sm btn-outline-dark fw-bold py-1 px-3" style="font-size:10px;" onclick="registrarRoleoCancelacionDetalle(@op.Id, '@op.TipoTarifaMaritima', '@(op.IdNavieraNavigation?.NombreNaviera)', @(op.IdNavieraNavigation?.DiasPenalidadRoleo ?? 7), '@(op.IdNavieraNavigation?.PenalidadRoleoSiempreAplica == true ? "true" : "false")', @(1 + (op.Unidadestecnicas?.Count ?? 0)), '@(op.EtdPol?.ToString("yyyy-MM-ddTHH:mm"))', this.dataset.penalidades)" data-penalidades="@(System.Text.Json.JsonSerializer.Serialize(new { roleo = Model.TarifasPenalidad.GetValueOrDefault(AtilsonCargoSpa.Helpers.RecargoNavieraHelper.GrupoRoleo), cancelacion = Model.TarifasPenalidad.GetValueOrDefault(AtilsonCargoSpa.Helpers.RecargoNavieraHelper.GrupoCancelacion), noShow = Model.TarifasPenalidad.GetValueOrDefault(AtilsonCargoSpa.Helpers.RecargoNavieraHelper.GrupoNoShow), naviera = op.IdNavieraNavigation?.MontoPenalidadRoleoUsd }))">
                                     <i class="bi bi-plus-circle me-1"></i> Registrar Nuevo
                                 </button>
                             </div>
@@ -484,7 +497,7 @@
                                 <div class="d-flex flex-column gap-2">
                                     @foreach (var r in historialRoleos)
                                     {
-                                        string nombreRoleoTipo = r.Tipo == "ROLEO" ? "Roleo" : "Cancelación / No Show";
+                                        string nombreRoleoTipo = AtilsonCargoSpa.Helpers.RecargoNavieraHelper.NombrePenalidad(r.Tipo);
                                         string colorPen = r.PenalidadConfirmada == "SI" ? "#dc2626" : (r.PenalidadConfirmada == "NO" ? "#16a34a" : "#d97706");
                                         string txtPen = r.PenalidadConfirmada switch { "SI" => "CON PENALIDAD", "NO" => "SIN PENALIDAD", _ => "PENALIDAD POR DETERMINAR" };
                                         <div class="p-2 rounded border bg-white">
@@ -777,7 +790,6 @@
                             };
                             var clCorr = System.Globalization.CultureInfo.GetCultureInfo("es-CL");
                             string monedaSugCorr = sugCorrBlDet?.Moneda ?? "USD";
-                            string montoSugCorr = sugCorrBlDet != null ? sugCorrBlDet.Monto.ToString(monedaSugCorr == "CLP" ? "0" : "0.##", System.Globalization.CultureInfo.InvariantCulture) : "";
                         }
                         <form method="post" asp-page-handler="RegistrarCorreccionBl" id="form-correccion-bl-@op.Id" class="mt-3" enctype="multipart/form-data">
                             <input type="hidden" name="IdOperacion" value="@op.Id" />
@@ -885,15 +897,15 @@
                                         <textarea name="CorreccionBlComentario" id="obsCorrBl-@op.Id" class="form-control erp-input" rows="2" maxlength="400" placeholder="Detalle de la corrección..."></textarea>
                                     </div>
                                     <div class="col-md-6">
-                                        <label class="mod-label">Costo naviera (neto) <span class="embl-hint ms-1">+ IVA en Finanzas</span></label>
-                                        <div class="input-group input-group-sm">
-                                            <input type="number" name="MontoCorreccionBl" id="montoCorrBl-@op.Id" class="form-control erp-input" min="0" step="0.01" value="@montoSugCorr" placeholder="Por valorizar" />
-                                            <select name="MonedaCorreccionBl" id="monedaCorrBl-@op.Id" class="form-select erp-input" style="max-width:90px;">
-                                                <option value="USD" selected="@(monedaSugCorr != "CLP")">USD</option>
-                                                <option value="CLP" selected="@(monedaSugCorr == "CLP")">CLP</option>
-                                            </select>
-                                        </div>
-                                        <span class="embl-hint d-block mt-1">@(sugCorrBlDet != null ? sugCorrBlDet.NotaCatalogo : "Sin tarifa de corrección en el catálogo de la naviera: si lo dejas vacío queda por valorizar en Finanzas.")</span>
+                                        @{
+                                            // nov-2026: el costo sale siempre de la tarifa de Comercial (no se escribe aquí).
+                                            string textoCostoCorr = sugCorrBlDet == null
+                                                ? "Por valorizar en Finanzas"
+                                                : (monedaSugCorr == "CLP" ? $"$ {sugCorrBlDet.Monto.ToString("N0", System.Globalization.CultureInfo.GetCultureInfo("es-CL"))} CLP + IVA" : $"{monedaSugCorr} {sugCorrBlDet.Monto.ToString("N2", System.Globalization.CultureInfo.GetCultureInfo("es-CL"))} (en Finanzas: CLP + IVA)");
+                                        }
+                                        <label class="mod-label">Costo naviera</label>
+                                        <div id="costoCorrBl-@op.Id" class="erp-input d-flex align-items-center fw-bold" style="min-height:31px; background:var(--surface-sunken, #f8fafc);" data-costo-texto="@textoCostoCorr">@textoCostoCorr</div>
+                                        <span class="embl-hint d-block mt-1">@(sugCorrBlDet != null ? $"Tarifa de Comercial — {sugCorrBlDet.NotaCatalogo}" : "La naviera no tiene tarifa de corrección de BL en Comercial › Marítimo › Otros: queda por valorizar en Finanzas.")</span>
                                     </div>
                                     <div class="col-md-6">
                                         <label class="mod-label">Evidencia / Referencia</label>
@@ -1171,14 +1183,8 @@
         }
     }
 
-    var vmEmisionDoc = new AtilsonCargoSpa.Models.EmisionBlCamposVm
-    {
-        IdPrefijo = $"embl-doc-{opDoc.Id}",
-        Tipo = AtilsonCargoSpa.Helpers.EmisionBlHelper.TipoActual(opDoc.TipoEmisionBl),
-        Otro = opDoc.TipoEmisionBlOtro,
-        Lugar = opDoc.UbicacionOriginalesDestino,
-        TipoObligatorio = true
-    };
+    // Emisión B/L: la única fuente editable es Marítimo > Gestión de Matriz.
+    string resumenEmisionDoc = AtilsonCargoSpa.Helpers.EmisionBlHelper.Resumen(opDoc);
 
     <div class="tab-pane fade" id="det-documental" role="tabpanel">
                 @{
@@ -1226,20 +1232,12 @@
                         <span class="text-muted">· se define en @(Model.ReqMaritimo ? "Marítimo" : "Terrestre")</span>
                     </div>
                 }
-                <form method="post" asp-page-handler="GuardarEmisionBl" id="form-emision-bl-doc-@opDoc.Id" class="mb-3">
-                    @Html.AntiForgeryToken()
-                    <input type="hidden" name="IdOperacion" value="@opDoc.Id" />
-                    <div class="form-subcard">
-                        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
-                            <div class="form-subcard-title m-0"><i class="bi bi-file-earmark-medical"></i> Emisión del B/L</div>
-                            <span class="embl-sync-note"><i class="bi bi-arrow-left-right"></i> Mismo dato que Gestión de Matriz (Marítimo)</span>
-                        </div>
-                        <div class="d-flex flex-wrap align-items-end justify-content-between gap-3">
-                            <partial name="_EmisionBlCampos" model="vmEmisionDoc" />
-                            <button type="button" class="btn btn-dark btn-sm fw-bold px-3" onclick="guardarEmisionBlDocDet(this)"><i class="bi bi-save me-1"></i> Guardar emisión</button>
-                        </div>
-                    </div>
-                </form>
+                <div class="d-flex align-items-center gap-2 mb-3 px-3 py-2 rounded" style="background:#f8fafc; border:1px solid #e2e8f0; font-size:11px;">
+                    <i class="bi bi-file-earmark-text text-muted"></i>
+                    <span class="text-muted">Emisión del B/L:</span>
+                    <strong>@(string.IsNullOrWhiteSpace(resumenEmisionDoc) ? "sin definir" : resumenEmisionDoc)</strong>
+                    <span class="text-muted">· se define en Marítimo, Gestión de Matriz y B/L</span>
+                </div>
                 @await Html.PartialAsync("_PanelDocumental", new AtilsonCargoSpa.Models.DocumentalPanelVm
                 {
                     Op = opDoc,
@@ -1799,6 +1797,7 @@
     <script src="~/js/operaciones-common.js" asp-append-version="true"></script>
     <script src="~/js/extracosto-modal.js" asp-append-version="true"></script>
     <script src="~/js/emision-bl.js" asp-append-version="true"></script>
+    <script src="~/js/naves-itinerario.js" asp-append-version="true"></script>
     <script src="~/js/operaciones-detalle.js" asp-append-version="true"></script>
     <script src="~/js/detalle-premium.js" asp-append-version="true"></script>
     @if (TempData["ErrorMsg"] is string errorMsgDet && !string.IsNullOrWhiteSpace(errorMsgDet))

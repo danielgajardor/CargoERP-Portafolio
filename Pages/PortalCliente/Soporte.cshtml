@@ -35,16 +35,38 @@
 
     <div class="so-app @((a != null || Model.MostrarNueva) && !soloLista ? "con-hilo" : "")">
         <aside class="so-lista" aria-label="Mis consultas">
+            <nav class="so-lista-top" aria-label="Filtrar mis consultas">
+                <div class="so-tabs">
+                    <a asp-route-estado="TODOS" class="@(Model.Estado == "TODOS" ? "activo" : "")" aria-current="@(Model.Estado == "TODOS" ? "page" : null)" title="Todas las consultas">
+                        Todas <span class="n">@Model.TotalConsultas</span>
+                    </a>
+                    <a asp-route-estado="@TicketSoporte.EstadoAbierto" class="@(Model.Estado == TicketSoporte.EstadoAbierto ? "activo" : "")" aria-current="@(Model.Estado == TicketSoporte.EstadoAbierto ? "page" : null)" title="Consultas esperando respuesta del equipo">
+                        Pendientes <span class="n">@Model.Contar(TicketSoporte.EstadoAbierto)</span>
+                    </a>
+                </div>
+                <div class="so-tabs">
+                    <a asp-route-estado="@TicketSoporte.EstadoRespondido" class="@(Model.Estado == TicketSoporte.EstadoRespondido ? "activo" : "")" aria-current="@(Model.Estado == TicketSoporte.EstadoRespondido ? "page" : null)" title="Consultas respondidas por el equipo">
+                        Respondidas <span class="n">@Model.Contar(TicketSoporte.EstadoRespondido)</span>
+                    </a>
+                    <a asp-route-estado="@TicketSoporte.EstadoCerrado" class="@(Model.Estado == TicketSoporte.EstadoCerrado ? "activo" : "")" aria-current="@(Model.Estado == TicketSoporte.EstadoCerrado ? "page" : null)" title="Consultas resueltas">
+                        Resueltas <span class="n">@Model.Contar(TicketSoporte.EstadoCerrado)</span>
+                    </a>
+                </div>
+                <div class="so-lista-resumen">Mostrando @Model.Tickets.Count de @Model.TotalFiltradas consultas</div>
+            </nav>
             <div class="so-items">
                 @if (!Model.Tickets.Any())
                 {
-                    <div class="so-vacio-lista">Aún no nos has escrito. Tus consultas aparecerán aquí.</div>
+                    <div class="so-vacio-lista">
+                        @if (Model.TotalConsultas == 0) { <text>Aún no nos has escrito. Tus consultas aparecerán aquí.</text> }
+                        else { <text>No tienes consultas en este estado. <a asp-route-estado="TODOS">Ver todas</a></text> }
+                    </div>
                 }
                 @foreach (var t in Model.Tickets)
                 {
                     var e = Estado(t.Estado);
                     Model.Ultimos.TryGetValue(t.Id, out var ult);
-                    <a class="so-item @(a?.Id == t.Id && !Model.MostrarNueva ? "activo" : "")" asp-route-t="@t.Id">
+                    <a class="so-item @(a?.Id == t.Id && !Model.MostrarNueva ? "activo" : "")" asp-route-t="@t.Id" asp-route-estado="@Model.Estado" asp-route-pagina="@Model.Pagina">
                         <div class="so-item-l1"><b>#@t.Id · @t.Tipo</b><time>@Cuando(t.UltimoMensaje ?? t.FechaCreacion)</time></div>
                         <div class="so-item-l2"><span class="so-chip @e.Clase">@e.Texto</span>@(t.Referencia != null ? "  " + t.Referencia : "")</div>
                         @if (ult != null)
@@ -55,6 +77,20 @@
                     </a>
                 }
             </div>
+            @if (Model.Paginas > 1)
+            {
+                <nav class="so-paginacion" aria-label="Páginas de consultas">
+                    @if (Model.Pagina > 1)
+                    {
+                        <a class="so-pag-boton" asp-route-estado="@Model.Estado" asp-route-pagina="@(Model.Pagina - 1)" title="Página anterior"><i class="bi bi-chevron-left"></i></a>
+                    }
+                    <span>Página @Model.Pagina de @Model.Paginas</span>
+                    @if (Model.Pagina < Model.Paginas)
+                    {
+                        <a class="so-pag-boton" asp-route-estado="@Model.Estado" asp-route-pagina="@(Model.Pagina + 1)" title="Página siguiente"><i class="bi bi-chevron-right"></i></a>
+                    }
+                </nav>
+            }
         </aside>
 
         @if (Model.MostrarNueva)
@@ -128,6 +164,15 @@
                         <button type="submit" class="so-btn" @(Model.Disponible ? "" : "disabled")><i class="bi bi-send"></i> Enviar</button>
                     </form>
                     <p class="ayuda">Enter envía · Shift + Enter para un salto de línea</p>
+                </div>
+            </section>
+        }
+        else
+        {
+            <section class="so-hilo so-sin-seleccion" aria-label="Selecciona una consulta">
+                <div><i class="bi bi-chat-dots"></i>
+                    <h2>Selecciona una conversación</h2>
+                    <p>Usa los filtros para encontrar tus consultas pendientes, respondidas o resueltas.</p>
                 </div>
             </section>
         }

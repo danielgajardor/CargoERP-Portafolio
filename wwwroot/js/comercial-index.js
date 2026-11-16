@@ -1,3 +1,303 @@
+// ==================== MONTOS A LA CHILENA (nov-2026) ====================
+// Los campos de monto aceptan "450.000", "1.200.000", "1.200,75" o "2850.50" (antes eran
+// <input type=number>: "1.200.000" no dejaba guardar y "380.000" quedaba como 380).
+// Misma regla que el servidor (Helpers/MontoHelper.cs).
+function leerMontoCl(txt) {
+    var t = String(txt == null ? '' : txt).trim().replace(/[\s $]/g, '');
+    if (!t) return NaN;
+    var tieneComa = t.indexOf(',') >= 0, tienePunto = t.indexOf('.') >= 0;
+    if (tieneComa && tienePunto) {
+        t = t.lastIndexOf(',') > t.lastIndexOf('.') ? t.replace(/\./g, '').replace(',', '.') : t.replace(/,/g, '');
+    } else if (tieneComa) {
+        t = t.split(',').length > 2 ? t.replace(/,/g, '') : t.replace(',', '.');
+    } else if (/^-?[1-9]\d{0,2}(\.\d{3})+$/.test(t)) {
+        t = t.replace(/\./g, '');
+    }
+    return /^-?(\d+\.?\d*|\.\d+)$/.test(t) ? parseFloat(t) : NaN;
+}
+window.leerMontoCl = leerMontoCl;
+
+var RE_CAMPO_MONTO = /(Valor|Precio|Tarifa|Monto|Rebate|Costo|Honorarios|VentaDoc|Plug|Profit|ControlSello|BlFee|FalsoFlete|Interplanta|Porteo)/i;
+var RE_CAMPO_NO_MONTO = /(Horas|Dias|Días)/i;
+
+function prepararInputMonto(el) {
+    var valor = el.value;
+    el.type = 'text';
+    el.setAttribute('inputmode', 'decimal');
+    el.setAttribute('autocomplete', 'off');
+    el.setAttribute('pattern', '[0-9 .,$\\-]+');
+    if (!el.title) el.title = 'Monto: 450.000 · 1.200,75 · 2850.50';
+    el.removeAttribute('step');
+    el.classList.add('input-monto-cl');
+    el.value = valor;
+}
+
+function prepararMontos(raiz) {
+    (raiz || document).querySelectorAll('input[type="number"]').forEach(function (el) {
+        var clave = (el.name || '') + ' ' + (el.id || '');
+        if (RE_CAMPO_MONTO.test(clave) && !RE_CAMPO_NO_MONTO.test(clave)) prepararInputMonto(el);
+    });
+}
+document.addEventListener('DOMContentLoaded', function () { prepararMontos(document); });
+
+// Al salir del campo se muestra el monto como quedará guardado (formato chileno).
+document.addEventListener('focusout', function (e) {
+    var el = e.target;
+    if (!el || !el.classList || !el.classList.contains('input-monto-cl')) return;
+    var v = leerMontoCl(el.value);
+    if (el.value.trim() === '') { el.setCustomValidity(''); return; }
+    if (isNaN(v)) { el.setCustomValidity('Monto no válido. Ejemplos: 450.000 · 1.200,75 · 2850.50'); el.reportValidity(); return; }
+    el.setCustomValidity('');
+    if (RE_CAMPO_NO_MONTO.test(el.name || '')) return; // horas / días: se dejan tal cual
+    var dec = Math.round(v) === v ? 0 : 2;
+    el.value = v.toLocaleString('es-CL', { minimumFractionDigits: dec, maximumFractionDigits: 2 });
+});
+document.addEventListener('input', function (e) {
+    if (e.target && e.target.classList && e.target.classList.contains('input-monto-cl')) e.target.setCustomValidity('');
+});
+
+
+// Edición de tarifas directamente debajo de la fila seleccionada.
+// Un único editor para proveedores/clientes, todas las familias y tarifas especiales.
+let ultimoBotonTarifa = null;
+document.addEventListener('click', function (event) {
+    const btn = event.target.closest('button, a');
+    if (btn) ultimoBotonTarifa = btn;
+}, true);
+
+const etiquetasTarifaFila = {
+    TarifaUsd: 'Flete USD', RebateUsd: 'Rebate USD', ValorNeto: 'Valor neto',
+    PrecioPactado: 'Precio pactado', TarifaBase: 'Tarifa base',
+    TarifaConexionReefer: 'Conexión reefer', TarifaPublicaUsd: 'Tarifa pública USD',
+    TarifaNetaUsd: 'Tarifa neta USD', Concepto: 'Concepto',
+    Moneda: 'Moneda', AplicaIva: 'IVA', FechaInicioVigencia: 'Vigente desde',
+    FechaFinVigencia: 'Vigente hasta', FechaVigenciaDesde: 'Vigente desde',
+    FechaVigenciaHasta: 'Vigente hasta', TipoContenedor: 'Tipo de contenedor',
+    Equipamiento: 'Equipamiento', Unidad: 'Tipo de cobro',
+    EsServicioGratuito: 'Servicio gratuito', Pol: 'Origen (POL)', Pod: 'Destino (POD)',
+    NombreTramo: 'Tramo', Comentarios: 'Observaciones', Codigo: 'Código naviera',
+    TipoMovimiento: 'Tipo de movimiento', CondicionAplicacion: 'Condición de aplicación',
+    EventoReferencia: 'Evento de referencia', HorasDesdeEvento: 'Horas desde evento',
+    HorasHastaEvento: 'Horas hasta evento', GrupoConcepto: 'Grupo de concepto',
+    DiasLibres: 'Días libres', DiasLibresOrigen: 'Días libres origen',
+    DiasLibresDestino: 'Días libres destino', HorasLibresPlanta: 'Horas libres planta',
+    HorasLibresPuerto: 'Horas libres puerto', Clasificacion: 'Clasificación',
+    TipoCarga: 'Tipo de carga', EstadoContenedor: 'Estado del contenedor',
+    TipoEmision: 'Tipo de emisión BL', TipoEmisionOtro: 'Otra emisión BL',
+    LateArrivalSinCosto: 'Late Arrival sin costo',
+    ExtraLateSinCosto: 'Extra Late sin costo',
+    CorreccionBlSinCosto: 'Corrección BL sin costo',
+    Commodity: 'Commodity', Plug: 'Plug'
+};
+function cerrarEditorTarifaFila() {
+    document.querySelectorAll('.tarifa-inline-editor').forEach(el => el.remove());
+    document.querySelectorAll('.tarifa-editando').forEach(el => el.classList.remove('tarifa-editando'));
+}
+async function abrirEditorTarifaFila(tipo, id) {
+    cerrarEditorTarifaFila();
+    const boton = ultimoBotonTarifa;
+    const fila = boton?.closest('tr');
+    const insertarDespues = fila || boton?.closest('.faf-card, .tab-pane, .table-container');
+    if (!insertarDespues) {
+        alert('No se encontró la fila para editar. Recarga esta pantalla y vuelve a intentarlo.');
+        return;
+    }
+    const url = '?handler=FilaTarifa&tipoEntidad=' + encodeURIComponent(tipo) + '&idRegistro=' + encodeURIComponent(id);
+    try {
+        const respuesta = await fetch(url, { credentials: 'same-origin', cache: 'no-store' });
+        if (!respuesta.ok) throw new Error('No se pudieron leer los datos de esta tarifa.');
+        const datos = await respuesta.json();
+
+        const contenedor = document.createElement('div');
+        contenedor.className = 'tarifa-editor-contenido';
+        const titulo = document.createElement('div');
+        titulo.className = 'tarifa-editor-titulo';
+        titulo.textContent = 'Editar tarifa en la fila · ' + tipo;
+        contenedor.append(titulo);
+
+        const form = document.createElement('form');
+        form.method = 'post';
+        form.action = '?handler=GuardarFilaTarifa';
+        form.className = 'tarifa-editor-form';
+        const campoOculto = (nombre, valor) => {
+            const el = document.createElement('input');
+            el.type = 'hidden'; el.name = nombre; el.value = String(valor ?? '');
+            form.append(el);
+        };
+        campoOculto('tipoEntidad', tipo);
+        campoOculto('idRegistro', id);
+        const token = document.querySelector('input[name="__RequestVerificationToken"]')?.value;
+        if (!token) throw new Error('No se pudo validar tu sesión. Actualiza la pantalla.');
+        campoOculto('__RequestVerificationToken', token);
+        const grid = document.createElement('div');
+        grid.className = 'tarifa-editor-grid';
+        (datos.campos || []).forEach(c => {
+            const grupo = document.createElement('label');
+            grupo.className = 'tarifa-editor-campo';
+            const texto = document.createElement('span');
+            texto.textContent = etiquetasTarifaFila[c.nombre] || c.nombre;
+            grupo.append(texto);
+            let control;
+            if (c.nombre === 'Moneda' || c.tipo === 'bool' || c.nombre === 'TipoEmision' ||
+                c.nombre === 'CorreccionBlSinCosto') {
+                control = document.createElement('select');
+                const opciones = c.nombre === 'Moneda' ? [['CLP','CLP'],['USD','USD']]
+                    : c.nombre === 'TipoEmision' ? [
+                        ['ORIGINALES','Originales'],['DESTINO','Destino'],['SEA_WAYBILL','Seawaybill'],
+                        ['TELEX_RELEASE','Telex Release'],['EXPRESS_RELEASE','Express Release'],['OTRO','Otro']]
+                    : c.nombre === 'CorreccionBlSinCosto' ? [
+                        ['','Con costo'],['ANTES_ZARPE','Antes del zarpe'],['24H','Hasta 24h'],['48H','Hasta 48h']]
+                    : [['true','Sí'],['false','No']];
+                opciones.forEach(([valor,etiqueta]) => {
+                    const opt = document.createElement('option');
+                    opt.value = valor; opt.textContent = etiqueta;
+                    control.append(opt);
+                });
+                control.value = c.valor || (c.tipo === 'bool' ? 'false' : 'CLP');
+            } else if (c.nombre === 'Comentarios' || c.nombre === 'CondicionAplicacion') {
+                control = document.createElement('textarea');
+                control.rows = 2;
+                control.value = c.valor || '';
+            } else {
+                control = document.createElement('input');
+                control.type = c.tipo === 'fecha' ? 'date' : 'text';
+                if (c.tipo === 'numero') prepararInputMonto(control);
+                control.value = c.valor ?? '';
+            }
+            control.name = 'f_' + c.nombre;
+            control.className = 'form-control form-control-sm';
+            control.autocomplete = 'off';
+            grupo.append(control);
+            grid.append(grupo);
+        });
+        form.append(grid);
+        const motivo = document.createElement('label');
+        motivo.className = 'tarifa-editor-motivo';
+        const textoMotivo = document.createElement('span');
+        textoMotivo.textContent = 'Motivo del cambio (obligatorio · historial de auditoría)';
+        const comentario = document.createElement('input');
+        comentario.name = 'motivo'; comentario.type = 'text';
+        comentario.className = 'form-control form-control-sm';
+        comentario.placeholder = 'Describe por qué se modifica esta tarifa';
+        comentario.required = true; comentario.minLength = 4;
+        motivo.append(textoMotivo, comentario);
+        form.append(motivo);
+        const acciones = document.createElement('div');
+        acciones.className = 'tarifa-editor-acciones';
+        const cancelar = document.createElement('button');
+        cancelar.type = 'button'; cancelar.className = 'btn btn-outline-secondary btn-sm';
+        cancelar.textContent = 'Cancelar';
+        cancelar.addEventListener('click', cerrarEditorTarifaFila);
+        const guardar = document.createElement('button');
+        guardar.type = 'submit'; guardar.className = 'btn btn-dark btn-sm fw-bold';
+        guardar.textContent = 'Guardar cambios';
+        acciones.append(cancelar, guardar);
+        form.append(acciones);
+        form.addEventListener('submit', async function (e) {
+            e.preventDefault();
+            guardar.disabled = true;
+            try {
+                const res = await fetch(form.action, {
+                    method: 'POST', body: new FormData(form), credentials: 'same-origin'
+                });
+                if (!res.ok) throw new Error((await res.text()).slice(0, 400) || 'No se pudo guardar.');
+                window.location.reload();
+            } catch (ex) {
+                guardar.disabled = false;
+                alert('Error al actualizar la tarifa: ' + ex.message);
+            }
+        });
+        contenedor.append(form);
+        if (fila) {
+            const editor = document.createElement('tr');
+            editor.className = 'tarifa-inline-editor';
+            const celda = document.createElement('td');
+            celda.colSpan = Math.max(1, fila.children.length);
+            celda.append(contenedor);
+            editor.append(celda);
+            fila.insertAdjacentElement('afterend', editor);
+            fila.classList.add('tarifa-editando');
+        } else {
+            const editor = document.createElement('div');
+            editor.className = 'tarifa-inline-editor';
+            editor.append(contenedor);
+            insertarDespues.prepend(editor);
+        }
+        contenedor.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        comentario.focus({ preventScroll: true });
+    } catch (error) {
+        alert(error.message || 'No se pudo abrir el editor.');
+    }
+}
+
+// Botones con la i (incluidos Collect y Emisión BL): resumen al pasar el mouse.
+document.addEventListener('DOMContentLoaded', function () {
+    document.querySelectorAll('button[onclick*="abrirModalHistorial"]').forEach(boton => {
+        boton.addEventListener('mouseenter', async () => {
+            if (boton.dataset.historialCargado) return;
+            const match = boton.getAttribute('onclick')?.match(/abrirModalHistorial\('([^']+)',\s*(\d+)\)/);
+            if (!match) return;
+            try {
+                const res = await fetch('?handler=Historial&tipoEntidad=' + encodeURIComponent(match[1])
+                    + '&idRegistro=' + match[2], { credentials: 'same-origin' });
+                if (!res.ok) return;
+                const registros = await res.json();
+                const ultimo = registros[0];
+                const resumen = ultimo ? 'Último: ' + ultimo.campo + ' · '
+                    + (ultimo.valorAnterior ?? '—') + ' → ' + (ultimo.valorNuevo ?? '—')
+                    + ' · ' + ultimo.usuario + ' · ' + ultimo.fecha
+                    : 'Sin cambios. Haz clic para ver el historial completo.';
+                boton.title = resumen;
+                boton.dataset.historialCargado = '1';
+                if (window.bootstrap?.Tooltip) {
+                    const tt = bootstrap.Tooltip.getOrCreateInstance(boton, { container: 'body', trigger: 'hover focus' });
+                    if (tt.setContent) tt.setContent({ '.tooltip-inner': resumen });
+                    tt.show();
+                }
+            } catch (_) { }
+        });
+    });
+});
+
+// La i muestra un resumen al pasar el cursor; al hacer clic abre TODO el historial.
+document.addEventListener('DOMContentLoaded', function () {
+    document.querySelectorAll('.info-mod-icon').forEach(icono => {
+        const fila = icono.closest('tr');
+        const botonHistorial = fila?.querySelector('button[onclick*="abrirModalHistorial"]');
+        if (!botonHistorial) return;
+        const match = botonHistorial.getAttribute('onclick')?.match(/abrirModalHistorial\('([^']+)',\s*(\d+)\)/);
+        if (!match) return;
+        const tipo = match[1], id = Number(match[2]);
+        icono.classList.remove('d-none');
+        icono.style.cursor = 'pointer';
+        icono.setAttribute('role', 'button');
+        icono.setAttribute('tabindex', '0');
+        icono.addEventListener('click', () => abrirModalHistorial(tipo, id));
+        icono.addEventListener('keydown', e => {
+            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); abrirModalHistorial(tipo, id); }
+        });
+        icono.addEventListener('mouseenter', async () => {
+            if (icono.dataset.historialCargado) return;
+            try {
+                const res = await fetch('?handler=Historial&tipoEntidad=' + encodeURIComponent(tipo)
+                    + '&idRegistro=' + id);
+                if (!res.ok) return;
+                const historial = await res.json();
+                const ultimo = historial[0];
+                const titulo = ultimo ? 'Último cambio: ' + ultimo.campo + ' · '
+                    + (ultimo.valorAnterior ?? '—') + ' → ' + (ultimo.valorNuevo ?? '—')
+                    + ' · ' + ultimo.usuario + ' · ' + ultimo.fecha
+                    : 'Sin cambios registrados. Clic para ver historial.';
+                icono.dataset.historialCargado = '1';
+                icono.setAttribute('title', titulo);
+                icono.setAttribute('data-bs-original-title', titulo);
+                const tooltip = window.bootstrap?.Tooltip?.getInstance(icono);
+                if (tooltip?.setContent) tooltip.setContent({ '.tooltip-inner': titulo });
+            } catch (_) {}
+        });
+    });
+});
+
         $(document).ready(function () {
             $('.select2-enable, .filtro-select').select2({ width: '100%' });
         });
@@ -23,6 +323,7 @@
 }
 
                 function abrirModalEditarTerrestre(id, valor, fecha) {
+            return abrirEditorTarifaFila('Terrestre', id);
             document.getElementById('editTerId').value = id;
             document.getElementById('editTerValor').value = valor;
             document.getElementById('editTerFecha').value = fecha;
@@ -30,22 +331,27 @@
             new bootstrap.Modal(document.getElementById('modalEditarTerrestre')).show();
         }
 
-        function abrirModalEditarMaritimo(id, valor, fecha, rebate) {
+        function abrirModalEditarMaritimo(id, valor, fecha, rebate, fechaFin) {
+            return abrirEditorTarifaFila('Maritimo', id);
             document.getElementById('editMarId').value = id;
             document.getElementById('editMarValor').value = valor;
             document.getElementById('editMarRebate').value = rebate || '';
-            document.getElementById('editMarFecha').value = fecha;
+            document.getElementById('editMarFecha').value = fecha || '';
+            const fechaFinInput = document.getElementById('editMarFechaFin');
+            if (fechaFinInput) fechaFinInput.value = fechaFin || '';
             document.getElementById('editMarComentario').value = '';
             new bootstrap.Modal(document.getElementById('modalEditarMaritimo')).show();
         }
 
         function abrirModalEditarRebateCliente(id, rebate) {
+            return abrirEditorTarifaFila('Cliente', id);
             document.getElementById('editRebCliId').value = id;
             document.getElementById('editRebCliValor').value = rebate || '';
             new bootstrap.Modal(document.getElementById('modalEditarRebateCliente')).show();
         }
 
                                 function abrirModalUniversal(id, valor, fecha, tipo, comentariosTarifa, esGratuito) {
+            return abrirEditorTarifaFila(tipo, id);
             document.getElementById('uniId').value = id;
             document.getElementById('uniValor').value = valor;
             document.getElementById('uniFecha').value = fecha;
@@ -410,11 +716,11 @@ function actualizarTotalIva(form) {
     var monto = form.querySelector('.faf-money input');
     var moneda = form.querySelector('.faf-money select');
     var iva = form.querySelector('[data-iva-select]');
-    var v = monto ? parseFloat(String(monto.value).replace(',', '.')) : NaN;
+    var v = monto ? leerMontoCl(monto.value) : NaN;
     if (isNaN(v)) { destino.textContent = '—'; return; }
     // Componentes que suman al total (Gate CMA: Control Sello + BL Fee).
     form.querySelectorAll('[data-suma-total]').forEach(function (el) {
-        var extra = parseFloat(String(el.value).replace(',', '.'));
+        var extra = leerMontoCl(el.value);
         if (!isNaN(extra)) v += extra;
     });
     var conIva = !iva || iva.value === 'true';
@@ -436,13 +742,13 @@ function calcularNetoDesdeIva(input) {
     var monto = form.querySelector('.faf-money input');
     var moneda = form.querySelector('.faf-money select');
     if (!monto) return;
-    var t = parseFloat(String(input.value).replace(',', '.'));
+    var t = leerMontoCl(input.value);
     if (isNaN(t)) { monto.value = ''; return; }
     var iva = form.querySelector('[data-iva-select]');
     var conIva = !iva || iva.value === 'true';
     var neto = conIva ? t / 1.19 : t;
     form.querySelectorAll('[data-suma-total]').forEach(function (el) {
-        var extra = parseFloat(String(el.value).replace(',', '.'));
+        var extra = leerMontoCl(el.value);
         if (!isNaN(extra)) neto -= extra;
     });
     var dec = (moneda && moneda.value === 'CLP') ? 0 : 2;
@@ -460,8 +766,8 @@ document.addEventListener('change', function (e) {
 
 // Venta documental al cliente: SAG o SERNAPESCA y al menos Honorarios o DUS.
 function validarVentaDocumental(form) {
-    var hon = parseFloat(String((form.querySelector('[name="VentaDocHonorarios"]') || {}).value || '').replace(',', '.'));
-    var dus = parseFloat(String((form.querySelector('[name="VentaDocDus"]') || {}).value || '').replace(',', '.'));
+    var hon = leerMontoCl((form.querySelector('[name="VentaDocHonorarios"]') || {}).value || '');
+    var dus = leerMontoCl((form.querySelector('[name="VentaDocDus"]') || {}).value || '');
     if (!(hon > 0) && !(dus > 0)) {
         var msg = 'Ingresa el valor de Honorarios (+ IVA) y/o del DUS (sin IVA).';
         if (window.Swal) Swal.fire({ icon: 'warning', title: 'Venta documental', text: msg, confirmButtonColor: '#0f172a' }); else alert(msg);
@@ -476,7 +782,7 @@ document.addEventListener('input', function (e) {
     var form = e.target.closest('form');
     var hint = form && form.querySelector('[data-doc-honorarios-iva]');
     if (!hint) return;
-    var v = parseFloat(String(e.target.value).replace(',', '.'));
+    var v = leerMontoCl(e.target.value);
     var mon = (form.querySelector('[data-doc-moneda]') || {}).value || 'CLP';
     var dec = mon === 'CLP' ? 0 : 2;
     hint.textContent = isNaN(v) || v <= 0 ? 'por contenedor'
@@ -547,8 +853,8 @@ document.addEventListener('input', function (e) {
     if (!e.target || !e.target.closest) return;
     if (!e.target.hasAttribute('data-collect-publica') && !e.target.hasAttribute('data-collect-neta')) return;
     var form = e.target.closest('form');
-    var pub = parseFloat(String((form.querySelector('[data-collect-publica]') || {}).value || '').replace(',', '.'));
-    var neta = parseFloat(String((form.querySelector('[data-collect-neta]') || {}).value || '').replace(',', '.'));
+    var pub = leerMontoCl((form.querySelector('[data-collect-publica]') || {}).value || '');
+    var neta = leerMontoCl((form.querySelector('[data-collect-neta]') || {}).value || '');
     var out = form.querySelector('[data-collect-rebate]');
     if (!out) return;
     if (isNaN(pub) || isNaN(neta)) { out.textContent = '—'; out.style.color = ''; return; }
@@ -558,8 +864,8 @@ document.addEventListener('input', function (e) {
 });
 
 function validarTarifaCollect(form) {
-    var pub = parseFloat(String((form.querySelector('[data-collect-publica]') || {}).value || '').replace(',', '.'));
-    var neta = parseFloat(String((form.querySelector('[data-collect-neta]') || {}).value || '').replace(',', '.'));
+    var pub = leerMontoCl((form.querySelector('[data-collect-publica]') || {}).value || '');
+    var neta = leerMontoCl((form.querySelector('[data-collect-neta]') || {}).value || '');
     var msg = null;
     if (!(pub > 0)) msg = 'Ingresa la Tarifa Pública.';
     else if (isNaN(neta) || neta < 0) msg = 'Ingresa la Tarifa Neta.';

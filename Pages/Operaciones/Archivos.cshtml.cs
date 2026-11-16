@@ -25,16 +25,31 @@ namespace AtilsonCargoSpa.Pages.Operaciones
         [BindProperty]
         public string TipoDocumento { get; set; } = string.Empty;
 
+        // nov-2026: si en la base aún no se corrió Sql/2026-11_archivos_operaciones.sql se
+        // muestra este aviso en vez de un error 500.
+        public string? AvisoTabla { get; set; }
+        private const string MensajeSinTabla = "Falta crear la tabla del Gestor Documental: ejecuta Sql/2026-11_archivos_operaciones.sql en la base (una sola vez).";
+        private static bool FaltaTabla(Exception ex) =>
+            ex is Microsoft.Data.SqlClient.SqlException sql && sql.Number == 208
+            || ex.InnerException is Microsoft.Data.SqlClient.SqlException { Number: 208 };
+
         public async Task<IActionResult> OnGetAsync(int id)
         {
             OperacionActual = await _context.Operaciones.FirstOrDefaultAsync(o => o.Id == id);
             if (OperacionActual == null) return NotFound();
 
             // Usamos Set<ArchivoOperacion>() para evitar el error de nombre del Contexto
-            ListaArchivos = await _context.Set<ArchivoOperacion>()
-                .Where(a => a.IdOperacion == id)
-                .OrderByDescending(a => a.FechaSubida)
-                .ToListAsync();
+            try
+            {
+                ListaArchivos = await _context.Set<ArchivoOperacion>()
+                    .Where(a => a.IdOperacion == id)
+                    .OrderByDescending(a => a.FechaSubida)
+                    .ToListAsync();
+            }
+            catch (Exception ex) when (FaltaTabla(ex))
+            {
+                AvisoTabla = MensajeSinTabla;
+            }
 
             return Page();
         }
@@ -71,7 +86,15 @@ namespace AtilsonCargoSpa.Pages.Operaciones
 
             // Usamos Set<ArchivoOperacion>() para agregar el documento
             _context.Set<ArchivoOperacion>().Add(nuevoDoc);
-            await _context.SaveChangesAsync();
+            try
+            {
+                await _context.SaveChangesAsync();
+            }
+            catch (Exception ex) when (FaltaTabla(ex))
+            {
+                if (System.IO.File.Exists(rutaFisica)) System.IO.File.Delete(rutaFisica);
+                TempData["ErrorMsg"] = MensajeSinTabla;
+            }
 
             return RedirectToPage(new { id = id });
         }

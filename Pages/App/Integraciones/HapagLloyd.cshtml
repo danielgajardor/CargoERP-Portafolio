@@ -1,0 +1,189 @@
+@page
+@model AtilsonCargoSpa.Pages.App.Integraciones.HapagLloydModel
+@{
+    ViewData["Title"] = "Itinerarios marítimos | ATILSON";
+}
+<div class="container-fluid px-3 px-lg-4 py-4" style="max-width:1600px">
+    <div class="d-flex flex-wrap align-items-start justify-content-between gap-2 mb-4">
+        <div>
+            <h1 class="h3 mb-1">Itinerarios marítimos</h1>
+            <p class="text-muted mb-0">Consulta de rutas y conexiones internacionales · ATILSON</p>
+        </div>
+        <span class="badge bg-light text-dark border px-3 py-2">Hapag-Lloyd · Commercial Schedule v3</span>
+    </div>
+
+    <div class="card mb-4 shadow-sm">
+        <div class="card-body">
+            <form method="get" class="row g-3 align-items-end">
+                <div class="col-sm-6 col-lg-3">
+                    <label class="form-label fw-semibold" for="origen">Puerto de origen</label>
+                    <input id="origen" asp-for="Origen" list="puertos" class="form-control text-uppercase"
+                           placeholder="Código, ej. CLVAP" maxlength="5" required aria-describedby="portshelp" />
+                </div>
+                <div class="col-sm-6 col-lg-3">
+                    <label class="form-label fw-semibold" for="destino">Puerto de destino</label>
+                    <input id="destino" asp-for="Destino" list="puertos" class="form-control text-uppercase"
+                           placeholder="Código, ej. DEHAM" maxlength="5" required />
+                </div>
+                <datalist id="puertos">
+                    <option value="CLVAP">Valparaíso, Chile</option>
+                    <option value="CLSAI">San Antonio, Chile</option>
+                    <option value="DEHAM">Hamburgo, Alemania</option>
+                    <option value="NLRTM">Róterdam, Países Bajos</option>
+                    <option value="CNSHA">Shanghái, China</option>
+                    <option value="SGSIN">Singapur</option>
+                    <option value="PECLL">Callao, Perú</option>
+                    <option value="USNYC">Nueva York, Estados Unidos</option>
+                </datalist>
+                <div class="col-sm-6 col-lg-3">
+                    <label class="form-label fw-semibold" for="desde">Salida desde</label>
+                    <input id="desde" name="Desde" type="date" value="@(Model.Desde?.ToString("yyyy-MM-dd"))" class="form-control" />
+                </div>
+                <div class="col-sm-6 col-lg-3">
+                    <label class="form-label fw-semibold" for="hasta">Salida hasta</label>
+                    <input id="hasta" name="Hasta" type="date" value="@(Model.Hasta?.ToString("yyyy-MM-dd"))" class="form-control" />
+                </div>
+                <div class="col-sm-6 col-lg-3">
+                    <label class="form-label fw-semibold" for="transbordos">Máximo de transbordos</label>
+                    <select id="transbordos" asp-for="MaxTransbordos" class="form-select">
+                        <option value="">Todos</option>
+                        <option value="0">Solo rutas directas</option>
+                        <option value="1">Hasta 1 transbordo</option>
+                        <option value="2">Hasta 2 transbordos</option>
+                        <option value="3">Hasta 3 transbordos</option>
+                    </select>
+                </div>
+                <div class="col-sm-6 col-lg-3">
+                    <label class="form-label fw-semibold" for="servOrigen">Servicio en origen</label>
+                    <select id="servOrigen" asp-for="ServicioOrigen" class="form-select">
+                        <option value="">Cualquiera</option>
+                        <option value="CY">CY · Terminal / patio</option>
+                        <option value="SD">SD · Puerta del cliente</option>
+                        <option value="CFS">CFS · Estación de carga</option>
+                    </select>
+                </div>
+                <div class="col-sm-6 col-lg-3">
+                    <label class="form-label fw-semibold" for="servDestino">Servicio en destino</label>
+                    <select id="servDestino" asp-for="ServicioDestino" class="form-select">
+                        <option value="">Cualquiera</option>
+                        <option value="CY">CY · Terminal / patio</option>
+                        <option value="SD">SD · Puerta del cliente</option>
+                        <option value="CFS">CFS · Estación de carga</option>
+                    </select>
+                </div>
+                <div class="col-sm-6 col-lg-3">
+                    <label class="form-label fw-semibold" for="orden">Ordenar resultados</label>
+                    <select id="orden" asp-for="Orden" class="form-select">
+                        <option value="salida">Próxima salida</option>
+                        <option value="llegada">Próxima llegada</option>
+                        <option value="transito">Menor duración</option>
+                        <option value="transbordos">Menos transbordos</option>
+                    </select>
+                </div>
+                <div class="col-12 d-flex flex-wrap justify-content-between align-items-center gap-2">
+                    <small class="text-muted" id="portshelp">Puedes ingresar cualquier UN/LOCODE válido de 5 caracteres, aunque no aparezca entre las sugerencias.</small>
+                    <div class="d-flex gap-2">
+                        <a class="btn btn-outline-secondary" href="/App/Integraciones/HapagLloyd">Limpiar</a>
+                        <button type="submit" class="btn btn-primary px-4">Buscar itinerarios</button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    @if (Model.Resultado is not null)
+    {
+        <div class="alert @(Model.Resultado.Success ? "alert-success" : "alert-warning") mb-3" role="status">
+            @Model.Resultado.Message
+            @if (Model.Resultado.FromCache) { <span class="ms-2">(datos en caché)</span> }
+        </div>
+        @if (Model.Resultado.Success)
+        {
+            <div class="d-flex flex-wrap align-items-center justify-content-between mb-3 gap-2">
+                <h2 class="h5 mb-0">Itinerarios encontrados: @Model.Itinerarios.Count</h2>
+                <small class="text-muted">Horarios locales con diferencia UTC. Fechas estimadas sujetas a cambios.</small>
+            </div>
+            @if (Model.Itinerarios.Count == 0)
+            {
+                <div class="alert alert-info">La naviera no informó rutas para estos criterios. Prueba otras fechas o permite transbordos.</div>
+            }
+            else
+            {
+                <div class="table-responsive border rounded bg-white">
+                    <table class="table table-hover align-middle mb-0" style="font-size:.91rem">
+                        <thead class="table-light">
+                            <tr>
+                                <th scope="col">#</th>
+                                <th scope="col">Origen</th>
+                                <th scope="col">Destino</th>
+                                <th scope="col">Salida</th>
+                                <th scope="col">Llegada</th>
+                                <th scope="col">Tránsito</th>
+                                <th scope="col">Transbordos</th>
+                                <th scope="col">Buques</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                        @for (var i = 0; i < Model.Itinerarios.Count; i++)
+                        {
+                            var route = Model.Itinerarios[i];
+                            <tr>
+                                <td class="text-muted">@(i + 1)</td>
+                                <td>@route.Origin</td>
+                                <td>@route.Destination</td>
+                                <td class="text-nowrap">@(route.Departure?.ToString("dd/MM/yyyy HH:mm zzz") ?? "No informada")</td>
+                                <td class="text-nowrap">@(route.Arrival?.ToString("dd/MM/yyyy HH:mm zzz") ?? "No informada")</td>
+                                <td class="text-nowrap fw-semibold">@(string.IsNullOrWhiteSpace(route.TransitTime) ? "No informado" : route.TransitTime)</td>
+                                <td><span class="badge bg-light text-dark border">@route.Transhipments</span></td>
+                                <td>@(string.IsNullOrWhiteSpace(route.VesselNames) ? "No informado" : route.VesselNames)</td>
+                            </tr>
+                            <tr>
+                                <td colspan="8" class="py-2 bg-light">
+                                    <details>
+                                        <summary class="text-primary fw-semibold" style="cursor:pointer">Detalle de ruta @(i + 1) · @route.Legs.Count tramo(s) @if (route.SolutionNumber.HasValue) { <span class="text-muted fw-normal">(Solución @route.SolutionNumber)</span> }</summary>
+                                        @if (route.Legs.Count == 0)
+                                        {
+                                            <p class="small text-muted mt-2 mb-0">La naviera no informó los tramos de esta ruta.</p>
+                                        }
+                                        else
+                                        {
+                                            <div class="table-responsive mt-3">
+                                                <table class="table table-sm table-bordered mb-0 bg-white">
+                                                    <thead class="table-light">
+                                                        <tr><th>Tramo</th><th>Medio</th><th>Desde</th><th>Hasta</th><th>Salida</th><th>Llegada</th><th>Buque</th></tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        @foreach (var leg in route.Legs.OrderBy(x => x.Sequence))
+                                                        {
+                                                            <tr>
+                                                                <td>@leg.Sequence</td>
+                                                                <td>@(leg.Mode == "VESSEL" ? "Marítimo" : leg.Mode)</td>
+                                                                <td>@leg.Origin</td><td>@leg.Destination</td>
+                                                                <td class="text-nowrap">@(leg.Departure?.ToString("dd/MM/yyyy HH:mm zzz") ?? "—")</td>
+                                                                <td class="text-nowrap">@(leg.Arrival?.ToString("dd/MM/yyyy HH:mm zzz") ?? "—")</td>
+                                                                <td>@(string.IsNullOrWhiteSpace(leg.VesselName) ? "—" : leg.VesselName)</td>
+                                                            </tr>
+                                                        }
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        }
+                                    </details>
+                                </td>
+                            </tr>
+                        }
+                        </tbody>
+                    </table>
+                </div>
+                <p class="small text-muted mt-2">Los tiempos de tránsito son los informados por Hapag-Lloyd o, cuando se indique, una estimación calculada. La información no confirma disponibilidad de espacio ni constituye una reserva.</p>
+            }
+            @if (Model.JsonResultado is not null)
+            {
+                <details class="mt-4">
+                    <summary class="text-muted" style="cursor:pointer">Respuesta técnica JSON · diagnóstico</summary>
+                    <pre class="p-3 border rounded bg-light mt-2" style="max-height:420px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere">@Model.JsonResultado</pre>
+                </details>
+            }
+        }
+    }
+</div>

@@ -44,6 +44,7 @@ namespace AtilsonCargoSpa.Services
     public class ConsolidadoOperacionDto
     {
         public string NumeroBooking { get; set; } = "";
+        public bool EsHistorica { get; set; }
         public DateTime? Fecha { get; set; }
         public decimal IngresoUsd { get; set; }
         public decimal IngresoClp { get; set; }

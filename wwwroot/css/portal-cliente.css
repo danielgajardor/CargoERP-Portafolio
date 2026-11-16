@@ -2164,3 +2164,38 @@
 .pc-arte-ruta text { fill: #e6e1f7; font: 700 12px 'JetBrains Mono', ui-monospace, monospace; letter-spacing: .06em; }
 .pc-soporte-link { font-size: 13px; font-weight: 700; color: var(--pc-brand); text-decoration: none; }
 .pc-soporte-link:hover { text-decoration: underline; }
+
+/* ---------- 15-nov-2026: fechas de la nave y contenedores en el detalle del embarque ---------- */
+.pc-dgrid--2 { grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); }
+.pc-nota-avisos { font-size: 10.5px; font-weight: 700; color: #6d2d9e; background: #f5f0fd; border-radius: 999px; padding: 3px 9px; white-space: nowrap; }
+.pc-fechas { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 18px; }
+.pc-fecha { display: flex; flex-direction: column; gap: 3px; padding: 10px 12px; border: 1px dashed var(--pc-line); border-radius: 12px; }
+.pc-fecha-val { font-size: 13px; font-weight: 700; color: var(--pc-ink); text-transform: capitalize; }
+.pc-fecha-val i.bi-arrow-right { color: #a19eb3; font-size: 11px; margin: 0 2px; }
+.pc-fecha-val.is-pend { color: #a19eb3; font-weight: 600; text-transform: none; }
+.pc-fecha-val.is-ok { color: #059669; }
+.pc-conts { list-style: none; margin: 0; padding: 0; }
+.pc-cont-fila { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-bottom: 1px dashed var(--pc-line); }
+.pc-cont-fila:last-child { border-bottom: 0; }
+.pc-cont-num { font-size: 13px; font-weight: 700; color: var(--pc-ink); min-width: 120px; }
+.pc-cont-tipo { font-size: 11.5px; color: #8a83a0; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (max-width: 900px) {
+    .pc-dgrid--2 { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 575.98px) {
+    .pc-fechas { grid-template-columns: minmax(0, 1fr); }
+    .pc-cont-fila { flex-wrap: wrap; }
+}
+
+/* ---------- 15-nov-2026: Novedades (avisos) en Inicio ---------- */
+.pc-novedades { margin-bottom: 26px; }
+.pc-novedades-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.pc-novedad { display: flex; gap: 12px; align-items: flex-start; padding: 13px 15px; background: #fff; border: 1px solid var(--pc-line); border-radius: 14px; text-decoration: none; color: inherit; transition: border-color .15s, box-shadow .15s; }
+.pc-novedad:hover { border-color: #c4b5fd; box-shadow: 0 6px 18px rgba(44, 27, 77, .08); }
+.pc-novedad.is-nueva { background: #fbf9fe; box-shadow: inset 3px 0 0 #7c3aed; }
+.pc-novedad-txt { flex: 1; min-width: 0; }
+.pc-novedad-txt b { display: block; font-size: 13.5px; color: var(--pc-ink); line-height: 1.35; }
+.pc-novedad-txt span { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; font-size: 12.5px; color: #6b6880; line-height: 1.45; margin-top: 2px; white-space: pre-line; }
+.pc-novedad-hace { font-size: 11px; color: #a19eb3; white-space: nowrap; }
+@media (max-width: 767.98px) { .pc-novedades-list { grid-template-columns: minmax(0, 1fr); } }
+.pc-dcard-title .pc-nota-avisos i { width: auto; height: auto; display: inline; background: none; font-size: 10.5px; border-radius: 0; }

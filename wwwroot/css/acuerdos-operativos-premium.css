@@ -14,8 +14,7 @@
    verían afectadas sin haber sido revisadas. Acotando todo a .ao-premium,
    esas vistas no cambian en absoluto.
    ========================================================================= */
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600&display=swap');
-
+/* Fuentes: se cargan una sola vez en _Layout (nov-2026). */
 /* ---------- 0. Tokens ---------- */
 .ao-premium {
     --ao-brand: #6d2d9e;
@@ -41,11 +40,11 @@
     --border-soft: #ece8f3;
     --bg-light: #f8f7fc;
 
-    font-family: 'Plus Jakarta Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+    font-family: var(--font-sans);
     padding-bottom: 48px;
 }
 .ao-premium .font-monospace {
-    font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Consolas, monospace !important;
+    font-family: var(--font-mono) !important;
 }
 
 body:has(.ao-premium) {
@@ -147,3 +146,12 @@ body:has(.ao-premium) {
 @media (prefers-reduced-motion: reduce) {
     .ao-premium .icon-chevron, .ao-premium .btn { transition: none !important; }
 }
+
+/* ---------- Cobros por contenedor y moneda del acuerdo (nov-2026) ---------- */
+.badge-contenedor-acu {
+    display: inline-block; margin-left: 6px; padding: 1px 7px; border-radius: 999px;
+    font-size: 9px; font-weight: 800; letter-spacing: 0; text-transform: none; white-space: nowrap;
+    background: #eef2ff; color: #4338ca; border: 1px solid #c7d2fe; vertical-align: 1px;
+}
+.tx-moneda { flex: 0 0 auto; width: auto; padding-right: 1.6rem; cursor: pointer; font-size: 11px; }
+.tx-moneda.is-modified { box-shadow: inset 0 0 0 2px #f59e0b; }

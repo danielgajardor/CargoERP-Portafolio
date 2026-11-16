@@ -31,7 +31,8 @@
                         <div class="mx-campos">
                             <div class="mx-campo c8">
                                 <label asp-for="Form.Nombre">Nombre<span class="req">*</span></label>
-                                <input asp-for="Form.Nombre" class="mx-input" maxlength="100" required autocomplete="off" />
+                                <input asp-for="Form.Nombre" class="mx-input" maxlength="100" required autocomplete="off" readonly="@(!Model.EsNuevo)" title="@(Model.EsNuevo ? null : "El nombre no se puede cambiar: si es otra empresa, inactiva este registro y crea uno nuevo.")" />
+                                @if (!Model.EsNuevo) { <small class="mx-ayuda d-block mt-1"><i class="bi bi-lock"></i> El nombre no se puede cambiar. Si es otra empresa, inactiva este registro y crea uno nuevo.</small> }
                                 <span asp-validation-for="Form.Nombre" class="mx-error-campo"></span>
                             </div>
                             <div class="mx-campo c4">

@@ -140,7 +140,7 @@
 }
 .cm-evento:hover { background: #faf9fd; border-color: #cfc7ea; color: inherit; }
 .cm-tipo { font-weight: 700; font-size: 12.5px; white-space: nowrap; }
-.cm-bkg { font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Consolas, monospace; font-weight: 700; color: var(--cm-indigo); font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cm-bkg { font-family: var(--font-mono); font-weight: 700; color: var(--cm-indigo); font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .cm-cli { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .cm-ruta { color: var(--cm-gris); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .cm-hora { font-weight: 700; color: var(--cm-tinta); font-variant-numeric: tabular-nums; }

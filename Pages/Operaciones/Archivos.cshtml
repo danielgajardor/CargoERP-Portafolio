@@ -13,6 +13,12 @@
         <a asp-page="./Index" class="btn btn-sm btn-light border fw-bold px-3">VOLVER</a>
     </div>
 
+    @{ var avisoArchivos = Model.AvisoTabla ?? TempData["ErrorMsg"] as string; }
+    @if (!string.IsNullOrEmpty(avisoArchivos))
+    {
+        <div class="alert alert-warning small" role="alert"><i class="bi bi-exclamation-triangle me-1"></i> @avisoArchivos</div>
+    }
+
     <div class="card shadow-sm border-0 mb-4">
         <div class="card-body p-4">
             <form method="post" enctype="multipart/form-data">

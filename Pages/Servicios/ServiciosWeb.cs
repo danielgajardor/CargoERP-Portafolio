@@ -289,7 +289,7 @@ namespace AtilsonCargoSpa.Pages.Servicios
                 },
                 new[]
                 {
-                    new PasoServicio("Registra tu empresa", "Completa el formulario con los datos de tu empresa."),
+                    new PasoServicio("Registra tu empresa", "Ingresa tu nombre, teléfono y email. Los demás datos se pueden completar de forma opcional."),
                     new PasoServicio("Validamos tu cuenta", "Nuestro equipo revisa los datos y activa tu acceso."),
                     new PasoServicio("Ingresa al portal", "Entra con tu correo y contraseña y sigue tus embarques."),
                 },

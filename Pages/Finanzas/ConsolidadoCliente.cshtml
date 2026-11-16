@@ -4,49 +4,105 @@
     ViewData["Title"] = "Consolidado por Cliente";
 }
 
-<div class="container-fluid px-4 py-4">
-    <partial name="/Pages/Finanzas/_FinanzasNav.cshtml" model='"ConsolidadoCliente"' />
-    <div class="d-flex justify-content-between align-items-center mb-4">
-        <div>
-            <h1 style="font-size: 24px; font-weight: 900; color: #0f172a; margin: 0;">CONSOLIDADO POR CLIENTE</h1>
-            <p class="text-muted small m-0 fw-medium mt-1">Resumen de ingresos y egresos a través de varias operaciones, en un rango de fechas.</p>
+<style>
+    .con-historico > td { background:#f8fafc !important; color:#64748b; border-color:#e2e8f0 !important; }
+    .con-hist-chip { display:inline-flex;align-items:center;gap:4px;margin-left:6px;padding:2px 6px;border-radius:999px;background:#e5e7eb;color:#4b5563;border:1px solid #d1d5db;font-size:8px;font-weight:850;text-transform:uppercase;vertical-align:middle; }
+    .con-filter { display:grid; grid-template-columns:minmax(220px,1.25fr) minmax(180px,1fr) minmax(145px,.8fr) minmax(145px,.8fr) minmax(150px,.8fr) minmax(150px,.8fr) auto; gap:9px; align-items:end; }
+    .con-filter label { display:block; margin:0 0 4px 2px; font-size:8.5px; font-weight:850; letter-spacing:.05em; text-transform:uppercase; color:#64748b; }
+    .con-filter .form-control,.con-filter .form-select { height:34px; min-height:34px; font-size:10.5px; font-weight:650; background:#f8fafc; border-color:#dbe3ec; }
+    .con-filter-actions { display:flex; gap:6px; }
+    .con-filter-actions .btn { height:34px; font-size:10px; font-weight:800; }
+    @@media(max-width:1400px){.con-filter{grid-template-columns:repeat(3,minmax(0,1fr))}.con-filter-actions{grid-column:span 3;justify-content:flex-end}}
+    @@media(max-width:760px){.con-filter{grid-template-columns:1fr}.con-filter-actions{grid-column:auto}}
+</style>
+
+<link rel="stylesheet" href="~/css/finanzas-modulo.css" asp-append-version="true" />
+<div class="container-fluid px-4 py-4 fin-modulo">
+    <div class="page-header">
+        <div class="page-header__title-row">
+            <div class="page-header__icon"><i class="bi bi-person-lines-fill"></i></div>
+            <div>
+                <h1>Consolidado por Cliente</h1>
+                <p class="page-header__subtitle">Resumen de ingresos y egresos a través de varias operaciones, en un rango de fechas.</p>
+            </div>
         </div>
-        <a href="/Finanzas/Index" class="btn btn-outline-secondary btn-sm fw-bold px-3"><i class="bi bi-arrow-left me-1"></i> Volver a Finanzas</a>
+        <div class="fin-header-actions">
+            <a href="/Finanzas/Index" class="btn btn-outline-secondary btn-sm fw-bold px-3"><i class="bi bi-arrow-left me-1"></i> Volver al Main Board</a>
+        </div>
     </div>
 
-    <form method="get" class="d-flex align-items-end gap-3 bg-white border rounded p-3 mb-4 shadow-sm">
+    <partial name="/Pages/Finanzas/_FinanzasNav.cshtml" model='"ConsolidadoCliente"' />
+
+    <form method="get" class="con-filter bg-white border rounded p-3 mb-4">
         <div>
-            <label class="form-label fw-bold" style="font-size: 11px; text-transform: uppercase; color: #64748b;">Cliente</label>
-            <select name="IdCliente" asp-items="Model.ListaClientes" class="form-select form-select-sm" style="min-width: 260px;">
-                <option value="">-- Seleccionar Cliente --</option>
+            <label>Cliente</label>
+            <select asp-for="IdCliente" asp-items="Model.ListaClientes" class="form-select">
+                <option value="">Seleccionar cliente</option>
             </select>
         </div>
         <div>
-            <label class="form-label fw-bold" style="font-size: 11px; text-transform: uppercase; color: #64748b;">Desde</label>
-            <input type="date" name="Desde" value="@(Model.Desde?.ToString("yyyy-MM-dd"))" class="form-control form-control-sm" />
+            <label>Búsqueda</label>
+            <input asp-for="Buscar" class="form-control" placeholder="Booking, concepto o N° documento" autocomplete="off" />
         </div>
         <div>
-            <label class="form-label fw-bold" style="font-size: 11px; text-transform: uppercase; color: #64748b;">Hasta</label>
-            <input type="date" name="Hasta" value="@(Model.Hasta?.ToString("yyyy-MM-dd"))" class="form-control form-control-sm" />
+            <label>Origen</label>
+            <select asp-for="Origen" class="form-select">
+                <option value="TODOS">Sistema + históricos</option>
+                <option value="SISTEMA">Solo sistema</option>
+                <option value="HISTORICO">Solo Histórico Excel</option>
+            </select>
         </div>
-        <button type="submit" class="btn btn-dark btn-sm fw-bold px-4"><i class="bi bi-search me-1"></i> Buscar</button>
+        <div>
+            <label>Estado financiero</label>
+            <select asp-for="Estado" class="form-select">
+                <option value="TODOS">Todos los estados</option>
+                <option value="PENDIENTE">Pendientes</option>
+                <option value="FACTURADO">Facturados</option>
+                <option value="PAGADO">Pagados / conciliados</option>
+            </select>
+        </div>
+        <div>
+            <label>Desde</label>
+            <input asp-for="Desde" type="date" class="form-control" />
+        </div>
+        <div>
+            <label>Hasta</label>
+            <input asp-for="Hasta" type="date" class="form-control" />
+        </div>
+        <div class="con-filter-actions">
+            <button type="submit" class="btn btn-dark px-3"><i class="bi bi-funnel me-1"></i> Filtrar</button>
+            <a asp-page="./ConsolidadoCliente" class="btn btn-outline-secondary" title="Limpiar filtros"><i class="bi bi-x-lg"></i></a>
+        </div>
     </form>
 
     @if (Model.Resultado != null)
     {
+        var desdeExport = Model.Desde ?? new DateTime(1900, 1, 1);
+        var hastaExport = Model.Hasta ?? DateTime.Today;
         <div class="d-flex justify-content-end gap-2 mb-3">
-            <a href="?handler=ExportarExcel&idCliente=@Model.IdCliente&desde=@Model.Desde?.ToString("yyyy-MM-dd")&hasta=@Model.Hasta?.ToString("yyyy-MM-dd")" class="btn btn-outline-success btn-sm fw-bold px-3 shadow-sm"><i class="bi bi-file-earmark-excel-fill me-2"></i> Excel</a>
-            <a href="?handler=ExportarPdf&idCliente=@Model.IdCliente&desde=@Model.Desde?.ToString("yyyy-MM-dd")&hasta=@Model.Hasta?.ToString("yyyy-MM-dd")" class="btn btn-dark btn-sm fw-bold px-4 shadow-sm"><i class="bi bi-file-earmark-pdf-fill me-2"></i> Descargar PDF</a>
+            <a asp-page="./ConsolidadoCliente" asp-page-handler="ExportarExcel"
+               asp-route-idCliente="@Model.IdCliente" asp-route-desde="@desdeExport.ToString("yyyy-MM-dd")" asp-route-hasta="@hastaExport.ToString("yyyy-MM-dd")"
+               asp-route-Buscar="@Model.Buscar" asp-route-Origen="@Model.Origen" asp-route-Estado="@Model.Estado"
+               class="btn btn-outline-success btn-sm fw-bold px-3 shadow-sm"><i class="bi bi-file-earmark-excel-fill me-2"></i> Excel</a>
+            <a asp-page="./ConsolidadoCliente" asp-page-handler="ExportarPdf"
+               asp-route-idCliente="@Model.IdCliente" asp-route-desde="@desdeExport.ToString("yyyy-MM-dd")" asp-route-hasta="@hastaExport.ToString("yyyy-MM-dd")"
+               asp-route-Buscar="@Model.Buscar" asp-route-Origen="@Model.Origen" asp-route-Estado="@Model.Estado"
+               class="btn btn-dark btn-sm fw-bold px-4 shadow-sm"><i class="bi bi-file-earmark-pdf-fill me-2"></i> Descargar PDF</a>
         </div>
 
-        <div class="bg-white border rounded shadow-sm overflow-hidden">
-            <div class="px-4 py-3 border-bottom bg-light">
+        <div class="fin-card overflow-hidden">
+            <div class="px-4 py-3 border-bottom fin-card__head">
                 <span class="fw-bold" style="font-size: 13px;">@Model.Resultado.ClienteNombre</span>
-                <span class="text-muted ms-2" style="font-size: 11px;">@Model.Resultado.Desde.ToString("dd/MM/yyyy") — @Model.Resultado.Hasta.ToString("dd/MM/yyyy")</span>
+                <span class="text-muted ms-2" style="font-size:11px;">
+                    @(Model.Desde.HasValue || Model.Hasta.HasValue
+                        ? $"{(Model.Desde?.ToString("dd/MM/yyyy") ?? "inicio")} — {(Model.Hasta?.ToString("dd/MM/yyyy") ?? "hoy")}"
+                        : "Todo el historial")
+                    · @(Model.Origen == "HISTORICO" ? "Histórico Excel" : Model.Origen == "SISTEMA" ? "Solo sistema" : "Sistema + históricos")
+                </span>
             </div>
-            <table class="table table-sm mb-0" style="font-size: 12px;">
+            <table class="table table-sm mb-0 con-table">
                 <thead class="bg-light">
-                    <tr style="font-size: 10px; text-transform: uppercase; color: #64748b;">
+                    <tr>
                         <th class="ps-4">Booking</th>
                         <th>Fecha</th>
                         <th class="text-end">Ingreso USD</th>
@@ -62,8 +118,8 @@
                         foreach (var o in Model.Resultado.Operaciones)
                         {
                             decimal rent = o.IngresoClp - o.EgresoClp;
-                            <tr>
-                                <td class="ps-4 fw-bold">@o.NumeroBooking</td>
+                            <tr class="@(o.EsHistorica ? "con-historico" : "")">
+                                <td class="ps-4 fw-bold">@o.NumeroBooking @if(o.EsHistorica){<span class="con-hist-chip"><i class="bi bi-archive-fill"></i> Histórico</span>}</td>
                                 <td class="text-muted">@(o.Fecha?.ToString("dd/MM/yyyy") ?? "-")</td>
                                 <td class="text-end font-monospace">@(o.IngresoUsd > 0 ? $"USD {o.IngresoUsd:N2}" : "-")</td>
                                 <td class="text-end font-monospace">@(o.IngresoClp > 0 ? $"$ {o.IngresoClp:N0}" : "-")</td>

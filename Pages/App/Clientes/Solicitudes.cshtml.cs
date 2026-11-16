@@ -52,6 +52,72 @@ namespace AtilsonCargoSpa.Pages.App.Clientes
             }
         }
 
+        public async Task<IActionResult> OnPostCompletarAsync(int id, string? razonSocial, string? rut, string? direccionOficina, string? passwordTemporal)
+        {
+            var s = await _context.SolicitudesRegistroCliente.FirstOrDefaultAsync(x => x.Id == id);
+            if (s == null)
+            {
+                TempData["ToastError"] = "La solicitud ya no existe.";
+                return RedirectToPage();
+            }
+            if (s.Estado != SolicitudRegistroCliente.EstadoPendiente)
+            {
+                TempData["ToastError"] = "Solo se pueden completar solicitudes pendientes.";
+                return RedirectToPage();
+            }
+
+            razonSocial = string.IsNullOrWhiteSpace(razonSocial) ? "" : razonSocial.Trim();
+            rut = string.IsNullOrWhiteSpace(rut) ? "" : rut.Trim();
+            direccionOficina = string.IsNullOrWhiteSpace(direccionOficina) ? "" : direccionOficina.Trim();
+            passwordTemporal = string.IsNullOrWhiteSpace(passwordTemporal) ? null : passwordTemporal;
+
+            if (razonSocial.Length > 100)
+            {
+                TempData["ToastError"] = "La razón social admite hasta 100 caracteres.";
+                return RedirectToPage();
+            }
+            if (rut.Length > 12)
+            {
+                TempData["ToastError"] = "El RUT admite hasta 12 caracteres.";
+                return RedirectToPage();
+            }
+            if (direccionOficina.Length > 255)
+            {
+                TempData["ToastError"] = "La dirección admite hasta 255 caracteres.";
+                return RedirectToPage();
+            }
+            if (rut.Length > 0 && !AtilsonCargoSpa.Helpers.RutHelper.EsValido(rut))
+            {
+                TempData["ToastError"] = "El RUT ingresado no es válido.";
+                return RedirectToPage();
+            }
+            if (passwordTemporal != null &&
+                (passwordTemporal.Length < 8 || !passwordTemporal.Any(char.IsLetter) || !passwordTemporal.Any(char.IsDigit)))
+            {
+                TempData["ToastError"] = "La contraseña temporal debe tener al menos 8 caracteres, con letras y números.";
+                return RedirectToPage();
+            }
+
+            var bloqueo = await _registro.MotivoBloqueoAsync(rut, s.Correo, s.Id);
+            if (bloqueo != null)
+            {
+                TempData["ToastError"] = bloqueo;
+                return RedirectToPage();
+            }
+
+            s.RazonSocial = razonSocial;
+            s.Rut = rut.Length == 0 ? "" : AtilsonCargoSpa.Helpers.RutHelper.Formatear(rut);
+            s.DireccionOficina = direccionOficina;
+            if (passwordTemporal != null)
+                s.PasswordHash = BCrypt.Net.BCrypt.HashPassword(passwordTemporal);
+
+            await _context.SaveChangesAsync();
+            TempData["ToastOk"] = passwordTemporal != null
+                ? "Datos actualizados. Comunica la contraseña temporal al cliente por un canal seguro: el correo de aprobación no la incluye."
+                : "Datos de la solicitud actualizados.";
+            return RedirectToPage(new { Estado });
+        }
+
         public async Task<IActionResult> OnPostAprobarAsync(int id)
         {
             var (ok, mensaje) = await _registro.AprobarAsync(id, MaestrosAuditoria.Usuario(User), Url.Page("/Login", null, null, Request.Scheme) ?? "/Login");

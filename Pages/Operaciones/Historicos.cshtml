@@ -1,0 +1,90 @@
+@page
+@model AtilsonCargoSpa.Pages.Operaciones.HistoricosModel
+@{
+    ViewData["Title"] = "Operaciones históricas";
+}
+<style>
+    .oph-card{background:#fff;border:1px solid #d9dee5;border-radius:10px;box-shadow:0 2px 10px rgba(15,23,42,.04);overflow:hidden}
+    .oph-row>td{background:#f8fafc!important;color:#475569;border-color:#e2e8f0!important}
+    .oph-row:hover>td{background:#f1f5f9!important}
+    .oph-table{min-width:900px}
+    .oph-table th{font-size:9px;text-transform:uppercase;letter-spacing:.04em;color:#64748b;white-space:nowrap}
+    .oph-table td{font-size:10.5px;vertical-align:middle}
+    .oph-bkg{font-size:12px;font-weight:900;color:#334155}
+    .oph-chip{display:inline-flex;align-items:center;gap:4px;padding:3px 7px;border-radius:999px;background:#e5e7eb;color:#4b5563;border:1px solid #d1d5db;font-size:8.5px;font-weight:850;text-transform:uppercase}
+    .oph-info{background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;color:#475569;font-size:10.5px;padding:10px 12px}
+</style>
+<div class="container-fluid py-4 px-4">
+    <div class="page-header">
+        <div class="page-header__title-row">
+            <div class="page-header__icon"><i class="bi bi-clock-history"></i></div>
+            <div>
+                <h1>Operaciones históricas</h1>
+                <p class="page-header__subtitle">Embarques anteriores al ERP importados desde Finanzas. Consulta únicamente.</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="workspace-nav opidx-premium">
+        <a asp-page="./Index" class="ws-btn"><i class="bi bi-grid-fill"></i> Main Board</a>
+        <a asp-page="./Maritimo" class="ws-btn"><i class="bi bi-water"></i> Marítimo</a>
+        <a asp-page="./Transporte" class="ws-btn"><i class="bi bi-truck"></i> Transporte</a>
+        <a asp-page="./Documental" class="ws-btn"><i class="bi bi-file-earmark-check"></i> Documental</a>
+        <a asp-page="./Historicos" class="ws-btn active"><i class="bi bi-clock-history"></i> Históricos</a>
+    </div>
+
+    <div class="oph-info mb-3">
+        <i class="bi bi-shield-lock-fill me-1"></i>
+        Estos registros participan del historial y de los totales financieros, pero <strong>no pueden abrirse, editarse ni gestionarse</strong> como una operación activa.
+    </div>
+
+    <form method="get" class="d-flex gap-2 mb-3" style="max-width:520px;">
+        <input asp-for="Buscar" class="form-control form-control-sm" placeholder="Buscar booking, cliente o naviera" />
+        <button class="btn btn-dark btn-sm fw-bold px-3"><i class="bi bi-search"></i></button>
+        @if(!string.IsNullOrWhiteSpace(Model.Buscar)){<a asp-page="./Historicos" class="btn btn-outline-secondary btn-sm"><i class="bi bi-x-lg"></i></a>}
+    </form>
+
+    <div class="oph-card table-responsive">
+        <table class="table oph-table mb-0">
+            <thead>
+                <tr>
+                    <th>Booking / Cliente</th>
+                    <th>Fecha</th>
+                    <th>Naviera</th>
+                    <th class="text-center">Movimientos financieros</th>
+                    <th>Fuente</th>
+                    <th class="text-end">Estado</th>
+                </tr>
+            </thead>
+            <tbody>
+            @foreach(var op in Model.Operaciones)
+            {
+                <tr class="oph-row">
+                    <td>
+                        <div class="d-flex align-items-center gap-2"><span class="oph-bkg">@op.NumeroBooking</span><span class="oph-chip">Histórico Excel</span></div>
+                        <div class="text-muted mt-1">@(op.IdClienteNavigation?.RazonSocial ?? "Sin cliente")</div>
+                    </td>
+                    <td>@(op.FechaCreacion?.ToString("dd/MM/yyyy") ?? "Sin fecha")</td>
+                    <td>@(op.IdNavieraNavigation?.NombreNaviera ?? "No informado")</td>
+                    <td class="text-center"><span class="oph-chip">@op.TransaccionesFinancieras.Count conceptos</span></td>
+                    <td>@(op.OrigenHistorico ?? "Excel histórico")</td>
+                    <td class="text-end"><span class="oph-chip"><i class="bi bi-lock-fill"></i> Solo lectura</span></td>
+                </tr>
+            }
+            @if(!Model.Operaciones.Any())
+            {
+                <tr><td colspan="6" class="text-center text-muted py-5">No hay operaciones históricas importadas.</td></tr>
+            }
+            </tbody>
+        </table>
+    </div>
+
+    @if(Model.TotalPaginas > 1)
+    {
+        <div class="d-flex justify-content-end mt-3"><ul class="pagination pagination-sm mb-0">
+            <li class="page-item @(Model.Pagina<=1?"disabled":"")"><a class="page-link" asp-route-Pagina="@(Model.Pagina-1)" asp-route-Buscar="@Model.Buscar"><i class="bi bi-chevron-left"></i></a></li>
+            <li class="page-item disabled"><span class="page-link">@Model.Pagina / @Model.TotalPaginas</span></li>
+            <li class="page-item @(Model.Pagina>=Model.TotalPaginas?"disabled":"")"><a class="page-link" asp-route-Pagina="@(Model.Pagina+1)" asp-route-Buscar="@Model.Buscar"><i class="bi bi-chevron-right"></i></a></li>
+        </ul></div>
+    }
+</div>

@@ -1,6 +1,8 @@
 using System.Collections.Generic;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
+using AtilsonCargoSpa.Services;
 
 namespace AtilsonCargoSpa.Pages
 {
@@ -8,7 +10,11 @@ namespace AtilsonCargoSpa.Pages
     [AllowAnonymous]
     public class NosotrosModel : PageModel
     {
-        public void OnGet() { }
+        private readonly SitioWebInfo _sitio;
+        public NosotrosModel(SitioWebInfo sitio) => _sitio = sitio;
+
+        public IActionResult OnGet()
+            => _sitio.MostrarNosotros ? Page() : NotFound();
     }
 
     public record HitoHistoria(string Anio, string Titulo, string Texto);
@@ -35,7 +41,7 @@ namespace AtilsonCargoSpa.Pages
         // Ficha del encabezado (datos que ya están en el sitio).
         public static readonly (string Etiqueta, string Valor)[] Ficha =
         {
-            ("Oficina central", "A. Prat 814, of. 503, Valparaíso"),
+            ("Oficina central", "Av. Demo 1234, of. 101, Valparaíso"),
             ("Servicios", "Marítimo, terrestre, documental y aduanas"),
             ("Puertos", "San Antonio, Valparaíso y Biobío"),
             ("Portal", "Propio, disponible las 24 horas"),
@@ -83,6 +89,6 @@ namespace AtilsonCargoSpa.Pages
             new("Nombre Apellido", "Desarrollo y sistemas", "Tecnología"),
         };
 
-        public const string MapaUrl = "https://www.google.com/maps/search/?api=1&query=Prat+814,+Valpara%C3%ADso,+Chile";
+        public const string MapaUrl = "https://www.google.com/maps/search/?api=1&query=Av.+Demo+1234,+Valpara%C3%ADso,+Chile";
     }
 }

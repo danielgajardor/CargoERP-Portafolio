@@ -36,6 +36,7 @@
             <h1 class="mx-titulo">Equipo Atilson</h1>
             <p class="mx-subtitulo">Valida las cuentas que pide el equipo en <a href="/RegistroEquipo" target="_blank">/RegistroEquipo</a>, asígnales el rol y administra los usuarios internos.</p>
         </div>
+        <a asp-page="/App/Equipo/Permisos" class="btn btn-dark btn-sm"><i class="bi bi-ui-checks-grid me-1"></i> Permisos por usuario</a>
     </header>
 
     @if (Model.FaltaScript)
@@ -70,6 +71,7 @@
                         <th>RUT</th>
                         <th>Teléfono</th>
                         <th>Rol</th>
+                        <th title="Permisos que se dan por persona, además del rol">Permisos extra</th>
                         <th>Estado</th>
                         <th>Último acceso</th>
                         <th class="mx-col-acciones"><span class="visually-hidden">Acciones</span></th>
@@ -101,6 +103,15 @@
                                 </form>
                             </td>
                             <td>
+                                @* 13-nov: permiso por persona — costos de transportistas en Comercial (p. ej. alguien de Operaciones). *@
+                                <form method="post" asp-page-handler="PermisoTransporte" asp-route-id="@u.Id" asp-route-activar="@(!u.PermisoTarifasTransporte)" class="eq-permiso">
+                                    <label class="eq-permiso-chk" title="Ver, comparar y cargar las tarifas de costo de transportistas en Comercial">
+                                        <input type="checkbox" @(u.PermisoTarifasTransporte ? "checked" : "") onchange="this.form.submit()" aria-label="Tarifas de transporte para @u.NombreCompleto" />
+                                        Tarifas de transporte
+                                    </label>
+                                </form>
+                            </td>
+                            <td>
                                 @if (activo)
                                 {
                                     <span class="mx-pill mx-pill-ok">Activo</span>
@@ -125,7 +136,14 @@
                 </tbody>
             </table>
         </div>
-        <p class="mx-subtitulo mt-2" style="font-size:12px;"><i class="bi bi-info-circle"></i> El rol nuevo se aplica la próxima vez que la persona inicie sesión. Administrador: valida cuentas, asigna roles y ve Finanzas y Comercial.</p>
+        <p class="mx-subtitulo mt-2" style="font-size:12px;"><i class="bi bi-info-circle"></i> El rol nuevo y los permisos se aplican la próxima vez que la persona inicie sesión.
+            <strong>Administrador</strong> y <strong>Finanzas</strong>: todo el sistema. <strong>Ventas</strong> (Comercial): todo menos Finanzas.
+            <strong>Operaciones</strong>: gestión operativa, sin Finanzas, Tarifas ni Cotizaciones. <strong>Tarifas de transporte</strong>: costos de transportistas en Comercial, aunque el rol sea Operaciones.</p>
+        <style>
+            .eq-permiso { margin: 0; }
+            .eq-permiso-chk { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: #475569; cursor: pointer; white-space: nowrap; margin: 0; }
+            .eq-permiso-chk input { width: 15px; height: 15px; cursor: pointer; }
+        </style>
     }
     else
     {

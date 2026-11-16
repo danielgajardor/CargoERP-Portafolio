@@ -88,7 +88,7 @@ window.archivarSolicitudCotizacion = function(idCotizacion, btn, event) {
             let formData = new FormData();
             formData.append('idCotizacion', idCotizacion);
 
-            fetch('?handler=ArchivarCotizacion', {
+            fetch('/Operaciones/Index?handler=ArchivarCotizacion', {
                 method: 'POST',
                 headers: { 'RequestVerificationToken': token },
                 body: formData

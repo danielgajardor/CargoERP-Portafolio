@@ -37,14 +37,14 @@
     <div class="top-bar d-none d-lg-block">
         <div class="contenedor">
             <div class="top-redes" aria-label="Redes sociales">
-                <a href="@Sitio.LinkedIn" target="_blank" rel="noopener" title="LinkedIn" aria-label="LinkedIn"><i class="bi bi-linkedin"></i></a>
-                <a href="@Sitio.InstagramUrl" target="_blank" rel="noopener" title="Instagram" aria-label="Instagram"><i class="bi bi-instagram"></i></a>
-                <a href="@Sitio.FacebookUrl" target="_blank" rel="noopener" title="Facebook" aria-label="Facebook"><i class="bi bi-facebook"></i></a>
-                <a href="@Sitio.WhatsAppUrl" target="_blank" rel="noopener" title="WhatsApp" aria-label="WhatsApp"><i class="bi bi-whatsapp"></i></a>
+                @if (Sitio.LinkedIn != null) { <a href="@Sitio.LinkedIn" target="_blank" rel="noopener" title="LinkedIn" aria-label="LinkedIn"><i class="bi bi-linkedin"></i></a> }
+                @if (Sitio.InstagramUrl != null) { <a href="@Sitio.InstagramUrl" target="_blank" rel="noopener" title="Instagram" aria-label="Instagram"><i class="bi bi-instagram"></i></a> }
+                @if (Sitio.FacebookUrl != null) { <a href="@Sitio.FacebookUrl" target="_blank" rel="noopener" title="Facebook" aria-label="Facebook"><i class="bi bi-facebook"></i></a> }
+                @if (Sitio.WhatsAppUrl != null) { <a href="@Sitio.WhatsAppUrl" target="_blank" rel="noopener" title="WhatsApp" aria-label="WhatsApp"><i class="bi bi-whatsapp"></i></a> }
             </div>
 
             <div class="top-centro">
-                <div class="indicadores" data-indicadores="@Url.Page("/Index", "Indicadores")" title="Valores del día">
+                <div class="indicadores" data-indicadores="@Url.Page("/Index", "Indicadores")" title="Indicadores publicados: consulta la fecha y fuente de cada valor">
                     <span class="live-indicator" aria-hidden="true"></span>
                     <div><b>UF</b><span id="top-uf">…</span></div>
                     <div><b>USD</b><span id="top-usd">…</span></div>
@@ -97,8 +97,9 @@
                                 <span class="nav-portal-lema"><i class="bi @s.Icono" aria-hidden="true"></i> Plataforma propia</span>
                                 <b>@s.Nombre</b>
                                 <small>@s.Corto</small>
-                                <span class="nav-portal-demo" aria-hidden="true">
-                                    <span class="npd-fila"><em>SAI</em><i class="npd-ruta"><i></i></i><em>RTM</em></span>
+                                @* Animación representativa del portal, no un booking real. *@
+                                <span class="nav-portal-demo" aria-hidden="true" title="Vista ilustrativa">
+                                    <span class="npd-fila"><em>SAI</em><span class="npd-ruta"><i></i></span><em>RTM</em></span>
                                     <span class="npd-hito"><i class="bi bi-check2"></i> Zarpe confirmado</span>
                                     <span class="npd-hito npd-hito-2"><i class="bi bi-file-earmark-check"></i> BL listo para aprobar</span>
                                 </span>
@@ -152,10 +153,10 @@
                     <span class="idioma-cod">EN</span>
                 </button>
         <div class="footer-redes menu-movil-redes" aria-label="Redes sociales">
-            <a href="@Sitio.LinkedIn" target="_blank" rel="noopener" aria-label="LinkedIn"><i class="bi bi-linkedin"></i></a>
-            <a href="@Sitio.InstagramUrl" target="_blank" rel="noopener" aria-label="Instagram"><i class="bi bi-instagram"></i></a>
-            <a href="@Sitio.FacebookUrl" target="_blank" rel="noopener" aria-label="Facebook"><i class="bi bi-facebook"></i></a>
-            <a href="@Sitio.WhatsAppUrl" target="_blank" rel="noopener" aria-label="WhatsApp"><i class="bi bi-whatsapp"></i></a>
+            @if (Sitio.LinkedIn != null) { <a href="@Sitio.LinkedIn" target="_blank" rel="noopener" aria-label="LinkedIn"><i class="bi bi-linkedin"></i></a> }
+            @if (Sitio.InstagramUrl != null) { <a href="@Sitio.InstagramUrl" target="_blank" rel="noopener" aria-label="Instagram"><i class="bi bi-instagram"></i></a> }
+            @if (Sitio.FacebookUrl != null) { <a href="@Sitio.FacebookUrl" target="_blank" rel="noopener" aria-label="Facebook"><i class="bi bi-facebook"></i></a> }
+            @if (Sitio.WhatsAppUrl != null) { <a href="@Sitio.WhatsAppUrl" target="_blank" rel="noopener" aria-label="WhatsApp"><i class="bi bi-whatsapp"></i></a> }
         </div>
     </div>
 
@@ -189,17 +190,17 @@
                 </div>
                 <div>
                     <h5 class="footer-title">Contacto</h5>
-                    <p class="footer-link mb-1"><i class="bi bi-geo-alt footer-icon"></i> A Prat 814 Of. 503, Valparaíso</p>
+                    <p class="footer-link mb-1"><i class="bi bi-geo-alt footer-icon"></i> Av. Demo 1234 Of. 101, Valparaíso</p>
                     <a href="mailto:@Sitio.CorreoContacto" class="footer-link mb-1"><i class="bi bi-envelope footer-icon"></i> @Sitio.CorreoContacto</a>
                     @if (Sitio.Telefono != null)
                     {
                         <a href="@Sitio.TelefonoEnlace" class="footer-link mb-1"><i class="bi bi-telephone footer-icon"></i> @Sitio.Telefono</a>
                     }
                     <div class="footer-redes" aria-label="Redes sociales">
-                        <a href="@Sitio.LinkedIn" target="_blank" rel="noopener" aria-label="LinkedIn" title="LinkedIn"><i class="bi bi-linkedin"></i></a>
-                        <a href="@Sitio.InstagramUrl" target="_blank" rel="noopener" aria-label="Instagram" title="Instagram"><i class="bi bi-instagram"></i></a>
-                        <a href="@Sitio.FacebookUrl" target="_blank" rel="noopener" aria-label="Facebook" title="Facebook"><i class="bi bi-facebook"></i></a>
-                        <a href="@Sitio.WhatsAppUrl" target="_blank" rel="noopener" aria-label="WhatsApp" title="WhatsApp"><i class="bi bi-whatsapp"></i></a>
+                        @if (Sitio.LinkedIn != null) { <a href="@Sitio.LinkedIn" target="_blank" rel="noopener" aria-label="LinkedIn" title="LinkedIn"><i class="bi bi-linkedin"></i></a> }
+                        @if (Sitio.InstagramUrl != null) { <a href="@Sitio.InstagramUrl" target="_blank" rel="noopener" aria-label="Instagram" title="Instagram"><i class="bi bi-instagram"></i></a> }
+                        @if (Sitio.FacebookUrl != null) { <a href="@Sitio.FacebookUrl" target="_blank" rel="noopener" aria-label="Facebook" title="Facebook"><i class="bi bi-facebook"></i></a> }
+                        @if (Sitio.WhatsAppUrl != null) { <a href="@Sitio.WhatsAppUrl" target="_blank" rel="noopener" aria-label="WhatsApp" title="WhatsApp"><i class="bi bi-whatsapp"></i></a> }
                     </div>
                 </div>
             </div>
@@ -256,6 +257,7 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
     <script src="~/js/publico.js" asp-append-version="true"></script>
     @await RenderSectionAsync("Scripts", required: false)
+    <script src="~/js/ruta-paises.js" asp-append-version="true"></script>
     <script src="~/js/i18n.js" asp-append-version="true"></script>
 </body>
 </html>

@@ -1,4 +1,4 @@
-using AtilsonCargoSpa.Models;
+﻿using AtilsonCargoSpa.Models;
 using AtilsonCargoSpa.Helpers;
 using Microsoft.EntityFrameworkCore;
 using System;
@@ -25,6 +25,56 @@ namespace AtilsonCargoSpa.Services
         {
             _context = context;
             _indicadores = indicadores;
+        }
+
+        // Solo las provisiones automáticas sin documentos pueden ajustarse o darse de baja.
+        // Un movimiento facturado, pagado, conciliado, manual o documentado
+        // nunca se modifica ni elimina automáticamente durante una sincronización.
+        private static bool ProvisionalSinRespaldo(TransaccionesFinanciera t) =>
+            !t.TarifaManual &&
+            !t.FechaEmision.HasValue &&
+            !t.ConfirmadoAga &&
+            !t.ValorAga.HasValue &&
+            !t.AceptaDiferenciaPago &&
+            string.IsNullOrWhiteSpace(t.NotaDiferenciaAga) &&
+            t.EstadoFila is ("PROVISIÓN" or "PENDIENTE VALORIZAR" or "NO FACTURABLE") &&
+            string.IsNullOrWhiteSpace(t.NumeroDocumento) &&
+            string.IsNullOrWhiteSpace(t.NumeroDocumentoOrigen) &&
+            string.IsNullOrWhiteSpace(t.NumeroOrdenCompra) &&
+            string.IsNullOrWhiteSpace(t.RutaFactura) &&
+            string.IsNullOrWhiteSpace(t.RutaComprobante);
+
+        // La tarifa de certificado se debe buscar por trámite, no por la redacción
+        // literal del catálogo. Comercial puede guardar "CERTIFICADO CAPTURA SERNAPESCA"
+        // o "CERTIFICADO DE CAPTURA", y ambos representan el mismo trámite.
+        // Las reemisiones jamás deben valorizar un certificado principal (ni al revés).
+        private static bool CoincideConceptoTarifaDocumental(string? conceptoTarifa, string clave)
+        {
+            string t = VentaClienteHelper.Norm(conceptoTarifa);
+            string c = VentaClienteHelper.Norm(clave);
+            if (t.Length == 0 || c.Length == 0) return false;
+            bool reemision = t.Contains("RE-EMISION") || t.Contains("REEMISION")
+                || t.Contains("RE EMISION");
+            if (c == "FITO")
+                return !reemision && t.Contains("FITO");
+            if (c == "CERTIFICADO SANITARIO")
+                return !reemision && t.Contains("CERTIFICADO") && t.Contains("SANITARIO")
+                    && !t.Contains("FITOSANITARIO");
+            if (c == "CERTIFICADO CAPTURA SERNAPESCA")
+                return !reemision && t.Contains("CAPTURA") &&
+                    (t.Contains("CERTIFICADO") || t.StartsWith("CAPTURA")) && !t.Contains("AGA");
+            if (c == "CERTIFICADO ORIGEN")
+                return !reemision && t.Contains("CERTIFICADO") && t.Contains("ORIGEN");
+            if (c == "RE-EMISION CERTIFICADOS ORIGEN")
+                return reemision && t.Contains("ORIGEN");
+            if (c == "RE-EMISION CERTIFICADOS SAG")
+                return reemision && !t.Contains("SERNAPESCA") && !t.Contains("ORIGEN")
+                    && (t.Contains("SAG") || t.Contains("FITO") || t == "RE-EMISION"
+                        || t == "REEMISION" || t == "RE-EMISION CERTIFICADOS");
+            if (c == "RE-EMISION")
+                return reemision && !t.Contains("SAG") && !t.Contains("FITO")
+                    && !t.Contains("ORIGEN");
+            return t.Contains(c);
         }
 
         // Valores estandarizados para Responsable/ResponsablePago — evita comparar
@@ -74,7 +124,7 @@ namespace AtilsonCargoSpa.Services
         };
 
         // Estos tres acuerdos son una condición comercial exclusiva del cliente
-        // especial (Promar) — nunca deben resultar en $0 para un cliente estándar,
+        // especial (Marfrio) — nunca deben resultar en $0 para un cliente estándar,
         // aunque el dato AcuerdoOrigen haya quedado guardado así por error, por una
         // operación antigua, o porque el cliente dejó de tener EsClienteEspecial
         // después de guardarse. Este gate vive en el cálculo, no solo en el <select>
@@ -86,7 +136,7 @@ namespace AtilsonCargoSpa.Services
         };
 
         // Detección automática de exención TLC por destino del Booking — Informe Caso
-        // Promar, Regla #1. Exclusiva de clientes especiales (EsClienteEspecial), igual
+        // Marfrio, Regla #1. Exclusiva de clientes especiales (EsClienteEspecial), igual
         // que la selección manual que reemplaza. Se chequea primero por país y, si no
         // hay match o el país no está cargado, por nombre de puerto.
         private static readonly Dictionary<string, string> PaisesTlcAutoExencion = new(StringComparer.OrdinalIgnoreCase)
@@ -136,7 +186,7 @@ namespace AtilsonCargoSpa.Services
             string tamano = t.Contains("45") ? "45" : (t.Contains("40") ? "40" : (t.Contains("20") ? "20" : ""));
 
             string tipo;
-            if (t.Contains("REEFER") || t.Contains(" RF") || t.Contains("RQ")) tipo = "RF";
+            if (t.Contains("REEFER") || t.Contains(" RF") || t.Contains("RF ") || t.EndsWith("RF") || t.Contains("RQ")) tipo = "RF";
             else if (t.Contains("HC") || t.Contains("HIGH CUBE") || t.Contains("HICUBE")) tipo = "HC";
             else if (t.Contains("STD") || t.Contains("STANDARD") || t.Contains("DV")) tipo = "STD";
             else tipo = "";
@@ -152,6 +202,79 @@ namespace AtilsonCargoSpa.Services
         // gris como referencia".
         // Penalidades de naviera que Finanzas mantiene en USD (sin pasar a CLP):
         // Roleo, Cancelación y No Show — igual que el Flete Marítimo.
+        /// <summary>
+        /// Completa en los extracostos los montos que quedaron en 0 por falta de tarifa cuando se
+        /// registraron (nov-2026): Roleo / Cancelación / No-Show con penalidad confirmada, Late
+        /// Arrival y Extra Late Arrival. No toca montos ya cargados.
+        /// </summary>
+        private async Task CompletarMontosDesdeTarifasAsync(Operacione op, List<ExtracostosOperacion> extracostos)
+        {
+            // Late Arrival con un monto mal sugerido antes de nov-2026: la búsqueda tomaba un
+            // recargo cualquiera de la naviera (ej. Corrección de B/L de Hapag, CLP 81.300) cuando
+            // el equipo no decía DRY/REEFER. Se reconocen por la nota del catálogo.
+            foreach (var lar in extracostos.Where(e => e.TipoCosto == "Late Arrival (LAR)" && e.Monto > 0))
+            {
+                var m = System.Text.RegularExpressions.Regex.Match(lar.Motivo ?? "", @"\s*\|?\s*Monto sugerido desde catálogo de recargos \((?<c>.+?)\)\. Confirmar antes de facturar\.");
+                if (!m.Success || m.Groups["c"].Value.ToUpperInvariant().Contains("LATE")) continue;
+                var sug = await RecargoNavieraHelper.SugerirLateArrivalAsync(_context, op.IdNaviera, RecargoNavieraHelper.TipoContenedorDe(op, lar.IdUnidadTecnica));
+                lar.Monto = sug?.Monto ?? 0;
+                lar.Moneda = sug?.Moneda ?? "USD";
+                lar.Motivo = (lar.Motivo ?? "").Replace(m.Value, "")
+                    + (sug != null ? " | " + sug.NotaCatalogo : " | Sin tarifa de Late Arrival de la naviera: monto por valorizar.");
+            }
+
+            bool EsExtracostoPenalidad(string? tipo) => tipo is "Roleo Marítimo"
+                or "Cancelación Marítima" or "No Show Marítimo" or "Cancelación / No Show Marítimo";
+            var pendientes = extracostos.Where(e => e.Monto == 0 && (
+                EsExtracostoPenalidad(e.TipoCosto)
+                || e.TipoCosto == "Late Arrival (LAR)" || e.TipoCosto == RecargoNavieraHelper.TipoExtraLateArrival)).ToList();
+            if (!pendientes.Any()) return;
+
+            List<RoleoCancelacion>? registros = null;
+            foreach (var ext in pendientes)
+            {
+                string motivo = ext.Motivo ?? "";
+                if (motivo.Contains("catálogo", StringComparison.OrdinalIgnoreCase) || motivo.Contains("sin costo", StringComparison.OrdinalIgnoreCase)) continue;
+
+                if (EsExtracostoPenalidad(ext.TipoCosto))
+                {
+                    registros ??= await _context.RoleosCancelaciones.Where(r => r.IdOperacion == op.Id).ToListAsync();
+                    string tipoReg = ext.TipoCosto switch
+                    {
+                        "Roleo Marítimo" => "ROLEO",
+                        "Cancelación Marítima" => "CANCELACION",
+                        "No Show Marítimo" => "NO_SHOW",
+                        _ => "CANCELACION_NOSHOW" // soporte para registros antiguos
+                    };
+                    var reg = registros.Where(r => r.Tipo == tipoReg)
+                        .OrderBy(r => Math.Abs((r.FechaCreacion - ext.FechaCreacion).TotalMinutes))
+                        .FirstOrDefault(r => Math.Abs((r.FechaCreacion - ext.FechaCreacion).TotalMinutes) < 5);
+                    if (reg == null || reg.PenalidadConfirmada != "SI") continue;
+                    var tarifa = await RecargoNavieraHelper.SugerirPenalidadAsync(_context, op.IdNaviera,
+                        RecargoNavieraHelper.GrupoPenalidad(reg.Tipo, reg.DiasAnticipacion.HasValue && reg.DiasAnticipacion.Value <= (op.IdNavieraNavigation?.DiasPenalidadRoleo ?? 7)));
+                    bool desdeTarifa = !reg.MontoPenalidadUnitarioUsd.HasValue;
+                    decimal? unitario = reg.MontoPenalidadUnitarioUsd ?? tarifa?.Monto;
+                    if (!unitario.HasValue || unitario.Value <= 0) continue;
+                    reg.MontoPenalidadUnitarioUsd = unitario;
+                    ext.Monto = unitario.Value * Math.Max(1, reg.CantidadContenedoresAfectados);
+                    ext.Moneda = desdeTarifa && tarifa != null ? tarifa.Moneda : (ext.Moneda ?? "USD");
+                    ext.GrupoOperativo ??= "Marítimo";
+                    if (desdeTarifa && tarifa != null) ext.Motivo = (motivo + " | " + tarifa.NotaCatalogo).Trim(' ', '|');
+                }
+                else
+                {
+                    var sug = ext.TipoCosto == "Late Arrival (LAR)"
+                        ? await RecargoNavieraHelper.SugerirLateArrivalAsync(_context, op.IdNaviera, RecargoNavieraHelper.TipoContenedorDe(op, ext.IdUnidadTecnica))
+                        : await RecargoNavieraHelper.SugerirExtraLateArrivalAsync(_context, op.IdNaviera);
+                    if (sug == null || sug.Monto <= 0) continue;
+                    ext.Monto = sug.Monto;
+                    ext.Moneda = sug.Moneda ?? "USD";
+                    ext.GrupoOperativo ??= "Marítimo";
+                    ext.Motivo = (motivo + " | " + sug.NotaCatalogo).Trim(' ', '|');
+                }
+            }
+        }
+
         public static bool EsPenalidadNavieraEnUsd(string? tipoCosto)
         {
             string t = (tipoCosto ?? "").ToUpperInvariant();
@@ -199,6 +322,14 @@ namespace AtilsonCargoSpa.Services
         // compilador disponible, idealmente con pruebas de regresión antes/después por operación.
         public async Task SincronizarAsync(int idOperacion, string usuario)
         {
+            // Los históricos pre-ERP son una fotografía contable del Excel. Nunca se
+            // recalculan con tarifas/reglas actuales porque eso alteraría la historia.
+            bool esHistorica = await _context.Operaciones.AsNoTracking()
+                .Where(o => o.Id == idOperacion)
+                .Select(o => o.EsHistorica)
+                .FirstOrDefaultAsync();
+            if (esHistorica) return;
+
             #region Preparación (carga de la operación, tarifas gratuitas del cliente, preload de tarifas documentales)
             var op = await _context.Operaciones
     .Include(o => o.OperacionesTerrestres)
@@ -213,13 +344,17 @@ namespace AtilsonCargoSpa.Services
 
             if (op == null) return;
 
+            // Conceptos extraordinarios (nov-2026): líneas manuales agregadas por Finanzas. No se
+            // cargan aquí para que ningún espejo, limpieza ni ajuste las toque (ver
+            // ConceptoExtraordinarioHelper). El prefijo debe coincidir con ConceptoExtraordinarioHelper.Prefijo.
             var txExistentes = await _context.TransaccionesFinancieras
-                .Where(t => t.IdOperacion == idOperacion)
+                .Where(t => t.IdOperacion == idOperacion
+                         && !(t.TarifaManual && t.JustificacionManual != null && t.JustificacionManual.StartsWith("Concepto extraordinario")))
                 .ToListAsync();
 
             DateTime ahora = DateTime.Now;
 
-            // Tarifas comerciales especiales del cliente (ej. Promar): conceptos marcados
+            // Tarifas comerciales especiales del cliente (ej. Marfrio): conceptos marcados
             // "Servicio Gratuito" en TarifasClientes (Comercial) que no deben cobrarse al
             // cliente aunque el motor calcule un valor — el Egreso real (lo que Atilson le
             // paga a la agencia/naviera/transportista) sigue intacto, solo se anula el
@@ -237,7 +372,16 @@ namespace AtilsonCargoSpa.Services
             // ordenadas/filtradas igual que las consultas que reemplazan, así que filtrar en
             // memoria más abajo da el mismo resultado.
             var todasTarifasDocumentalesActivas = await _context.TarifasDocumentales.AsNoTracking()
-                .Where(t => t.EsActiva == true)
+                .Where(t => t.EsActiva == true &&
+                    (!t.FechaInicioVigencia.HasValue || t.FechaInicioVigencia.Value <= ahora) &&
+                    (!t.FechaFinVigencia.HasValue || t.FechaFinVigencia.Value >= ahora.Date))
+                .OrderByDescending(t => t.FechaInicioVigencia)
+                .ThenByDescending(t => t.Id)
+                .ToListAsync();
+            // Rendimiento (nov-2026): el maestro de conceptos se lee una vez por sincronización;
+            // GenerarEspejo lo consultaba en la BD en cada concepto y cada contenedor.
+            var tarifasMaestrasActivas = await _context.TarifasMaestras.AsNoTracking()
+                .Where(t => t.EsActiva)
                 .OrderBy(t => t.Id)
                 .ToListAsync();
             var todasTarifasMaestrasDocumental = await _context.TarifasMaestras.AsNoTracking()
@@ -267,8 +411,14 @@ namespace AtilsonCargoSpa.Services
             // costoSinCargo / ventaSinCargo (oct-2026): el acuerdo Collect de la naviera / del
             // cliente deja ese concepto sin costo (ej. Late Arrival en cerezas). La línea queda
             // en $0, en provisión y marcada en JustificacionManual (no es "Por asignar").
-            async Task GenerarEspejo(string grupo, string concepto, bool activo, string busquedaTarifa, decimal? valorOverride = null, string? monedaOverride = null, int? idProveedorOverride = null, bool convertirAClp = false, bool? ivaExento = null, string? responsablePagoOverride = null, string? responsableOverride = null, decimal? valorVentaOverride = null, string? monedaVentaOverride = null, bool costoSinCargo = false, bool ventaSinCargo = false, string? notaSinCargo = null, bool soloTarifaEspecifica = false)
+            async Task GenerarEspejo(string grupo, string concepto, bool activo, string busquedaTarifa, decimal? valorOverride = null, string? monedaOverride = null, int? idProveedorOverride = null, bool convertirAClp = false, bool? ivaExento = null, string? responsablePagoOverride = null, string? responsableOverride = null, decimal? valorVentaOverride = null, string? monedaVentaOverride = null, bool costoSinCargo = false, bool ventaSinCargo = false, string? notaSinCargo = null, bool soloTarifaEspecifica = false, bool? ivaExentoVenta = null)
             {
+                // IVA de la venta (nov-2026): el de la tarifa del cliente cuando es distinto del
+                // costo (ej. flete: la naviera no cobra IVA, la venta sigue el acuerdo comercial).
+                bool? ivaIngreso = ivaExentoVenta ?? ivaExento;
+                // En lo Marítimo el IVA sigue la regla del concepto también en filas ajustadas en
+                // Acuerdos Operativos (allí solo se ajusta monto y moneda).
+                bool ivaManda = grupo == "Marítimo";
                 string? MarcaSinCargo(bool sinCargo, string? actual) =>
                     sinCargo ? (notaSinCargo ?? AcuerdoCollectHelper.MarcaSinCosto)
                     : (AcuerdoCollectHelper.EsMarcaSinCosto(actual) ? null : actual);
@@ -279,8 +429,8 @@ namespace AtilsonCargoSpa.Services
                 var txIngreso = txsIngreso.FirstOrDefault();
                 var txEgreso = txsEgreso.FirstOrDefault();
 
-                if (txsIngreso.Count > 1) _context.TransaccionesFinancieras.RemoveRange(txsIngreso.Skip(1));
-                if (txsEgreso.Count > 1) _context.TransaccionesFinancieras.RemoveRange(txsEgreso.Skip(1));
+                // No borrar duplicados automáticamente: pueden tener comprobantes, facturas,
+                // pagos o ajustes manuales. Se conservan para conciliación de Finanzas.
 
                 if (activo)
                 {
@@ -295,7 +445,8 @@ namespace AtilsonCargoSpa.Services
                     else if (soloTarifaEspecifica) { montoCosto = 0m; moneda = monedaOverride ?? moneda; }
                     else
                     {
-                        var tarifa = await _context.TarifasMaestras.AsNoTracking().FirstOrDefaultAsync(t => t.EsActiva && t.Concepto.ToUpper().Contains(busquedaTarifa.ToUpper()));
+                        string busquedaUpper = busquedaTarifa.ToUpper();
+                        var tarifa = tarifasMaestrasActivas.FirstOrDefault(t => (t.Concepto ?? "").ToUpper().Contains(busquedaUpper));
                         if (tarifa != null) { montoCosto = tarifa.ValorNeto; moneda = tarifa.Moneda ?? "USD"; }
                     }
 
@@ -371,21 +522,22 @@ namespace AtilsonCargoSpa.Services
 
                     if (txIngreso == null)
                     {
-                        _context.TransaccionesFinancieras.Add(new TransaccionesFinanciera { IdOperacion = op.Id, GrupoCobro = grupo, TipoMovimiento = "INGRESO", Concepto = concepto, MontoNeto = montoVentaFinal, Moneda = monedaVenta, TipoCambio = esResponsableCliente ? tasaVenta : null, MontoOriginalUsd = esResponsableCliente ? montoOriginalUsdVenta : null, EstadoFila = estadoVentaFinal, FechaCreacion = ahora, UsuarioCreador = usuario, IdCliente = op.IdCliente, ResponsablePago = responsablePagoOverride ?? ResponsabilidadValores.Atilson, Responsable = responsableParaNuevo, IvaExento = ivaExento, JustificacionManual = MarcaSinCargo(ventaSinCargo, null) });
+                        _context.TransaccionesFinancieras.Add(new TransaccionesFinanciera { IdOperacion = op.Id, GrupoCobro = grupo, TipoMovimiento = "INGRESO", Concepto = concepto, MontoNeto = montoVentaFinal, Moneda = monedaVenta, TipoCambio = esResponsableCliente ? tasaVenta : null, MontoOriginalUsd = esResponsableCliente ? montoOriginalUsdVenta : null, EstadoFila = estadoVentaFinal, FechaCreacion = ahora, UsuarioCreador = usuario, IdCliente = op.IdCliente, ResponsablePago = responsablePagoOverride ?? ResponsabilidadValores.Atilson, Responsable = responsableParaNuevo, IvaExento = ivaIngreso, JustificacionManual = MarcaSinCargo(ventaSinCargo, null) });
                     }
                     else
                     {
-                        txIngreso.Concepto = concepto;
-                        if (!txIngreso.TarifaManual)
+                        if (ProvisionalSinRespaldo(txIngreso)) txIngreso.Concepto = concepto;
+                        if (ProvisionalSinRespaldo(txIngreso))
                         {
                             txIngreso.MontoNeto = montoVentaFinal;
                             txIngreso.Moneda = monedaVenta;
                             txIngreso.TipoCambio = esResponsableCliente ? tasaVenta : null;
                             txIngreso.MontoOriginalUsd = esResponsableCliente ? montoOriginalUsdVenta : null;
                             txIngreso.EstadoFila = estadoVentaFinal;
-                            txIngreso.IvaExento = ivaExento;
+                            txIngreso.IvaExento = ivaIngreso;
                             txIngreso.JustificacionManual = MarcaSinCargo(ventaSinCargo, txIngreso.JustificacionManual);
                         }
+                        else if (ivaManda && ivaIngreso.HasValue && ProvisionalSinRespaldo(txIngreso)) txIngreso.IvaExento = ivaIngreso;
                     }
 
                     if (txEgreso == null)
@@ -394,19 +546,20 @@ namespace AtilsonCargoSpa.Services
                     }
                     else
                     {
-                        txEgreso.Concepto = concepto;
-                        if (idProveedorOverride.HasValue) txEgreso.IdProveedor = idProveedorOverride;
-                        if (!txEgreso.TarifaManual) { txEgreso.MontoNeto = montoCosto; txEgreso.Moneda = moneda; txEgreso.TipoCambio = tasaUsada; txEgreso.MontoOriginalUsd = montoOriginalUsd; txEgreso.EstadoFila = estadoCostoFinal; txEgreso.IvaExento = ivaExento; txEgreso.JustificacionManual = MarcaSinCargo(costoSinCargo, txEgreso.JustificacionManual); }
+                        if (ProvisionalSinRespaldo(txEgreso)) txEgreso.Concepto = concepto;
+                        if (ProvisionalSinRespaldo(txEgreso) && idProveedorOverride.HasValue) txEgreso.IdProveedor = idProveedorOverride;
+                        if (ProvisionalSinRespaldo(txEgreso)) { txEgreso.MontoNeto = montoCosto; txEgreso.Moneda = moneda; txEgreso.TipoCambio = tasaUsada; txEgreso.MontoOriginalUsd = montoOriginalUsd; txEgreso.EstadoFila = estadoCostoFinal; txEgreso.IvaExento = ivaExento; txEgreso.JustificacionManual = MarcaSinCargo(costoSinCargo, txEgreso.JustificacionManual); }
+                        else if (ivaManda && ivaExento.HasValue && ProvisionalSinRespaldo(txEgreso)) txEgreso.IvaExento = ivaExento;
                     }
                 }
                 else
                 {
-                    if (txIngreso != null && (txIngreso.EstadoFila == "PROVISIÓN" || txIngreso.EstadoFila == "PENDIENTE VALORIZAR" || txIngreso.EstadoFila == "NO FACTURABLE")) _context.TransaccionesFinancieras.Remove(txIngreso);
-                    if (txEgreso != null && (txEgreso.EstadoFila == "PROVISIÓN" || txEgreso.EstadoFila == "PENDIENTE VALORIZAR")) _context.TransaccionesFinancieras.Remove(txEgreso);
+                    if (txIngreso != null && ProvisionalSinRespaldo(txIngreso)) _context.TransaccionesFinancieras.Remove(txIngreso);
+                    if (txEgreso != null && ProvisionalSinRespaldo(txEgreso)) _context.TransaccionesFinancieras.Remove(txEgreso);
                 }
             }
 
-            async Task GenerarEspejoDocumental(string conceptoEspejo, bool activo, string busquedaTarifa, int? idAgenciaAduana, decimal? valorOverride = null, string? numeroDocumento = null, string? monedaOverride = null, bool convertirAClp = false, decimal? valorVentaOverride = null, string? monedaVentaOverride = null, bool generarIngreso = true, decimal factorIngreso = 1m, bool forzarIngreso = false)
+            async Task GenerarEspejoDocumental(string conceptoEspejo, bool activo, string busquedaTarifa, int? idAgenciaAduana, decimal? valorOverride = null, string? numeroDocumento = null, string? monedaOverride = null, bool convertirAClp = false, decimal? valorVentaOverride = null, string? monedaVentaOverride = null, bool generarIngreso = true, decimal factorIngreso = 1m, bool forzarIngreso = false, string? clasificacionTarifa = null)
             {
                 var txsIngreso = txExistentes.Where(t => t.Concepto == conceptoEspejo && t.TipoMovimiento == "INGRESO").ToList();
                 var txsEgreso = txExistentes.Where(t => t.Concepto == conceptoEspejo && t.TipoMovimiento == "EGRESO").ToList();
@@ -421,8 +574,7 @@ namespace AtilsonCargoSpa.Services
                 // contenedor), pero al cliente no se le cobra en esta línea porque va en un
                 // solo cobro grupal (oct-2026, Honorarios y DUS). Se retira el Ingreso si aún
                 // está en provisión; uno ya facturado o ajustado a mano no se toca.
-                if (!generarIngreso && txIngreso != null && !txIngreso.TarifaManual
-                    && (txIngreso.EstadoFila == "PROVISIÓN" || txIngreso.EstadoFila == "PENDIENTE VALORIZAR" || txIngreso.EstadoFila == "NO FACTURABLE"))
+                if (!generarIngreso && txIngreso != null && ProvisionalSinRespaldo(txIngreso))
                 {
                     _context.TransaccionesFinancieras.Remove(txIngreso);
                     txExistentes.Remove(txIngreso);
@@ -442,7 +594,7 @@ namespace AtilsonCargoSpa.Services
                     // distinto de $0 guardado de antes, hay que forzar el recálculo aunque nada
                     // más haya cambiado. Nunca toca una fila ya calibrada a mano (TarifaManual).
                     bool deberiaSerCeroAhora = EsConceptoGratuitoCliente(conceptoEspejo) || (valorOverride.HasValue && valorOverride.Value == 0m);
-                    bool necesitaAjusteGratuito = txIngreso != null && !txIngreso.TarifaManual && deberiaSerCeroAhora && txIngreso.MontoNeto != 0m;
+                    bool necesitaAjusteGratuito = txIngreso != null && ProvisionalSinRespaldo(txIngreso) && deberiaSerCeroAhora && txIngreso.MontoNeto != 0m;
 
                     // Con tarifa de venta del cliente (Comercial), el Ingreso se recalcula
                     // mientras siga en provisión y no se haya ajustado a mano.
@@ -450,32 +602,59 @@ namespace AtilsonCargoSpa.Services
                     // grupal de Honorarios/DUS), así que se recalcula en cada sincronización
                     // mientras siga en provisión.
                     bool necesitaAjusteVenta = ((valorVentaOverride.HasValue && valorVentaOverride.Value > 0) || forzarIngreso)
-                        && txIngreso != null && !txIngreso.TarifaManual
-                        && (txIngreso.EstadoFila == "PROVISIÓN" || txIngreso.EstadoFila == "PENDIENTE VALORIZAR");
+                        && txIngreso != null && ProvisionalSinRespaldo(txIngreso);
 
-                    if (txIngreso == null || txEgreso == null || txIngreso.EstadoFila == "PENDIENTE VALORIZAR" || txEgreso.EstadoFila == "PENDIENTE VALORIZAR" || txIngreso.NumeroDocumento != numeroDocumento || faltaTipoCambio || necesitaAjusteGratuito || necesitaAjusteVenta)
+                    bool necesitaAjusteCosto = txEgreso != null && ProvisionalSinRespaldo(txEgreso);
+                    if (txIngreso == null || txEgreso == null || txIngreso.EstadoFila == "PENDIENTE VALORIZAR" || txEgreso.EstadoFila == "PENDIENTE VALORIZAR" || txIngreso.NumeroDocumentoDocumental != numeroDocumento || faltaTipoCambio || necesitaAjusteGratuito || necesitaAjusteVenta || necesitaAjusteCosto)
                     {
                         decimal montoCosto = 0m;
                         string moneda = "CLP";
+                        bool hayTarifaDocumental = false;
 
                         if (idAgenciaAduana.HasValue)
                         {
                             // Preload en memoria (ver todasTarifasDocumentalesActivas arriba) — mismo
                             // filtro y mismo orden que la consulta original, sin ir a la BD por cada llamada.
-                            var tarifaDoc = todasTarifasDocumentalesActivas
-                                .FirstOrDefault(t => t.IdAgenciaAduana == idAgenciaAduana.Value && t.Concepto.ToUpper().Contains(busquedaTarifa.ToUpper()));
+                            var tarifasAgencia = todasTarifasDocumentalesActivas
+                                .Where(t => t.IdAgenciaAduana == idAgenciaAduana.Value &&
+                                    CoincideConceptoTarifaDocumental(t.Concepto, busquedaTarifa))
+                                .ToList();
+                            // Distintas tarifas para SAG/Sernapesca: preferir la clasificación
+                            // exacta y luego una genérica, nunca otra clasificación incompatible.
+                            // No cruzar SAG con SERNAPESCA, ni usar una tarifa SAG si
+                            // Operaciones dejó la clasificación vacía. "COMUN"/"COMUNES"
+                            // son los únicos respaldos generales válidos.
+                            bool EsGenerica(TarifasDocumentale t) =>
+                                string.IsNullOrWhiteSpace(t.Clasificacion) ||
+                                VentaClienteHelper.Norm(t.Clasificacion).StartsWith("COMUN");
+                            // Los certificados llevan la clasificación del organismo del
+                            // trámite, aunque la operación procese también el otro organismo.
+                            // Antes clasificacionTarifa=null hacía que SOLO encontrara COMUN.
+                            string? clasificacionEfectiva = conceptoEspejo.StartsWith("Certificado Fitosanitario", StringComparison.OrdinalIgnoreCase)
+                                ? "SAG"
+                                : conceptoEspejo.StartsWith("Certificado Sanitario", StringComparison.OrdinalIgnoreCase)
+                                    || conceptoEspejo.StartsWith("Certificado de Captura", StringComparison.OrdinalIgnoreCase)
+                                    ? "SERNAPESCA" : clasificacionTarifa;
+                            var tarifaDoc = !string.IsNullOrWhiteSpace(clasificacionEfectiva)
+                                ? tarifasAgencia.FirstOrDefault(t =>
+                                    VentaClienteHelper.Norm(t.Clasificacion) ==
+                                    VentaClienteHelper.Norm(clasificacionEfectiva))
+                                    ?? tarifasAgencia.FirstOrDefault(EsGenerica)
+                                : tarifasAgencia.FirstOrDefault(EsGenerica);
 
                             if (tarifaDoc != null)
                             {
                                 montoCosto = tarifaDoc.ValorNeto;
                                 moneda = tarifaDoc.Moneda ?? "CLP";
+                                // El costo $0 definido expresamente por Comercial es válido.
+                                hayTarifaDocumental = true;
                             }
                         }
 
-                        if (montoCosto == 0m)
+                        if (!hayTarifaDocumental)
                         {
                             var tarifaMaestra = todasTarifasMaestrasDocumental
-                                .FirstOrDefault(t => t.Concepto.ToUpper().Contains(busquedaTarifa.ToUpper()));
+                                .FirstOrDefault(t => CoincideConceptoTarifaDocumental(t.Concepto, busquedaTarifa));
                             if (tarifaMaestra != null)
                             {
                                 montoCosto = tarifaMaestra.ValorNeto;
@@ -525,29 +704,43 @@ namespace AtilsonCargoSpa.Services
                             }
                         }
 
-                        string estadoVenta = (montoVenta > 0 || (valorOverride.HasValue && valorOverride.Value == 0)) ? "PROVISIÓN" : "PENDIENTE VALORIZAR";
-                        string estadoCosto = (montoCosto > 0 || (valorOverride.HasValue && valorOverride.Value == 0)) ? "PROVISIÓN" : "PENDIENTE VALORIZAR";
+                        bool costoCeroConfigurado = hayTarifaDocumental && montoCosto == 0m;
+                        string estadoVenta = (montoVenta > 0 || costoCeroConfigurado || (valorOverride.HasValue && valorOverride.Value == 0)) ? "PROVISIÓN" : "PENDIENTE VALORIZAR";
+                        string estadoCosto = (montoCosto > 0 || costoCeroConfigurado || (valorOverride.HasValue && valorOverride.Value == 0)) ? "PROVISIÓN" : "PENDIENTE VALORIZAR";
 
                         bool esResponsableClienteDoc = txIngreso == null || string.IsNullOrEmpty(txIngreso.Responsable) || txIngreso.Responsable == ResponsabilidadValores.Cliente;
                         bool esGratuitoClienteDoc = EsConceptoGratuitoCliente(conceptoEspejo);
                         decimal montoVentaFinalDoc = (esResponsableClienteDoc && !esGratuitoClienteDoc) ? montoVenta : 0m;
                         string estadoVentaFinalDoc = esGratuitoClienteDoc ? "PROVISIÓN" : (esResponsableClienteDoc ? estadoVenta : "NO FACTURABLE");
 
-                        if (txIngreso == null) { if (generarIngreso) _context.TransaccionesFinancieras.Add(new TransaccionesFinanciera { IdOperacion = op.Id, GrupoCobro = "Documental", TipoMovimiento = "INGRESO", Concepto = conceptoEspejo, MontoNeto = montoVentaFinalDoc, Moneda = monedaVentaDoc, TipoCambio = esResponsableClienteDoc ? tasaVentaDoc : null, MontoOriginalUsd = esResponsableClienteDoc ? montoOriginalUsdVentaDoc : null, EstadoFila = estadoVentaFinalDoc, FechaCreacion = ahora, UsuarioCreador = usuario, IdCliente = op.IdCliente, NumeroDocumento = numeroDocumento, ResponsablePago = ResponsabilidadValores.Atilson, Responsable = ResponsabilidadValores.Cliente }); }
+                        if (txIngreso == null) { if (generarIngreso) _context.TransaccionesFinancieras.Add(new TransaccionesFinanciera { IdOperacion = op.Id, GrupoCobro = "Documental", TipoMovimiento = "INGRESO", Concepto = conceptoEspejo, MontoNeto = montoVentaFinalDoc, Moneda = monedaVentaDoc, TipoCambio = esResponsableClienteDoc ? tasaVentaDoc : null, MontoOriginalUsd = esResponsableClienteDoc ? montoOriginalUsdVentaDoc : null, EstadoFila = estadoVentaFinalDoc, FechaCreacion = ahora, UsuarioCreador = usuario, IdCliente = op.IdCliente, NumeroDocumentoDocumental = numeroDocumento, ResponsablePago = ResponsabilidadValores.Atilson, Responsable = ResponsabilidadValores.Cliente }); }
                         else
                         {
-                            txIngreso.NumeroDocumento = numeroDocumento;
-                            if (txIngreso.EstadoFila == "PENDIENTE VALORIZAR" || necesitaAjusteGratuito || necesitaAjusteVenta) { txIngreso.MontoNeto = montoVentaFinalDoc; txIngreso.Moneda = monedaVentaDoc; txIngreso.EstadoFila = estadoVentaFinalDoc; }
-                            else if (!esResponsableClienteDoc && txIngreso.EstadoFila != "NO FACTURABLE") { txIngreso.MontoNeto = 0m; txIngreso.EstadoFila = "NO FACTURABLE"; }
-                            if (convertirAClp) { txIngreso.TipoCambio = esResponsableClienteDoc ? tasaVentaDoc : null; txIngreso.MontoOriginalUsd = esResponsableClienteDoc ? montoOriginalUsdVentaDoc : null; }
+                            if (ProvisionalSinRespaldo(txIngreso))
+                            {
+                                txIngreso.NumeroDocumentoDocumental = numeroDocumento;
+                                // Resincronizar valores de tarifa aun si la fila ya estaba en PROVISIÓN.
+                                txIngreso.MontoNeto = montoVentaFinalDoc;
+                                txIngreso.Moneda = monedaVentaDoc;
+                                txIngreso.EstadoFila = estadoVentaFinalDoc;
+                                txIngreso.TipoCambio = esResponsableClienteDoc ? tasaVentaDoc : null;
+                                txIngreso.MontoOriginalUsd = esResponsableClienteDoc ? montoOriginalUsdVentaDoc : null;
+                            }
                         }
 
-                        if (txEgreso == null) _context.TransaccionesFinancieras.Add(new TransaccionesFinanciera { IdOperacion = op.Id, GrupoCobro = "Documental", TipoMovimiento = "EGRESO", Concepto = conceptoEspejo, MontoNeto = montoCosto, Moneda = moneda, TipoCambio = tasaUsadaDoc, MontoOriginalUsd = montoOriginalUsdDoc, EstadoFila = estadoCosto, FechaCreacion = ahora, UsuarioCreador = usuario, NumeroDocumento = numeroDocumento, ResponsablePago = ResponsabilidadValores.Atilson, Responsable = ResponsabilidadValores.Cliente });
+                        if (txEgreso == null) _context.TransaccionesFinancieras.Add(new TransaccionesFinanciera { IdOperacion = op.Id, GrupoCobro = "Documental", TipoMovimiento = "EGRESO", Concepto = conceptoEspejo, MontoNeto = montoCosto, Moneda = moneda, TipoCambio = tasaUsadaDoc, MontoOriginalUsd = montoOriginalUsdDoc, EstadoFila = estadoCosto, FechaCreacion = ahora, UsuarioCreador = usuario, NumeroDocumentoDocumental = numeroDocumento, ResponsablePago = ResponsabilidadValores.Atilson, Responsable = ResponsabilidadValores.Cliente });
                         else
                         {
-                            txEgreso.NumeroDocumento = numeroDocumento;
-                            if (txEgreso.EstadoFila == "PENDIENTE VALORIZAR" && montoCosto >= 0) { txEgreso.MontoNeto = montoCosto; txEgreso.Moneda = moneda; txEgreso.EstadoFila = estadoCosto; }
-                            if (convertirAClp) { txEgreso.TipoCambio = tasaUsadaDoc; txEgreso.MontoOriginalUsd = montoOriginalUsdDoc; }
+                            if (ProvisionalSinRespaldo(txEgreso))
+                            {
+                                txEgreso.NumeroDocumentoDocumental = numeroDocumento;
+                                // Egresos provisionales deben seguir la tarifa vigente de Comercial.
+                                txEgreso.MontoNeto = montoCosto;
+                                txEgreso.Moneda = moneda;
+                                txEgreso.EstadoFila = estadoCosto;
+                                txEgreso.TipoCambio = tasaUsadaDoc;
+                                txEgreso.MontoOriginalUsd = montoOriginalUsdDoc;
+                            }
                         }
                     }
                 }
@@ -564,46 +757,11 @@ namespace AtilsonCargoSpa.Services
             bool isMaritimo = new[] { 1, 2, 3, 5, 8, 9, 10, 12 }.Contains(op.IdTipoServicio ?? 0);
             string naviera = op.IdNavieraNavigation?.NombreNaviera ?? "Por Confirmar";
 
-            // Modalidad Collect / No Prepaid (instrucción de Cristian): el consignatario le
-            // paga el flete directo a la naviera, la naviera nos paga un REBATE a nosotros
-            // (INGRESO) y nosotros le devolvemos una parte al cliente (EGRESO). La diferencia
-            // es nuestra comisión/profit. Mismo GrupoCobro "Marítimo" para heredar el mismo
-            // tratamiento IVA-exento que ya tienen ControlFinanciero/AcuerdosOperativos, pero
-            // con Concepto "Rebate Marítimo (...)" — NO usa GenerarEspejo porque esa función
-            // siempre espeja Ingreso=Egreso del mismo monto, y aquí son dos montos
-            // independientes (Rebate Naviera ≠ Rebate Cliente).
+            // Collect / Full Collect: el flete marítimo lo paga el consignatario
+            // a la naviera. Control Financiero no genera ni muestra conceptos
+            // Rebate Marítimo. Las tarifas Collect se mantienen disponibles para
+            // reglas operacionales y condiciones comerciales sin costo.
             bool esCollectMar = op.CondicionPago == 3 || op.CondicionPago == 4; // Collect / Full Collect
-
-            async Task GenerarRebateMaritimo(string concepto, string tipoMovimiento, bool activo, decimal? valorOverride, string moneda, string responsable, string responsablePago)
-            {
-                var txsRebate = txExistentes.Where(t => t.GrupoCobro == "Marítimo" && t.Concepto == concepto && t.TipoMovimiento == tipoMovimiento).ToList();
-                var txRebate = txsRebate.FirstOrDefault();
-                if (txsRebate.Count > 1) _context.TransaccionesFinancieras.RemoveRange(txsRebate.Skip(1));
-
-                if (activo)
-                {
-                    decimal monto = valorOverride ?? 0m;
-                    string estado = monto > 0 ? "PROVISIÓN" : "PENDIENTE VALORIZAR";
-                    if (txRebate == null)
-                    {
-                        _context.TransaccionesFinancieras.Add(new TransaccionesFinanciera
-                        {
-                            IdOperacion = op.Id, GrupoCobro = "Marítimo", TipoMovimiento = tipoMovimiento, Concepto = concepto,
-                            MontoNeto = monto, Moneda = moneda, EstadoFila = estado, FechaCreacion = ahora, UsuarioCreador = usuario,
-                            IdCliente = op.IdCliente, IdProveedor = tipoMovimiento == "INGRESO" ? op.IdNaviera : null,
-                            ResponsablePago = responsablePago, Responsable = responsable, IvaExento = true
-                        });
-                    }
-                    else if (!txRebate.TarifaManual)
-                    {
-                        txRebate.MontoNeto = monto; txRebate.Moneda = moneda; txRebate.EstadoFila = estado; txRebate.IvaExento = true;
-                    }
-                }
-                else if (txRebate != null && (txRebate.EstadoFila == "PROVISIÓN" || txRebate.EstadoFila == "PENDIENTE VALORIZAR"))
-                {
-                    _context.TransaccionesFinancieras.Remove(txRebate);
-                }
-            }
 
             decimal? valorFleteMarDb = null;
             decimal? valorRebateNavieraDb = null;
@@ -677,9 +835,9 @@ namespace AtilsonCargoSpa.Services
             // las condiciones sin costo (Late Arrival, Extra Late, Corrección de BL).
             TarifaCollect? acuerdoCollectNaviera = null;
             TarifaCollect? acuerdoCollectCliente = null;
+            List<TarifaCollect> tarifasCollectNav = new();
             if (isMaritimo && esCollectMar && op.IdNaviera > 0)
             {
-                List<TarifaCollect> tarifasCollectNav;
                 try
                 {
                     tarifasCollectNav = await _context.TarifasCollect.AsNoTracking()
@@ -715,7 +873,9 @@ namespace AtilsonCargoSpa.Services
                     ? VentaClienteHelper.ElegirMaritima(ventasCliente, op.IdNaviera, op.IdPuertoOrigenNavigation?.NombrePuerto, op.IdPuertoDestinoNavigation?.NombrePuerto, VentaClienteHelper.EquipoOperacion(cf.Equipo, cf.TipoCarga), cf.Condicion)
                     : null;
                 string conceptoFlete = $"Flete Marítimo{sufijoFlete} ({naviera})";
+                // Flete marítimo: USD y exento, costo y venta, todas las navieras (nov-2026).
                 await GenerarEspejo("Marítimo", conceptoFlete, isMaritimo && !esCollectMar, $"Flete Marítimo{sufijoFlete}", fleteCosto, "USD", soloTarifaEspecifica: true,
+                    ivaExento: true,
                     valorVentaOverride: ventaFlete?.PrecioPactado, monedaVentaOverride: ventaFlete?.Moneda);
 
                 // Handling de la venta (Comercial > Clientes > Marítimo): va en la línea de
@@ -741,76 +901,137 @@ namespace AtilsonCargoSpa.Services
                 }
             }
 
-            // Rebate Marítimo (modelo Collect / No Prepaid), ver nota más arriba.
-            if (isMaritimo && op.IdCliente != null)
+            // REBATES MARÍTIMOS: exclusivamente para COLLECT / FULL COLLECT.
+            // El consignatario paga el flete; la naviera paga su rebate a Atilson
+            // (INGRESO) y Atilson entrega al cliente el suyo (EGRESO).
+            // Nunca espejar ambas direcciones: son montos y contrapartes distintos.
+            // Un movimiento facturado/pagado/con respaldo o manual jamás se altera.
+            void SincronizarRebate(string concepto, string movimiento, decimal? valor, string moneda)
             {
-                decimal? valorRebateClienteDb = null;
-                if (esCollectMar)
-                {
-                    // AUDITORÍA oct-2026: antes esto tomaba "la tarifa Marítimo más reciente
-                    // del cliente" sin cruzarla con la naviera/ruta real de esta operación —
-                    // un cliente que embarca con más de una naviera (o ruta) puede tener varias
-                    // filas TarifasClientes activas con GrupoCobro="Marítimo", cada una con su
-                    // propio RebateUsd, y la más reciente no es necesariamente la que aplica a
-                    // ESTE booking. Se corrige con el mismo criterio de cruce Naviera+POL+POD
-                    // que ya usa candidatasMar/PolPodOk arriba (coincidencia exacta primero,
-                    // mismo cruce "contains" en ambos sentidos para tolerar nombres parciales,
-                    // y una cascada de respaldo si no hay match exacto).
-                    string polNombreRebate = (op.IdPuertoOrigenNavigation?.NombrePuerto ?? "").ToUpper();
-                    string podNombreRebate = (op.IdPuertoDestinoNavigation?.NombrePuerto ?? "").ToUpper();
+                var anteriores = txExistentes.Where(t => t.GrupoCobro == "Marítimo" &&
+                    string.Equals(t.Concepto, concepto, StringComparison.OrdinalIgnoreCase) &&
+                    t.TipoMovimiento == movimiento).ToList();
+                // Mantener primero un asiento protegido para no generar una segunda provisión.
+                var actual = anteriores.FirstOrDefault(t => !ProvisionalSinRespaldo(t)) ??
+                    anteriores.FirstOrDefault();
+                foreach (var duplicado in anteriores.Where(t => t != actual && ProvisionalSinRespaldo(t)))
+                    _context.TransaccionesFinancieras.Remove(duplicado);
 
-                    bool PolPodOkCliente(TarifasCliente t)
+                if (!isMaritimo || !esCollectMar)
+                {
+                    if (actual != null && ProvisionalSinRespaldo(actual))
+                        _context.TransaccionesFinancieras.Remove(actual);
+                    return;
+                }
+
+                decimal monto = Math.Max(0m, valor ?? 0m);
+                string estado = valor.HasValue && monto > 0m ? "PROVISIÓN" : "PENDIENTE VALORIZAR";
+                if (actual == null)
+                {
+                    _context.TransaccionesFinancieras.Add(new TransaccionesFinanciera
                     {
-                        var pol = (t.Pol ?? "").ToUpper();
-                        var pod = (t.Pod ?? "").ToUpper();
-                        bool polOk = string.IsNullOrEmpty(polNombreRebate) || pol.Contains(polNombreRebate) || polNombreRebate.Contains(pol);
-                        bool podOk = string.IsNullOrEmpty(podNombreRebate) || pod.Contains(podNombreRebate) || podNombreRebate.Contains(pod);
-                        return polOk && podOk;
-                    }
-
-                    var candidatasRebateCliente = await _context.TarifasClientes.AsNoTracking()
-                        .Where(t => t.IdCliente == op.IdCliente && t.EsActiva && t.GrupoCobro == "Marítimo")
-                        .OrderByDescending(t => t.Id)
-                        .ToListAsync();
-
-                    // 1° intento: misma naviera y misma ruta (POL/POD) que esta operación.
-                    // 2° intento: misma naviera, sin exigir ruta exacta.
-                    // 3° intento: cualquier tarifa Marítimo activa del cliente (mejor
-                    // referencia disponible que ninguna) — mismo criterio de respaldo que
-                    // el 3er intento de candidatasMar más arriba.
-                    var tarifaClienteCollect =
-                        candidatasRebateCliente.FirstOrDefault(t => t.IdNaviera == op.IdNaviera && PolPodOkCliente(t))
-                        ?? candidatasRebateCliente.FirstOrDefault(t => t.IdNaviera == op.IdNaviera)
-                        ?? candidatasRebateCliente.FirstOrDefault();
-
-                    valorRebateClienteDb = tarifaClienteCollect?.RebateUsd;
+                        IdOperacion = op.Id,
+                        GrupoCobro = "Marítimo",
+                        TipoMovimiento = movimiento,
+                        Concepto = concepto,
+                        MontoNeto = monto,
+                        Moneda = moneda,
+                        EstadoFila = estado,
+                        IvaExento = true,
+                        IdCliente = movimiento == "EGRESO" ? op.IdCliente : null,
+                        ResponsablePago = movimiento == "INGRESO" ? "NAVIERA" : "ATILSON",
+                        Responsable = movimiento == "EGRESO" ? ResponsabilidadValores.Cliente : ResponsabilidadValores.Atilson,
+                        FechaCreacion = ahora,
+                        UsuarioCreador = usuario
+                    });
                 }
-
-                // oct-2026: con tarifa Collect, el rebate de cada lado es Pública − Neta; sin
-                // ella se usa el RebateUsd antiguo. El rebate es por contenedor: una línea por
-                // cada uno ("(Uxx)" para los adicionales). Si el acuerdo del cliente no le
-                // entrega rebate (0), no se genera su línea.
-                decimal? rebateNaviera = acuerdoCollectNaviera != null ? acuerdoCollectNaviera.RebateUsd : valorRebateNavieraDb;
-                decimal? rebateCliente = acuerdoCollectCliente != null ? acuerdoCollectCliente.RebateUsd : valorRebateClienteDb;
-                bool generaRebateCliente = esCollectMar && !(acuerdoCollectCliente != null && acuerdoCollectCliente.RebateUsd <= 0m);
-                var unidadesRebate = new List<int?> { null };
-                unidadesRebate.AddRange((op.Unidadestecnicas ?? new List<Unidadestecnica>()).Select(u => (int?)u.Id));
-                foreach (var idURebate in unidadesRebate)
+                else if (ProvisionalSinRespaldo(actual))
                 {
-                    string sufijoRebate = idURebate.HasValue ? $" (U{idURebate})" : "";
-                    await GenerarRebateMaritimo($"Rebate Marítimo (Naviera){sufijoRebate}", "INGRESO", esCollectMar, rebateNaviera, "USD", "NAVIERA", "NAVIERA");
-                    await GenerarRebateMaritimo($"Rebate Marítimo (Cliente){sufijoRebate}", "EGRESO", generaRebateCliente, rebateCliente, "USD", "ATILSON", "ATILSON");
+                    actual.MontoNeto = monto;
+                    actual.Moneda = moneda;
+                    actual.EstadoFila = estado;
+                    actual.IvaExento = true;
                 }
-                // Líneas de contenedores que ya no existen (solo en provisión).
-                var idsUnidadesRebate = unidadesRebate.Where(x => x.HasValue).Select(x => x!.Value).ToHashSet();
-                foreach (var txHuerfano in txExistentes.Where(t => t.GrupoCobro == "Marítimo" && (t.Concepto ?? "").StartsWith("Rebate Marítimo (")).ToList())
+            }
+
+            bool CoincideEquipoCollect(string? equipoTarifa, string? equipoOperacion)
+            {
+                if (string.IsNullOrWhiteSpace(equipoTarifa)) return true;
+                string general = equipoTarifa.Trim().ToUpperInvariant();
+                if (general is "ALL" or "TODOS" or "TODAS" or "AMBOS") return true;
+                var (tamTar, tipoTar) = NormalizarEquipo(equipoTarifa);
+                var (tamOp, tipoOp) = NormalizarEquipo(equipoOperacion);
+                if (tamOp == "") return false;
+                bool reeferOperacion = tipoOp == "RF";
+                if (tamTar == "")
                 {
-                    var mU = System.Text.RegularExpressions.Regex.Match(txHuerfano.Concepto ?? "", @"\(U(\d+)\)");
-                    if (mU.Success && !idsUnidadesRebate.Contains(int.Parse(mU.Groups[1].Value))
-                        && (txHuerfano.EstadoFila == "PROVISIÓN" || txHuerfano.EstadoFila == "PENDIENTE VALORIZAR")
-                        && _context.Entry(txHuerfano).State != EntityState.Deleted)
-                        _context.TransaccionesFinancieras.Remove(txHuerfano);
+                    if (general.Contains("REEFER") || general is "RF") return reeferOperacion;
+                    if (general.Contains("DRY") || general.Contains("SECO")) return !reeferOperacion;
+                    return false;
                 }
+                return tamTar == tamOp &&
+                    (tipoTar == tipoOp || (tipoTar == "RF") == reeferOperacion);
+            }
+            bool CoincideLugarRebate(string? tarifaLugar, string? operacionLugar)
+                => string.IsNullOrWhiteSpace(tarifaLugar) ||
+                   (!string.IsNullOrWhiteSpace(operacionLugar) &&
+                    (string.Equals(tarifaLugar.Trim(), operacionLugar.Trim(), StringComparison.OrdinalIgnoreCase) ||
+                     tarifaLugar.Contains(operacionLugar, StringComparison.OrdinalIgnoreCase) ||
+                     operacionLugar.Contains(tarifaLugar, StringComparison.OrdinalIgnoreCase)));
+
+            var tarifasRebateCliente = isMaritimo && esCollectMar
+                ? await _context.TarifasClientes.AsNoTracking()
+                    .Where(t => t.IdCliente == op.IdCliente && t.EsActiva &&
+                        t.GrupoCobro == "Marítimo" && t.RebateUsd.HasValue &&
+                        t.FechaInicioVigencia <= ahora && t.FechaFinVigencia >= ahora.Date)
+                    .OrderByDescending(t => t.FechaInicioVigencia).ThenByDescending(t => t.Id)
+                    .ToListAsync()
+                : new List<TarifasCliente>();
+
+            foreach (var unidadRebate in contenedoresFlete)
+            {
+                string sufijo = unidadRebate.IdUnidad.HasValue ? $" (U{unidadRebate.IdUnidad})" : "";
+                // En un booking multiequipo (20'/40', Dry/Reefer) el acuerdo Collect
+                // debe corresponder a ESTE contenedor, no al equipo de la primera fila.
+                var acuerdosEquipo = tarifasCollectNav.Where(t =>
+                    CoincideEquipoCollect(t.Equipamiento, unidadRebate.Equipo)).ToList();
+                DateTime fechaAcuerdo = op.EtdPol ?? ahora;
+                var acuerdoNavUnidad = AcuerdoCollectHelper.Elegir(acuerdosEquipo,
+                    TarifaCollect.TipoNaviera, null, op.IdNaviera,
+                    op.IdPuertoOrigenNavigation?.NombrePuerto,
+                    op.IdPuertoDestinoNavigation?.NombrePuerto, op.Commodity, fechaAcuerdo);
+                var acuerdoCliUnidad = AcuerdoCollectHelper.Elegir(acuerdosEquipo,
+                    TarifaCollect.TipoCliente, op.IdCliente, op.IdNaviera,
+                    op.IdPuertoOrigenNavigation?.NombrePuerto,
+                    op.IdPuertoDestinoNavigation?.NombrePuerto, op.Commodity, fechaAcuerdo);
+                bool acuerdoCliCoincide = acuerdoCliUnidad != null;
+
+                decimal? rebateNaviera = acuerdoNavUnidad?.RebateUsd
+                    ?? tarifaMarPorEquipo(unidadRebate.Equipo)?.RebateUsd;
+                var tarifaCliente = tarifasRebateCliente.FirstOrDefault(t =>
+                    (!t.IdNaviera.HasValue || t.IdNaviera.Value == op.IdNaviera) &&
+                    CoincideLugarRebate(t.Pol, op.IdPuertoOrigenNavigation?.NombrePuerto) &&
+                    CoincideLugarRebate(t.Pod, op.IdPuertoDestinoNavigation?.NombrePuerto) &&
+                    CoincideEquipoCollect(t.TipoContenedor, unidadRebate.Equipo));
+                decimal? rebateCliente = acuerdoCliCoincide ? acuerdoCliUnidad!.RebateUsd : tarifaCliente?.RebateUsd;
+                string monedaCliente = acuerdoCliCoincide ? "USD" : (tarifaCliente?.Moneda ?? "USD");
+
+                // Principal conserva el concepto histórico; adicionales llevan sufijo Uxx.
+                SincronizarRebate("Rebate Marítimo (Naviera)" + sufijo, "INGRESO", rebateNaviera, "USD");
+                SincronizarRebate("Rebate Marítimo (Cliente)" + sufijo, "EGRESO", rebateCliente, monedaCliente);
+            }
+
+            // Limpiar líneas de rebate de unidades eliminadas; solo si son provisiones
+            // automáticas sin respaldo. Nunca borrar movimientos contabilizados.
+            var idsRebate = contenedoresFlete.Where(u => u.IdUnidad.HasValue)
+                .Select(u => u.IdUnidad!.Value).ToHashSet();
+            foreach (var antiguo in txExistentes.Where(t => t.GrupoCobro == "Marítimo" &&
+                (t.Concepto ?? "").StartsWith("Rebate Marítimo", StringComparison.OrdinalIgnoreCase)).ToList())
+            {
+                var sufijo = System.Text.RegularExpressions.Regex.Match(antiguo.Concepto ?? "", @"\(U(\d+)\)");
+                if (sufijo.Success && !idsRebate.Contains(int.Parse(sufijo.Groups[1].Value)) &&
+                    ProvisionalSinRespaldo(antiguo) && _context.Entry(antiguo).State != EntityState.Deleted)
+                    _context.TransaccionesFinancieras.Remove(antiguo);
             }
 
             // 1b. TIPO DE EMISIÓN B/L — un tipo por booking (EmisionBlHelper):
@@ -834,7 +1055,9 @@ namespace AtilsonCargoSpa.Services
                     var tarifaBl = EmisionBlHelper.BuscarTarifa(tarifasBlNaviera, tipoBl, op.TipoEmisionBlOtro);
                     decimal? valorBl = tarifaBl?.ValorNeto;
                     string monedaBl = string.IsNullOrWhiteSpace(tarifaBl?.Moneda) ? "USD" : tarifaBl!.Moneda;
-                    bool? ivaExentoBl = false; // Emisión BL siempre + IVA (USD o CLP)
+                    // Emisión BL: siempre CLP + IVA en Finanzas (costo y venta), cobre la naviera en
+                    // USD o CLP y venga o no exenta en su tarifa (nov-2026).
+                    bool? ivaExentoBl = false;
 
                     string busquedaBl = EmisionBlHelper.PrefijoConcepto + nombreBl;
                     // Originales muestra el Lugar de emisión en el concepto (informativo:
@@ -872,11 +1095,11 @@ namespace AtilsonCargoSpa.Services
             // Devuelve la tarifa del tramo y el transportista de ESE contenedor (oct-2026: el
             // Id se guarda en la fila de egreso para que Control Financiero muestre el
             // transportista de cada contenedor y no el del principal en todos).
-            async Task<(decimal? Valor, int? IdProveedor)> ObtenerTarifaTransportistaAsync(OperacionesTerrestre? terrUnidad, string retiroU, string plantaU, string entregaU)
+            async Task<(decimal? Valor, int? IdProveedor)> ObtenerTarifaTransportistaAsync(OperacionesTerrestre? terrUnidad, string retiroU, string plantaU, string entregaU, int idTipoCargaU)
             {
                 // Cruce en Helpers/TarifaTransporteHelper (mismo que usa el diagnóstico de
                 // Control Financiero "¿Por qué no hay tarifa?").
-                var res = await TarifaTransporteHelper.BuscarAsync(_context, terrUnidad, op.IdTipoCarga, retiroU, plantaU, entregaU, ahora);
+                var res = await TarifaTransporteHelper.BuscarAsync(_context, terrUnidad, idTipoCargaU, retiroU, plantaU, entregaU, ahora);
                 return (res.Valor, res.IdProveedor);
             }
 
@@ -920,19 +1143,26 @@ namespace AtilsonCargoSpa.Services
                 string rutaU = $"{retiroU} - {plantaU} - {entregaU}";
                 string sufijoU = $" (U{terrU.IdUnidadTecnica})";
 
-                var (tarifaU, idTransportistaU) = await ObtenerTarifaTransportistaAsync(terrU, retiroU, plantaU, entregaU);
+                // Cada contenedor adicional con SU equipo (nov-2026): antes se usaba el
+                // Dry/Reefer y el tamaño del contenedor principal para costo y venta.
+                var unidadTer = (op.Unidadestecnicas ?? new List<Unidadestecnica>()).FirstOrDefault(u => u.Id == terrU.IdUnidadTecnica);
+                int tipoCargaU = unidadTer?.IdTipoCarga ?? op.IdTipoCarga;
+                string equipoVentaU = VentaClienteHelper.EquipoOperacion(
+                    string.IsNullOrWhiteSpace(unidadTer?.TipoContenedor) ? op.TipoContenedor : unidadTer!.TipoContenedor, tipoCargaU);
 
-                var ventaTerrU = VentaClienteHelper.ElegirTerrestre(ventasCliente, retiroU, plantaU, entregaU, equipoOpVenta);
+                var (tarifaU, idTransportistaU) = await ObtenerTarifaTransportistaAsync(terrU, retiroU, plantaU, entregaU, tipoCargaU);
+
+                var ventaTerrU = VentaClienteHelper.ElegirTerrestre(ventasCliente, retiroU, plantaU, entregaU, equipoVentaU);
                 if (ventaTerrU == null && ventasCliente.Any())
                 {
                     var ciuU = await TarifaTransporteHelper.CiudadesTramoAsync(_context, terrU, retiroU, plantaU, entregaU);
-                    ventaTerrU = VentaClienteHelper.ElegirTerrestre(ventasCliente, ciuU.Retiro, ciuU.Planta, ciuU.Puerto, equipoOpVenta);
+                    ventaTerrU = VentaClienteHelper.ElegirTerrestre(ventasCliente, ciuU.Retiro, ciuU.Planta, ciuU.Puerto, equipoVentaU);
                 }
                 await GenerarEspejo("Transporte", $"Flete Terrestre{sufijoU} ({rutaU})", true, $"Flete Terrestre{sufijoU}", tarifaU, "CLP", idProveedorOverride: idTransportistaU, soloTarifaEspecifica: true,
                     valorVentaOverride: ventaTerrU?.PrecioPactado, monedaVentaOverride: ventaTerrU?.Moneda);
             }
 
-            // 2b. TARIFA PLANA PAQUETIZADA (acuerdos comerciales especiales, ej. Promar)
+            // 2b. TARIFA PLANA PAQUETIZADA (acuerdos comerciales especiales, ej. Marfrio)
             var tarifaPlanaCliente = await _context.TarifasClientes.AsNoTracking()
                 .Where(t => t.IdCliente == op.IdCliente && t.EsActiva && t.Concepto != null && t.Concepto.ToUpper().Contains("TARIFA PLANA PAQUETIZADA"))
                 .OrderByDescending(t => t.Id)
@@ -986,14 +1216,53 @@ namespace AtilsonCargoSpa.Services
                 await _context.SaveChangesAsync();
             }
 
-            var docsAProcesar = op.OperacionesDocumentales
-                .GroupBy(d => d.IdUnidadTecnica)
-                .Select(g => g.OrderBy(x => x.Id).First());
+            // Cada certificado genera COSTO por contenedor, aunque en Operaciones se
+            // haya elegido administrar el certificado de forma conjunta. Las unidades
+            // sin ficha documental propia heredan el trámite y la agencia principales,
+            // pero NO heredan su número de certificado (son documentos diferentes).
+            var docPrincipalCertificados = op.OperacionesDocumentales
+                .Where(d => d.IdUnidadTecnica == null).OrderBy(d => d.Id).FirstOrDefault()
+                ?? op.OperacionesDocumentales.OrderBy(d => d.Id).FirstOrDefault();
+            var contenedoresCert = new List<int?> { null };
+            contenedoresCert.AddRange((op.Unidadestecnicas ?? new List<Unidadestecnica>())
+                .OrderBy(u => u.Id).Select(u => (int?)u.Id));
 
-            foreach (var doc in docsAProcesar)
+            // GRUPAL / INDIVIDUAL son valores históricos persistidos en SQL:
+            // visualmente se muestran como "Por booking" / "Por contenedor".
+            bool CertPorBooking(string cert) => !string.Equals(cert switch
             {
-                int? idAg = doc.IdAgenciaAduana;
-                string sufijoUnidad = doc.IdUnidadTecnica.HasValue ? $" (U{doc.IdUnidadTecnica})" : "";
+                "ori" => op.ModalidadCertOrigen,
+                "fit" => op.ModalidadCertFito,
+                "san" => op.ModalidadCertSanitario,
+                "cap" => op.ModalidadCertCaptura,
+                _ => null
+            }, "INDIVIDUAL", StringComparison.OrdinalIgnoreCase);
+
+            foreach (var idUnidadCert in contenedoresCert)
+            {
+                var docReal = op.OperacionesDocumentales
+                    .Where(d => d.IdUnidadTecnica == idUnidadCert).OrderBy(d => d.Id).FirstOrDefault();
+                var doc = docReal ?? docPrincipalCertificados;
+                if (doc == null) continue;
+                int? idAg = doc.IdAgenciaAduana ?? docPrincipalCertificados?.IdAgenciaAduana;
+                string sufijoUnidad = idUnidadCert.HasValue ? $" (U{idUnidadCert.Value})" : "";
+                bool tieneFichaPropia = docReal != null;
+                bool numeroCertificadoPropio = !idUnidadCert.HasValue || tieneFichaPropia;
+                // Los organismos requeridos en la operación aplican también a
+                // contenedores adicionales, salvo que se trate de un trámite
+                // exclusivo de otra operación. Los datos propios prevalecen.
+                bool aplicaSagUnidad = doc.AplicaSag ||
+                    (idUnidadCert.HasValue && docPrincipalCertificados?.AplicaSag == true);
+                bool aplicaSernaUnidad = doc.AplicaSernapesca ||
+                    (idUnidadCert.HasValue && docPrincipalCertificados?.AplicaSernapesca == true);
+                bool aplicaOrigenUnidad = doc.CertificadoOrigen == true ||
+                    (idUnidadCert.HasValue && docPrincipalCertificados?.CertificadoOrigen == true);
+                string? modalidadSagUnidad = doc.SagModalidad ??
+                    docPrincipalCertificados?.SagModalidad;
+                bool generarIngresoOrigen = !CertPorBooking("ori") || !idUnidadCert.HasValue;
+                bool generarIngresoFito = !CertPorBooking("fit") || !idUnidadCert.HasValue;
+                bool generarIngresoSanitario = !CertPorBooking("san") || !idUnidadCert.HasValue;
+                bool generarIngresoCaptura = !CertPorBooking("cap") || !idUnidadCert.HasValue;
 
                 bool esClienteEspecialOrigen = op.IdClienteNavigation?.EsClienteEspecial == true;
                 string? acuerdoOrigenEfectivo = doc.AcuerdoOrigen;
@@ -1004,40 +1273,44 @@ namespace AtilsonCargoSpa.Services
                 }
                 decimal? valorAcuerdoOrigen = CalcularValorAcuerdoOrigen(acuerdoOrigenEfectivo, esClienteEspecialOrigen);
                 string? monedaAcuerdoOrigen = valorAcuerdoOrigen.HasValue ? "CLP" : null;
+                // El certificado de origen también puede estar tarifado dentro del
+                // grupo SAG/Sernapesca de esta operación, no solo en COMUNES.
+                string? clasificacionOrigen = doc.AplicaSag ? "SAG"
+                    : doc.AplicaSernapesca ? "SERNAPESCA" : null;
                 bool ori2Bloqueado = DocumentalHelpers.SlotBloqueado(doc, "ori", 2);
                 bool ori3Bloqueado = DocumentalHelpers.SlotBloqueado(doc, "ori", 3);
                 bool ori4Bloqueado = DocumentalHelpers.SlotBloqueado(doc, "ori", 4);
 
-                await GenerarEspejoDocumental($"Certificado de Origen{sufijoUnidad}", doc.CertificadoOrigen == true, "CERTIFICADO ORIGEN", idAg, valorAcuerdoOrigen ?? doc.ValOri1, doc.RemisionOrigen1, monedaAcuerdoOrigen);
-                await GenerarEspejoDocumental($"Certificado de Origen R1{sufijoUnidad}", doc.CertificadoOrigen == true && ori2Bloqueado, "RE-EMISION CERTIFICADOS ORIGEN", idAg, valorAcuerdoOrigen ?? doc.ValOri2, doc.RemisionOrigen2, monedaAcuerdoOrigen);
-                await GenerarEspejoDocumental($"Certificado de Origen R2{sufijoUnidad}", doc.CertificadoOrigen == true && ori3Bloqueado, "RE-EMISION CERTIFICADOS ORIGEN", idAg, valorAcuerdoOrigen ?? doc.ValOri3, doc.NumOri3, monedaAcuerdoOrigen);
-                await GenerarEspejoDocumental($"Certificado de Origen R3{sufijoUnidad}", doc.CertificadoOrigen == true && ori4Bloqueado, "RE-EMISION CERTIFICADOS ORIGEN", idAg, valorAcuerdoOrigen ?? doc.ValOri4, doc.NumOri4, monedaAcuerdoOrigen);
+                await GenerarEspejoDocumental($"Certificado de Origen{sufijoUnidad}", aplicaOrigenUnidad, "CERTIFICADO ORIGEN", idAg, valorAcuerdoOrigen ?? doc.ValOri1, (numeroCertificadoPropio ? doc.RemisionOrigen1 : null), monedaAcuerdoOrigen, clasificacionTarifa: clasificacionOrigen, generarIngreso: generarIngresoOrigen);
+                await GenerarEspejoDocumental($"Certificado de Origen R1{sufijoUnidad}", aplicaOrigenUnidad && ori2Bloqueado, "RE-EMISION CERTIFICADOS ORIGEN", idAg, valorAcuerdoOrigen ?? doc.ValOri2, (numeroCertificadoPropio ? doc.RemisionOrigen2 : null), monedaAcuerdoOrigen, clasificacionTarifa: clasificacionOrigen, generarIngreso: generarIngresoOrigen);
+                await GenerarEspejoDocumental($"Certificado de Origen R2{sufijoUnidad}", aplicaOrigenUnidad && ori3Bloqueado, "RE-EMISION CERTIFICADOS ORIGEN", idAg, valorAcuerdoOrigen ?? doc.ValOri3, (numeroCertificadoPropio ? doc.NumOri3 : null), monedaAcuerdoOrigen, clasificacionTarifa: clasificacionOrigen, generarIngreso: generarIngresoOrigen);
+                await GenerarEspejoDocumental($"Certificado de Origen R3{sufijoUnidad}", aplicaOrigenUnidad && ori4Bloqueado, "RE-EMISION CERTIFICADOS ORIGEN", idAg, valorAcuerdoOrigen ?? doc.ValOri4, (numeroCertificadoPropio ? doc.NumOri4 : null), monedaAcuerdoOrigen, clasificacionTarifa: clasificacionOrigen, generarIngreso: generarIngresoOrigen);
 
                 bool fit2Bloqueado = DocumentalHelpers.SlotBloqueado(doc, "fit", 2);
                 bool fit3Bloqueado = DocumentalHelpers.SlotBloqueado(doc, "fit", 3);
                 bool fit4Bloqueado = DocumentalHelpers.SlotBloqueado(doc, "fit", 4);
-                await GenerarEspejoDocumental($"Certificado Fitosanitario{sufijoUnidad}", doc.AplicaSag, "FITO", idAg, doc.ValFit1, doc.CertFitosanitario);
-                await GenerarEspejoDocumental($"Certificado Fitosanitario R1{sufijoUnidad}", doc.AplicaSag && fit2Bloqueado, "RE-EMISION CERTIFICADOS SAG", idAg, doc.ValFit2, doc.NumFit2);
-                await GenerarEspejoDocumental($"Certificado Fitosanitario R2{sufijoUnidad}", doc.AplicaSag && fit3Bloqueado, "RE-EMISION CERTIFICADOS SAG", idAg, doc.ValFit3, doc.NumFit3);
-                await GenerarEspejoDocumental($"Certificado Fitosanitario R3{sufijoUnidad}", doc.AplicaSag && fit4Bloqueado, "RE-EMISION CERTIFICADOS SAG", idAg, doc.ValFit4, doc.NumFit4);
+                await GenerarEspejoDocumental($"Certificado Fitosanitario{sufijoUnidad}", aplicaSagUnidad, "FITO", idAg, doc.ValFit1, (numeroCertificadoPropio ? doc.CertFitosanitario : null), generarIngreso: generarIngresoFito);
+                await GenerarEspejoDocumental($"Certificado Fitosanitario R1{sufijoUnidad}", aplicaSagUnidad && fit2Bloqueado, "RE-EMISION CERTIFICADOS SAG", idAg, doc.ValFit2, (numeroCertificadoPropio ? doc.NumFit2 : null), generarIngreso: generarIngresoFito);
+                await GenerarEspejoDocumental($"Certificado Fitosanitario R2{sufijoUnidad}", aplicaSagUnidad && fit3Bloqueado, "RE-EMISION CERTIFICADOS SAG", idAg, doc.ValFit3, (numeroCertificadoPropio ? doc.NumFit3 : null), generarIngreso: generarIngresoFito);
+                await GenerarEspejoDocumental($"Certificado Fitosanitario R3{sufijoUnidad}", aplicaSagUnidad && fit4Bloqueado, "RE-EMISION CERTIFICADOS SAG", idAg, doc.ValFit4, (numeroCertificadoPropio ? doc.NumFit4 : null), generarIngreso: generarIngresoFito);
 
                 bool san2Bloqueado = DocumentalHelpers.SlotBloqueado(doc, "san", 2);
                 bool san3Bloqueado = DocumentalHelpers.SlotBloqueado(doc, "san", 3);
                 bool san4Bloqueado = DocumentalHelpers.SlotBloqueado(doc, "san", 4);
-                await GenerarEspejoDocumental($"Certificado Sanitario{sufijoUnidad}", doc.AplicaSernapesca, "CERTIFICADO SANITARIO", idAg, doc.ValSan1, doc.CertSanitario);
-                await GenerarEspejoDocumental($"Certificado Sanitario R1{sufijoUnidad}", doc.AplicaSernapesca && san2Bloqueado, "RE-EMISION", idAg, doc.ValSan2, doc.NumSan2);
-                await GenerarEspejoDocumental($"Certificado Sanitario R2{sufijoUnidad}", doc.AplicaSernapesca && san3Bloqueado, "RE-EMISION", idAg, doc.ValSan3, doc.NumSan3);
-                await GenerarEspejoDocumental($"Certificado Sanitario R3{sufijoUnidad}", doc.AplicaSernapesca && san4Bloqueado, "RE-EMISION", idAg, doc.ValSan4, doc.NumSan4);
+                await GenerarEspejoDocumental($"Certificado Sanitario{sufijoUnidad}", aplicaSernaUnidad, "CERTIFICADO SANITARIO", idAg, doc.ValSan1, (numeroCertificadoPropio ? doc.CertSanitario : null), generarIngreso: generarIngresoSanitario);
+                await GenerarEspejoDocumental($"Certificado Sanitario R1{sufijoUnidad}", aplicaSernaUnidad && san2Bloqueado, "RE-EMISION", idAg, doc.ValSan2, (numeroCertificadoPropio ? doc.NumSan2 : null), generarIngreso: generarIngresoSanitario);
+                await GenerarEspejoDocumental($"Certificado Sanitario R2{sufijoUnidad}", aplicaSernaUnidad && san3Bloqueado, "RE-EMISION", idAg, doc.ValSan3, (numeroCertificadoPropio ? doc.NumSan3 : null), generarIngreso: generarIngresoSanitario);
+                await GenerarEspejoDocumental($"Certificado Sanitario R3{sufijoUnidad}", aplicaSernaUnidad && san4Bloqueado, "RE-EMISION", idAg, doc.ValSan4, (numeroCertificadoPropio ? doc.NumSan4 : null), generarIngreso: generarIngresoSanitario);
 
                 bool cap2Bloqueado = DocumentalHelpers.SlotBloqueado(doc, "cap", 2);
                 bool cap3Bloqueado = DocumentalHelpers.SlotBloqueado(doc, "cap", 3);
                 bool cap4Bloqueado = DocumentalHelpers.SlotBloqueado(doc, "cap", 4);
-                await GenerarEspejoDocumental($"Certificado de Captura{sufijoUnidad}", doc.AplicaSernapesca, "CERTIFICADO CAPTURA SERNAPESCA", idAg, doc.ValCap1, doc.NumCap1);
-                await GenerarEspejoDocumental($"Certificado de Captura R1{sufijoUnidad}", doc.AplicaSernapesca && cap2Bloqueado, "RE-EMISION", idAg, doc.ValCap2, doc.NumCap2);
-                await GenerarEspejoDocumental($"Certificado de Captura R2{sufijoUnidad}", doc.AplicaSernapesca && cap3Bloqueado, "RE-EMISION", idAg, doc.ValCap3, doc.NumCap3);
-                await GenerarEspejoDocumental($"Certificado de Captura R3{sufijoUnidad}", doc.AplicaSernapesca && cap4Bloqueado, "RE-EMISION", idAg, doc.ValCap4, doc.NumCap4);
+                await GenerarEspejoDocumental($"Certificado de Captura{sufijoUnidad}", aplicaSernaUnidad, "CERTIFICADO CAPTURA SERNAPESCA", idAg, doc.ValCap1, (numeroCertificadoPropio ? doc.NumCap1 : null), generarIngreso: generarIngresoCaptura);
+                await GenerarEspejoDocumental($"Certificado de Captura R1{sufijoUnidad}", aplicaSernaUnidad && cap2Bloqueado, "RE-EMISION", idAg, doc.ValCap2, (numeroCertificadoPropio ? doc.NumCap2 : null), generarIngreso: generarIngresoCaptura);
+                await GenerarEspejoDocumental($"Certificado de Captura R2{sufijoUnidad}", aplicaSernaUnidad && cap3Bloqueado, "RE-EMISION", idAg, doc.ValCap3, (numeroCertificadoPropio ? doc.NumCap3 : null), generarIngreso: generarIngresoCaptura);
+                await GenerarEspejoDocumental($"Certificado de Captura R3{sufijoUnidad}", aplicaSernaUnidad && cap4Bloqueado, "RE-EMISION", idAg, doc.ValCap4, (numeroCertificadoPropio ? doc.NumCap4 : null), generarIngreso: generarIngresoCaptura);
 
-                if (doc.AplicaSag)
+                if (aplicaSagUnidad)
                 {
                     const string justificacionSagPlanta = "Costo Cero (Inspección en Planta)";
 
@@ -1059,9 +1332,9 @@ namespace AtilsonCargoSpa.Services
                         txsFito = candidatosFito.Where(t => EsFitoDeEstaUnidad(t.Concepto)).ToList();
                     }
 
-                    if (doc.SagModalidad == "Planta")
+                    if (modalidadSagUnidad == "Planta")
                     {
-                        foreach (var tx in txsFito)
+                        foreach (var tx in txsFito.Where(ProvisionalSinRespaldo))
                         {
                             tx.MontoNeto = 0m;
                             tx.Moneda = "CLP";
@@ -1072,7 +1345,14 @@ namespace AtilsonCargoSpa.Services
                     }
                     else
                     {
-                        foreach (var tx in txsFito.Where(t => t.TarifaManual && t.JustificacionManual == justificacionSagPlanta))
+                        foreach (var tx in txsFito.Where(t =>
+                            t.TarifaManual && t.JustificacionManual == justificacionSagPlanta &&
+                            !t.FechaEmision.HasValue && !t.ConfirmadoAga &&
+                            t.EstadoFila is ("PROVISIÓN" or "PENDIENTE VALORIZAR") &&
+                            string.IsNullOrWhiteSpace(t.NumeroDocumento) &&
+                            string.IsNullOrWhiteSpace(t.NumeroOrdenCompra) &&
+                            string.IsNullOrWhiteSpace(t.RutaFactura) &&
+                            string.IsNullOrWhiteSpace(t.RutaComprobante)))
                         {
                             bool esReemision = tx.Concepto.Contains(" R1") || tx.Concepto.Contains(" R2") || tx.Concepto.Contains(" R3");
                             string busquedaFito = esReemision ? "RE-EMISION CERTIFICADOS SAG" : "FITO";
@@ -1080,19 +1360,37 @@ namespace AtilsonCargoSpa.Services
                             decimal montoTarifa = 0m;
                             string monedaTarifa = "USD";
 
+                            bool tarifaEncontrada = false;
                             if (idAg.HasValue)
                             {
-                                // Mismo preload en memoria que en GenerarEspejoDocumental (ver arriba).
-                                var tarifaDoc = todasTarifasDocumentalesActivas
-                                    .FirstOrDefault(t => t.IdAgenciaAduana == idAg.Value && t.Concepto.ToUpper().Contains(busquedaFito.ToUpper()));
-                                if (tarifaDoc != null) { montoTarifa = tarifaDoc.ValorNeto; monedaTarifa = tarifaDoc.Moneda ?? "USD"; }
+                                // La transición Planta -> Puerto usa exactamente el mismo
+                                // cruce SAG que un fitosanitario recién creado.
+                                var tarifasFito = todasTarifasDocumentalesActivas
+                                    .Where(t => t.IdAgenciaAduana == idAg.Value &&
+                                        CoincideConceptoTarifaDocumental(t.Concepto, busquedaFito)).ToList();
+                                var tarifaDoc = tarifasFito.FirstOrDefault(t =>
+                                        VentaClienteHelper.Norm(t.Clasificacion) == "SAG")
+                                    ?? tarifasFito.FirstOrDefault(t =>
+                                        string.IsNullOrWhiteSpace(t.Clasificacion) ||
+                                        VentaClienteHelper.Norm(t.Clasificacion).StartsWith("COMUN"));
+                                if (tarifaDoc != null)
+                                {
+                                    montoTarifa = tarifaDoc.ValorNeto;
+                                    monedaTarifa = tarifaDoc.Moneda ?? "CLP";
+                                    tarifaEncontrada = true;
+                                }
                             }
 
-                            if (montoTarifa == 0m)
+                            if (!tarifaEncontrada)
                             {
                                 var tarifaMaestra = todasTarifasMaestrasDocumental
-                                    .FirstOrDefault(t => t.Concepto.ToUpper().Contains(busquedaFito.ToUpper()));
-                                if (tarifaMaestra != null) { montoTarifa = tarifaMaestra.ValorNeto; monedaTarifa = tarifaMaestra.Moneda ?? "USD"; }
+                                    .FirstOrDefault(t => CoincideConceptoTarifaDocumental(t.Concepto, busquedaFito));
+                                if (tarifaMaestra != null)
+                                {
+                                    montoTarifa = tarifaMaestra.ValorNeto;
+                                    monedaTarifa = tarifaMaestra.Moneda ?? "CLP";
+                                    tarifaEncontrada = true;
+                                }
                             }
 
                             (montoTarifa, monedaTarifa) = await NormalizarMonedaDocumentalAsync(montoTarifa, monedaTarifa);
@@ -1101,21 +1399,13 @@ namespace AtilsonCargoSpa.Services
                             tx.Moneda = monedaTarifa;
                             tx.TarifaManual = false;
                             tx.JustificacionManual = null;
-                            tx.EstadoFila = montoTarifa > 0 ? "PROVISIÓN" : "PENDIENTE VALORIZAR";
+                            tx.EstadoFila = (montoTarifa > 0 || tarifaEncontrada) ? "PROVISIÓN" : "PENDIENTE VALORIZAR";
                         }
                     }
                 }
 
-                if (doc.AplicaSernapesca)
-                {
-                    var txsSani = _context.TransaccionesFinancieras.Local.Where(t => t.IdOperacion == op.Id && (t.Concepto ?? "").Contains("Certificado Sanitario")).ToList();
-                    if (!txsSani.Any()) txsSani = await _context.TransaccionesFinancieras.Where(t => t.IdOperacion == op.Id && (t.Concepto ?? "").Contains("Certificado Sanitario")).ToListAsync();
-                    foreach (var tx in txsSani) { if (tx.MontoNeto == 0m) tx.TarifaManual = false; }
-
-                    var txsCap = _context.TransaccionesFinancieras.Local.Where(t => t.IdOperacion == op.Id && (t.Concepto ?? "").Contains("Certificado de Captura")).ToList();
-                    if (!txsCap.Any()) txsCap = await _context.TransaccionesFinancieras.Where(t => t.IdOperacion == op.Id && (t.Concepto ?? "").Contains("Certificado de Captura")).ToListAsync();
-                    foreach (var tx in txsCap) { if (tx.MontoNeto == 0m) tx.TarifaManual = false; }
-                }
+                // Sernapesca no debe borrar marcas TarifaManual por el mero hecho de
+                // encontrar un monto 0: puede ser un ajuste legítimo de Finanzas.
 
                 await GenerarEspejoDocumental($"Trámite CODAUT{sufijoUnidad}", !string.IsNullOrEmpty(doc.NumCod1), "CODAUT", idAg, doc.ValCod1);
                 await GenerarEspejoDocumental($"Trámite CLAVE{sufijoUnidad}", !string.IsNullOrEmpty(doc.NumCla1), "CLAVE", idAg, doc.ValCla1);
@@ -1200,7 +1490,9 @@ namespace AtilsonCargoSpa.Services
                 {
                     bool tieneDus = !string.IsNullOrEmpty(docParaDus.DusDin);
                     bool tieneDin = !string.IsNullOrEmpty(docParaDus.Din);
-                    decimal? valorLegalizacionDus = tieneDus ? docParaDus.ValorDus : (tieneDin ? docParaDus.ValorDin : null);
+                    // nov-2026: el "Valor Trámite ($)" del DUS/DIN se quitó de la pestaña Documental;
+                    // el costo sale siempre de la tarifa de la agencia en Comercial.
+                    decimal? valorLegalizacionDus = null;
                     string busquedaLegalizacionDus = (tieneDin && !tieneDus) ? "DIN" : "DUS EMBARQUES NORMALES";
 
                     // oct-2026: la AGA cobra la Legalización/Emisión DUS por cada contenedor
@@ -1212,34 +1504,35 @@ namespace AtilsonCargoSpa.Services
                     var lineasDus = contenedoresDus.Select(idUnidadDus =>
                     {
                         var docUnidadDus = op.OperacionesDocumentales.FirstOrDefault(d => d.IdUnidadTecnica == idUnidadDus) ?? docParaDus;
-                        decimal? valorDusUnidad = (tieneDin && !tieneDus ? docUnidadDus.ValorDin : docUnidadDus.ValorDus) ?? valorLegalizacionDus;
+                        decimal? valorDusUnidad = valorLegalizacionDus;
                         // Venta al cliente (Comercial > Documental, SAG o SERNAPESCA): DUS sin IVA.
                         var ventaDusUnidad = VentaClienteHelper.ElegirDocumental(ventasCliente, esDus: true, VentaClienteHelper.ClasificacionDocumental(docUnidadDus));
-                        return (IdUnidad: idUnidadDus, IdAg: docUnidadDus.IdAgenciaAduana ?? docParaDus.IdAgenciaAduana, Valor: valorDusUnidad, Venta: ventaDusUnidad);
+                        // N° del DUS (o DIN) para la columna "N° Documento" de Control Financiero.
+                        string? numeroDus = (tieneDin && !tieneDus)
+                            ? (string.IsNullOrWhiteSpace(docUnidadDus.Din) ? docParaDus.Din : docUnidadDus.Din)
+                            : (string.IsNullOrWhiteSpace(docUnidadDus.DusDin) ? docParaDus.DusDin : docUnidadDus.DusDin);
+                        return (IdUnidad: idUnidadDus, IdAg: docUnidadDus.IdAgenciaAduana ?? docParaDus.IdAgenciaAduana, Valor: valorDusUnidad, Venta: ventaDusUnidad, Numero: numeroDus);
                     }).ToList();
-                    // Cobro grupal: la línea del 1° contenedor cobra la SUMA de todos.
-                    bool sumaDusConocida = lineasDus.All(l => l.Valor.HasValue);
-                    bool ventasDusCompletas = lineasDus.All(l => l.Venta != null) && lineasDus.Select(l => (l.Venta!.Moneda ?? "CLP").ToUpperInvariant()).Distinct().Count() == 1;
+                    // Cobro POR BOOKING (nov-2026, regla de Atilson): se cobra UNA sola vez al
+                    // cliente, en la línea del 1° contenedor, al valor de un contenedor; los demás
+                    // contenedores quedan solo con su costo. Por contenedor: un cobro por cada uno.
+                    // (Entre el 25-oct y el 10-nov la línea única cobraba la suma de todos.)
                     foreach (var l in lineasDus)
                     {
                         string sufijoDus = l.IdUnidad.HasValue ? $" (U{l.IdUnidad})" : "";
-                        bool esLineaGrupal = cobroAgenciaGrupal && !l.IdUnidad.HasValue && lineasDus.Count > 1;
-                        decimal? ventaDus = esLineaGrupal
-                            ? (ventasDusCompletas ? lineasDus.Sum(x => x.Venta!.PrecioPactado) : (sumaDusConocida ? lineasDus.Sum(x => x.Valor!.Value) : null))
-                            : l.Venta?.PrecioPactado;
-                        string? monedaVentaDus = (esLineaGrupal && !ventasDusCompletas) ? null : l.Venta?.Moneda;
                         await GenerarEspejoDocumental($"Legalización / Emisión DUS{sufijoDus}", true, busquedaLegalizacionDus, l.IdAg, l.Valor,
-                            valorVentaOverride: ventaDus,
-                            monedaVentaOverride: monedaVentaDus,
+                            numeroDocumento: l.Numero,
+                            valorVentaOverride: l.Venta?.PrecioPactado,
+                            monedaVentaOverride: l.Venta?.Moneda,
                             generarIngreso: !cobroAgenciaGrupal || !l.IdUnidad.HasValue,
-                            factorIngreso: esLineaGrupal && !sumaDusConocida && !ventasDusCompletas ? lineasDus.Count : 1m,
+                            factorIngreso: 1m,
                             forzarIngreso: true);
                     }
 
                     // El DUS se cobra al cliente sin IVA (oct-2026).
                     foreach (var txDusIng in _context.TransaccionesFinancieras.Local
                         .Where(t => t.IdOperacion == op.Id && t.TipoMovimiento == "INGRESO" && (t.Concepto ?? "").StartsWith("Legalización / Emisión DUS")))
-                        txDusIng.IvaExento = true;
+                        if (ProvisionalSinRespaldo(txDusIng)) txDusIng.IvaExento = true;
                 }
             }
 
@@ -1249,46 +1542,50 @@ namespace AtilsonCargoSpa.Services
             // activada sin guardar) hereda Agencia/SAG/Sernapesca del registro principal.
             if (reqDocumentalServicio)
             {
-                var docPrincipalHon = op.OperacionesDocumentales.FirstOrDefault(d => d.IdUnidadTecnica == null);
+                var docPrincipalHon = op.OperacionesDocumentales.FirstOrDefault(d => d.IdUnidadTecnica == null)
+                    ?? op.OperacionesDocumentales.FirstOrDefault();
                 var contenedoresHon = new List<int?> { null };
                 contenedoresHon.AddRange((op.Unidadestecnicas ?? new List<Unidadestecnica>()).Select(u => (int?)u.Id));
 
-                var lineasHon = new List<(int? IdUnidad, int? IdAg, decimal? Valor, TarifasCliente? Venta)>();
+                var lineasHon = new List<(int? IdUnidad, int? IdAg, decimal? Valor, TarifasCliente? Venta, string? Clasificacion)>();
                 foreach (var idUnidadHon in contenedoresHon)
                 {
                     var docUnidadHon = op.OperacionesDocumentales.FirstOrDefault(d => d.IdUnidadTecnica == idUnidadHon) ?? docPrincipalHon;
                     if (docUnidadHon == null) continue;
 
+                    // La elección SAG/SERNAPESCA y la agencia pertenecen a Operaciones.
+                    // Si la unidad no tiene datos propios, hereda los del registro principal.
+                    string? clasificacionHon = VentaClienteHelper.ClasificacionDocumental(docUnidadHon)
+                        ?? VentaClienteHelper.ClasificacionDocumental(docPrincipalHon);
+                    // Costo: tarifa de la agencia para esa clasificación, nunca un monto fijo.
                     decimal? honorariosAgencia = null;
-                    if (docUnidadHon.AplicaSernapesca == true) honorariosAgencia = 111500m;
-                    else if (docUnidadHon.AplicaSag == true) honorariosAgencia = 78000m;
-                    // Venta al cliente (Comercial > Documental, SAG o SERNAPESCA): Honorarios + IVA.
-                    var ventaHonUnidad = VentaClienteHelper.ElegirDocumental(ventasCliente, esDus: false, VentaClienteHelper.ClasificacionDocumental(docUnidadHon));
-                    lineasHon.Add((idUnidadHon, docUnidadHon.IdAgenciaAduana, honorariosAgencia, ventaHonUnidad));
+                    // Venta: tarifa del cliente de la MISMA clasificación, no se confunde con costo.
+                    var ventaHonUnidad = VentaClienteHelper.ElegirDocumental(ventasCliente, esDus: false, clasificacionHon);
+                    lineasHon.Add((idUnidadHon, docUnidadHon.IdAgenciaAduana ?? docPrincipalHon?.IdAgenciaAduana,
+                        honorariosAgencia, ventaHonUnidad, clasificacionHon));
                 }
 
-                // Cobro grupal (oct-2026): la línea del 1° contenedor cobra la SUMA de todos
-                // los contenedores; las demás quedan solo con su costo.
-                bool sumaHonConocida = lineasHon.All(l => l.Valor.HasValue);
-                bool ventasHonCompletas = lineasHon.Count > 0 && lineasHon.All(l => l.Venta != null) && lineasHon.Select(l => (l.Venta!.Moneda ?? "CLP").ToUpperInvariant()).Distinct().Count() == 1;
+                // Cobro POR BOOKING (nov-2026): un solo cobro al valor de un contenedor, en la
+                // línea del 1° contenedor; los demás quedan solo con su costo.
                 foreach (var l in lineasHon)
                 {
                     string sufijoHon = l.IdUnidad.HasValue ? $" (U{l.IdUnidad})" : "";
-                    bool esLineaGrupal = cobroAgenciaGrupal && !l.IdUnidad.HasValue && lineasHon.Count > 1;
-                    decimal? ventaHon = esLineaGrupal
-                        ? (ventasHonCompletas ? lineasHon.Sum(x => x.Venta!.PrecioPactado) : (sumaHonConocida ? lineasHon.Sum(x => x.Valor!.Value) : null))
-                        : l.Venta?.PrecioPactado;
-                    string? monedaVentaHon = (esLineaGrupal && !ventasHonCompletas) ? null : l.Venta?.Moneda;
                     await GenerarEspejoDocumental($"Honorarios Agencia de Aduanas{sufijoHon}", l.IdAg.HasValue, "HONORARIOS AGENCIA", l.IdAg, l.Valor,
-                        valorVentaOverride: ventaHon,
-                        monedaVentaOverride: monedaVentaHon,
+                        valorVentaOverride: l.Venta?.PrecioPactado,
+                        monedaVentaOverride: l.Venta?.Moneda,
                         generarIngreso: !cobroAgenciaGrupal || !l.IdUnidad.HasValue,
-                        factorIngreso: esLineaGrupal && !sumaHonConocida && !ventasHonCompletas ? lineasHon.Count : 1m,
-                        forzarIngreso: true);
+                        factorIngreso: 1m,
+                        forzarIngreso: true,
+                        clasificacionTarifa: l.Clasificacion);
                 }
+                // Honorarios están afectos a IVA: no heredar accidentalmente
+                // el indicador exento de DUS u otros conceptos documentales.
+                foreach (var txHonorarios in _context.TransaccionesFinancieras.Local
+                    .Where(t => t.IdOperacion == op.Id && (t.Concepto ?? "").StartsWith("Honorarios Agencia de Aduanas")))
+                    if (ProvisionalSinRespaldo(txHonorarios)) txHonorarios.IvaExento = false;
             }
 
-            // 3c. DESCUENTO MULTICONTENEDOR — ACUERDOS COMERCIALES ESPECIALES (ej. Promar)
+            // 3c. DESCUENTO MULTICONTENEDOR — ACUERDOS COMERCIALES ESPECIALES (ej. Marfrio)
             // En modalidad Individual, cada contenedor genera su propio Certificado de
             // Origen a precio completo. El acuerdo especial del cliente dice que solo el
             // primero se cobra entero — el resto (N-1) se descuenta en una sola línea,
@@ -1304,7 +1601,9 @@ namespace AtilsonCargoSpa.Services
                              && t.Concepto != null
                              && t.Concepto.StartsWith("Certificado de Origen")
                              && !t.Concepto.Contains(" R1") && !t.Concepto.Contains(" R2") && !t.Concepto.Contains(" R3")
-                             && t.MontoNeto > 0)
+                             && t.MontoNeto > 0
+                             // Un concepto extraordinario con ese nombre no es un certificado por contenedor.
+                             && !ConceptoExtraordinarioHelper.Es(t))
                     .OrderByDescending(t => t.MontoNeto)
                     .ToList();
 
@@ -1357,7 +1656,19 @@ namespace AtilsonCargoSpa.Services
             contenedoresGateIsps.AddRange((op.Unidadestecnicas ?? new List<Unidadestecnica>()).Select(u => (int?)u.Id));
 
             bool reqDocumentalOp = op.OperacionesDocumentales != null && op.OperacionesDocumentales.Any();
+            // nov-2026 (reunión con Cristian y J): el ISPS es un gasto de seguridad que factura la
+            // agencia en el ámbito documental/terminal, por contenedor. Aparece siempre que el
+            // servicio incluye Documental, haya o no Marítimo; un servicio solo Marítimo (o solo
+            // Terrestre) no lleva ISPS. Si el tipo de servicio no está informado, se mantiene el
+            // criterio anterior (que existan registros documentales).
+            int servicioIsps = op.IdTipoServicio ?? 0;
+            bool servicioConDocumental = servicioIsps > 0
+                ? new[] { 1, 3, 4, 7, 8, 10, 11, 14 }.Contains(servicioIsps)
+                : reqDocumentalOp;
             string terminalActual = (terr?.TerminalTerrestreStr ?? "").ToUpper().Trim();
+            // Sin Marítimo ni Terrestre el terminal se elige en Documental y queda también en
+            // operaciones.TerminalPortuario (antes, sin terminal, el ISPS no aparecía).
+            if (string.IsNullOrEmpty(terminalActual)) terminalActual = (op.TerminalPortuario ?? "").ToUpper().Trim();
 
             // Salvaguarda: si el terminal no quedó guardado (ej. una operación "Solo
             // Marítimo" creada antes de corregir el formulario), se infiere desde el
@@ -1366,7 +1677,10 @@ namespace AtilsonCargoSpa.Services
             // requiere selección manual, así que no se auto-completa. Esto NO corrige
             // el dato en la base — solo evita que el cálculo de ISPS se pierda mientras
             // se resuelve la causa raíz en el formulario de creación.
-            if (string.IsNullOrEmpty(terminalActual))
+            // Un servicio solo documental (7 / 14) usa únicamente el terminal elegido en Documental:
+            // desde nov-2026 guarda POL/POD, y "Sin ISPS / no aplica" no debe inferirse como TPS.
+            bool soloDocumentalIsps = servicioIsps is 7 or 14;
+            if (string.IsNullOrEmpty(terminalActual) && !soloDocumentalIsps)
             {
                 bool esExpoIsps = new[] { 1, 2, 3, 4, 5, 6, 7 }.Contains(op.IdTipoServicio ?? 0);
                 string puertoChileno = (esExpoIsps ? op.IdPuertoOrigenNavigation?.NombrePuerto : op.IdPuertoDestinoNavigation?.NombrePuerto)?.ToUpper() ?? "";
@@ -1380,7 +1694,7 @@ namespace AtilsonCargoSpa.Services
             else if (terminalActual.Contains("STI")) { terminalLabel = "STI - San Antonio"; conceptoIspsMaestro = "SEGURIDAD DE LA CARGA STI"; }
             else if (terminalActual.Contains("DPW") || terminalActual.Contains("DP WORLD")) { terminalLabel = "DP World - San Antonio"; conceptoIspsMaestro = "SEGURIDAD DE LA CARGA DP WORLD"; }
 
-            bool activaIsps = reqDocumentalOp && conceptoIspsMaestro != null;
+            bool activaIsps = servicioConDocumental && conceptoIspsMaestro != null;
 
             decimal? valorIspsOverride = null;
             string? monedaIspsOverride = null;
@@ -1515,21 +1829,30 @@ namespace AtilsonCargoSpa.Services
                 // Tarifa por depósito (no-plana): es la misma tarifa física para cualquier
                 // contenedor del booking (mismo depósito, misma naviera, mismo tipo de
                 // equipo), así que se calcula una sola vez aquí y se reutiliza en el loop.
+                // Nov-2026: manda la tarifa de la naviera en ese depósito, pero si la naviera no
+                // tiene tarifa para el equipo de ESTE contenedor se usa la general del depósito
+                // (sin naviera = "aplica a todas"). Antes, con solo una tarifa de la naviera
+                // cargada (ej. 20' Dry), un 40' Reefer quedaba "por valorizar" aunque el
+                // depósito tuviera su tarifa general de Reefer.
+                List<TarifaGate>? candidatasOutGate = null, genericasOutGate = null;
+                List<TarifaGate>? candidatasInGate = null, genericasInGate = null;
+                (decimal Valor, string Moneda)? MatchConRespaldo(List<TarifaGate> deNaviera, List<TarifaGate>? generales)
+                    => MatchTarifa(deNaviera) ?? (generales != null ? MatchTarifa(generales) : null);
                 if (aplicaGateOut && !aplicaTarifaPlana && idDepositoFisico != null)
                 {
                     var tOutTodos = await _context.Set<TarifaGate>().AsNoTracking().Where(t => t.IdDeposito == idDepositoFisico && t.TipoMovimiento == "OUT" && t.EsActiva).ToListAsync();
-                    var tOutNaviera = tOutTodos.Where(t => t.IdNaviera == op.IdNaviera).ToList();
-                    var candidatasOut = tOutNaviera.Any() ? tOutNaviera : tOutTodos.Where(t => t.IdNaviera == null).ToList();
-                    var resultOut = MatchTarifa(candidatasOut);
+                    candidatasOutGate = tOutTodos.Where(t => t.IdNaviera == op.IdNaviera).ToList();
+                    genericasOutGate = tOutTodos.Where(t => t.IdNaviera == null).ToList();
+                    var resultOut = MatchConRespaldo(candidatasOutGate, genericasOutGate);
                     if (resultOut.HasValue) { valorGateOutBase = resultOut.Value.Valor; monedaGateOutBase = resultOut.Value.Moneda; }
                 }
 
                 if (aplicaGateIn && !aplicaTarifaPlana && idDepositoFisico != null)
                 {
                     var tInTodos = await _context.Set<TarifaGate>().AsNoTracking().Where(t => t.IdDeposito == idDepositoFisico && t.TipoMovimiento == "IN" && t.EsActiva).ToListAsync();
-                    var tInNaviera = tInTodos.Where(t => t.IdNaviera == op.IdNaviera).ToList();
-                    var candidatasIn = tInNaviera.Any() ? tInNaviera : tInTodos.Where(t => t.IdNaviera == null).ToList();
-                    var resultIn = MatchTarifa(candidatasIn);
+                    candidatasInGate = tInTodos.Where(t => t.IdNaviera == op.IdNaviera).ToList();
+                    genericasInGate = tInTodos.Where(t => t.IdNaviera == null).ToList();
+                    var resultIn = MatchConRespaldo(candidatasInGate, genericasInGate);
                     if (resultIn.HasValue) { valorGateInBase = resultIn.Value.Valor; monedaGateInBase = resultIn.Value.Moneda; }
                 }
 
@@ -1559,6 +1882,31 @@ namespace AtilsonCargoSpa.Services
                     string monedaGateOut = monedaGateOutBase;
                     decimal? valorGateIn = valorGateInBase;
                     string monedaGateIn = monedaGateInBase;
+
+                    // Equipo de ESTE contenedor (nov-2026): un booking puede mezclar 20'/40' y
+                    // Dry/Reefer. Antes todos los contenedores tomaban la tarifa del principal.
+                    // tipoBusq/sizeBusq los leen MatchTarifa y ObtenerTarifaGatePlanaAsync.
+                    var unidadGate = idUnidadGate.HasValue ? op.Unidadestecnicas?.FirstOrDefault(u => u.Id == idUnidadGate.Value) : null;
+                    string tcGateU = ((unidadGate == null || string.IsNullOrWhiteSpace(unidadGate.TipoContenedor)) ? op.TipoContenedor : unidadGate.TipoContenedor) ?? "";
+                    int tipoCargaGateU = unidadGate?.IdTipoCarga ?? op.IdTipoCarga;
+                    tipoBusq = (tcGateU.Contains("RF") || tcGateU.Contains("REEFER") || tipoCargaGateU == 2) ? "RF" : "DRY";
+                    sizeBusq = tcGateU.Contains("20") ? "20" : (tcGateU.Contains("40") ? "40" : "");
+                    if (idUnidadGate.HasValue)
+                    {
+                        if (candidatasOutGate != null)
+                        {
+                            var rOutU = MatchConRespaldo(candidatasOutGate, genericasOutGate);
+                            valorGateOut = rOutU?.Valor; monedaGateOut = rOutU?.Moneda ?? "CLP";
+                        }
+                        if (candidatasInGate != null)
+                        {
+                            var rInU = MatchConRespaldo(candidatasInGate, genericasInGate);
+                            valorGateIn = rInU?.Valor; monedaGateIn = rInU?.Moneda ?? "CLP";
+                        }
+                    }
+                    string equipoGateVentaU = VentaClienteHelper.EquipoOperacion(tcGateU, tipoCargaGateU);
+                    var ventaGateOutU = aplicaGateOut ? VentaClienteHelper.ElegirGate(ventasCliente, "OUT", depRetiro, op.IdNaviera, equipoGateVentaU) : null;
+                    var ventaGateInU = aplicaGateIn ? VentaClienteHelper.ElegirGate(ventasCliente, "IN", depRetiro, op.IdNaviera, equipoGateVentaU) : null;
 
                     if (aplicaGateOut && aplicaTarifaPlana)
                     {
@@ -1591,12 +1939,12 @@ namespace AtilsonCargoSpa.Services
                     bool outSinCosto = aplicaGateOut && valorGateOut == 0m;
                     bool inSinCosto = aplicaGateIn && valorGateIn == 0m;
                     await GenerarEspejo("Depósito", conceptoGateOutU, aplicaGateOut, conceptoGateOutU, valorGateOut, monedaGateOut, idProveedorGate, convertirAClp: true,
-                        valorVentaOverride: ventaGateOut?.PrecioPactado, monedaVentaOverride: ventaGateOut?.Moneda,
+                        valorVentaOverride: ventaGateOutU?.PrecioPactado, monedaVentaOverride: ventaGateOutU?.Moneda,
                         responsableOverride: gateOutIncluido ? ResponsabilidadValores.Atilson : null,
-                        costoSinCargo: outSinCosto, ventaSinCargo: outSinCosto && ventaGateOut == null, notaSinCargo: outSinCosto ? AcuerdoCollectHelper.MarcaSinCostoTarifa : null);
+                        costoSinCargo: outSinCosto, ventaSinCargo: outSinCosto && ventaGateOutU == null, notaSinCargo: outSinCosto ? AcuerdoCollectHelper.MarcaSinCostoTarifa : null);
                     await GenerarEspejo("Depósito", conceptoGateInU, aplicaGateIn, conceptoGateInU, valorGateIn, monedaGateIn, idProveedorGate, convertirAClp: true,
-                        valorVentaOverride: ventaGateIn?.PrecioPactado, monedaVentaOverride: ventaGateIn?.Moneda,
-                        costoSinCargo: inSinCosto, ventaSinCargo: inSinCosto && ventaGateIn == null, notaSinCargo: inSinCosto ? AcuerdoCollectHelper.MarcaSinCostoTarifa : null);
+                        valorVentaOverride: ventaGateInU?.PrecioPactado, monedaVentaOverride: ventaGateInU?.Moneda,
+                        costoSinCargo: inSinCosto, ventaSinCargo: inSinCosto && ventaGateInU == null, notaSinCargo: inSinCosto ? AcuerdoCollectHelper.MarcaSinCostoTarifa : null);
                 }
             }
 
@@ -1656,6 +2004,13 @@ namespace AtilsonCargoSpa.Services
                 };
             }
 
+            // nov-2026: montos que quedaron en 0 porque cuando se registraron no había tarifa en
+            // Comercial. Roleo / Cancelación / No-Show con penalidad confirmada toman la tarifa
+            // de penalidad (USD 50 por contenedor o la de la naviera); Late Arrival y Extra Late
+            // Arrival, la del catálogo de la naviera. Se guarda en el extracosto (queda a la vista
+            // en Operaciones). Un monto distinto de 0 nunca se toca.
+            await CompletarMontosDesdeTarifasAsync(op, extracostos);
+
             foreach (var ext in extracostos)
             {
                 decimal? montoOverride = null;
@@ -1698,7 +2053,7 @@ namespace AtilsonCargoSpa.Services
 
                 // Roleo / Cancelación / No Show: monto y moneda tal como se registraron
                 // (la penalidad de la naviera, en USD). Ver "mantenerUsd" más abajo.
-                if (ext.TipoCosto == "Roleo Marítimo" || ext.TipoCosto == "Cancelación / No Show Marítimo")
+                if (EsPenalidadNavieraEnUsd(ext.TipoCosto))
                 {
                     grupoExtracosto = "Marítimo";
                     if (ext.Monto > 0)
@@ -1735,7 +2090,26 @@ namespace AtilsonCargoSpa.Services
                         notaSinCargoExt = $"{AcuerdoCollectHelper.MarcaSinCosto} ({op.Commodity ?? "sin commodity"})";
                 }
 
+                // Roleo / Cancelación / No-Show SIN penalidad (contrato, o fuera del plazo de la
+                // naviera): $0 sin costo, no "Por asignar" (antes quedaba pendiente de valorizar y
+                // bloqueaba el set de cobro). nov-2026.
+                if (EsPenalidadNavieraEnUsd(ext.TipoCosto) && ext.Monto == 0 && (ext.Motivo ?? "").StartsWith("SIN penalidad"))
+                {
+                    costoSinCargoExt = true; ventaSinCargoExt = true;
+                    notaSinCargoExt = $"{AcuerdoCollectHelper.MarcaSinCostoTarifa} (sin penalidad de la naviera)";
+                }
+
                 string conceptoUnico = $"{ext.TipoCosto} (EXT-{ext.Id})";
+                // Cobro de un contenedor adicional (Late Arrival / Extra Late Arrival por
+                // contenedor, nov-2026): sufijo "(Uxx)" como el resto de las filas por contenedor,
+                // para que Control Financiero y Acuerdos Operativos muestren de qué contenedor es.
+                if (ext.IdUnidadTecnica.HasValue)
+                {
+                    string conSufijo = $"{conceptoUnico} (U{ext.IdUnidadTecnica.Value})";
+                    foreach (var txSinSufijo in txExistentes.Where(t => t.Concepto == conceptoUnico))
+                        txSinSufijo.Concepto = conSufijo;
+                    conceptoUnico = conSufijo;
+                }
                 // oct-2026: antes "Marítimo" quedaba excluido a propósito de la conversión a
                 // CLP (por eso Late Arrival/Roleo/Cancelación/Corrección BL etc. en USD se
                 // mostraban tal cual en AcuerdosOperativos/ControlFinanciero, sin el "(USD x)"
@@ -1753,7 +2127,11 @@ namespace AtilsonCargoSpa.Services
                 // Corrección BL, etc.) se sigue convirtiendo a CLP como hasta ahora.
                 bool mantenerUsd = EsPenalidadNavieraEnUsd(ext.TipoCosto);
                 bool convertirAClpExt = monedaOverride == "USD" && !mantenerUsd;
-                await GenerarEspejo(grupoExtracosto, conceptoUnico, true, conceptoUnico, montoOverride, monedaOverride, idProveedorOverride: ext.IdProveedor, convertirAClp: convertirAClpExt, responsablePagoOverride: NormalizarResponsabilidad(ext.ResponsableGestion), responsableOverride: NormalizarResponsabilidad(ext.Responsable),
+                // IVA (nov-2026, Ingresos y Egresos): Roleo / Cancelación / No-Show exentos; Late
+                // Arrival, Extra Late, Corrección de BL y demás recargos marítimos + IVA. No depende
+                // de la tarifa (que guarda lo que cobra la naviera, tal cual).
+                bool? ivaExentoExt = mantenerUsd ? true : (grupoExtracosto == "Marítimo" ? false : null);
+                await GenerarEspejo(grupoExtracosto, conceptoUnico, true, conceptoUnico, montoOverride, monedaOverride, idProveedorOverride: ext.IdProveedor, convertirAClp: convertirAClpExt, ivaExento: ivaExentoExt, responsablePagoOverride: NormalizarResponsabilidad(ext.ResponsableGestion), responsableOverride: NormalizarResponsabilidad(ext.Responsable),
                     costoSinCargo: costoSinCargoExt, ventaSinCargo: ventaSinCargoExt, notaSinCargo: notaSinCargoExt);
             }
 

@@ -77,21 +77,21 @@
         <form method="get" class="it-filtro" role="search" aria-label="Buscar salidas">
             <div>
                 <label for="busPol">Desde</label>
-                <select id="busPol" name="pol">
+                <select id="busPol" name="pol" data-ruta="pol">
                     <option value="">Cualquier puerto</option>
                     @foreach (var p in Model.OpcionesPol)
                     {
-                        <option value="@p.Id" selected="@(Model.Pol == p.Id)">@p.NombrePuerto@(PuertosHelper.EsChileno(p) ? "" : ", " + p.Pais)</option>
+                        <option value="@p.Id" data-pais="@p.Pais" data-clave="@PuertosHelper.Clave(p)" selected="@(Model.Pol == p.Id)">@p.NombrePuerto@(PuertosHelper.EsChileno(p) ? "" : ", " + p.Pais)</option>
                     }
                 </select>
             </div>
             <div>
                 <label for="busPod">Hasta</label>
-                <select id="busPod" name="pod">
+                <select id="busPod" name="pod" data-ruta="pod">
                     <option value="">Cualquier puerto</option>
                     @foreach (var p in Model.OpcionesPod)
                     {
-                        <option value="@p.Id" selected="@(Model.Pod == p.Id)">@p.NombrePuerto@(string.IsNullOrWhiteSpace(p.Pais) ? "" : ", " + p.Pais)</option>
+                        <option value="@p.Id" data-pais="@p.Pais" data-clave="@PuertosHelper.Clave(p)" selected="@(Model.Pod == p.Id)">@p.NombrePuerto@(string.IsNullOrWhiteSpace(p.Pais) ? "" : ", " + p.Pais)</option>
                     }
                 </select>
             </div>
@@ -154,7 +154,10 @@
                         <div class="it-pweek__list">
                             @foreach (var s in semana)
                             {
-                                <partial name="/Pages/PortalCliente/_SalidaCard.cshtml" model="@(new SalidaCardVm { Salida = s, AccionUrl = "/PortalCliente/SolicitarReserva?itinerario=" + s.Id, AccionTexto = "Reservar" })" />
+                                @* data-*: origen, destino y naviera de la salida, para filtrar sin recargar en la copia estática del sitio. *@
+                                <div class="it-salida" style="display:contents" data-pol="@(s.IdPuertoOrigenNavigation == null ? "" : PuertosHelper.Clave(s.IdPuertoOrigenNavigation))" data-pod="@(s.IdPuertoDestinoNavigation == null ? "" : PuertosHelper.Clave(s.IdPuertoDestinoNavigation))" data-naviera="@s.IdNaviera">
+                                    <partial name="/Pages/PortalCliente/_SalidaCard.cshtml" model="@(new SalidaCardVm { Salida = s, AccionUrl = "/PortalCliente/SolicitarReserva?itinerario=" + s.Id, AccionTexto = "Reservar" })" />
+                                </div>
                             }
                         </div>
                     </section>

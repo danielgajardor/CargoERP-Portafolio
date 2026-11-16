@@ -253,6 +253,8 @@ namespace AtilsonCargoSpa.Pages.PortalCliente
                 if (pod == null) Error("Selecciona el puerto de destino.");
                 if (pol != null && pod != null && PuertosHelper.Clave(pol) == PuertosHelper.Clave(pod))
                     Error("El puerto de origen y el de destino no pueden ser el mismo.");
+                else if (pol != null && pod != null && PuertosHelper.MismoPais(pol.Pais, pod.Pais))
+                    Error(PuertosHelper.MensajeMismoPais(pol.Pais));
                 if (string.IsNullOrWhiteSpace(c.TipoContenedor) || !TiposContenedor.Contains(c.TipoContenedor))
                     Error("Selecciona el tipo de contenedor.");
                 if (c.CantidadContenedores is null or < 1 or > 200)

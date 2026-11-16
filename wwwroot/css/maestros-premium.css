@@ -14,8 +14,7 @@
    son genéricos, acotar todo a .mst-premium evita que cualquier otra vista
    que llegue a reutilizarlos a futuro se vea afectada.
    ========================================================================= */
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600&display=swap');
-
+/* Fuentes: se cargan una sola vez en _Layout (nov-2026). */
 /* ---------- 0. Tokens ---------- */
 .mst-premium {
     --mst-brand: #6d2d9e;
@@ -37,7 +36,7 @@
     --bg-soft: #f8f7fc;
     --atilson-dark: #6d2d9e;
 
-    font-family: 'Plus Jakarta Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+    font-family: var(--font-sans);
     padding-bottom: 48px;
 }
 

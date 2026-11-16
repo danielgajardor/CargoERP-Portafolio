@@ -1,4 +1,4 @@
-using AtilsonCargoSpa.Models;
+﻿using AtilsonCargoSpa.Models;
 using AtilsonCargoSpa.Services;
 using AtilsonCargoSpa.Helpers;
 using DocumentFormat.OpenXml.InkML;
@@ -9,6 +9,7 @@ using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.AspNetCore.Mvc.Rendering;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;
@@ -16,7 +17,6 @@ using System.IO;
 using System.Linq;
 using System.Text.Json;
 using System.Threading.Tasks;
-using AtilsonCargoSpa.Services;
 
 namespace AtilsonCargoSpa.Pages.Operaciones
 {
@@ -52,8 +52,9 @@ namespace AtilsonCargoSpa.Pages.Operaciones
         private readonly IServiceScopeFactory _scopeFactory;
         private readonly FinanzasSyncService _finanzasSync;
         private readonly ILogger<IndexModel> _logger;
+        private readonly IConfiguration _configuration;
 
-        public IndexModel(AtilsonContext context, IWebHostEnvironment env, EmailService emailService, IServiceScopeFactory scopeFactory, FinanzasSyncService finanzasSync, ILogger<IndexModel> logger)
+        public IndexModel(AtilsonContext context, IWebHostEnvironment env, EmailService emailService, IServiceScopeFactory scopeFactory, FinanzasSyncService finanzasSync, ILogger<IndexModel> logger, IConfiguration configuration)
         {
             _context = context;
             _env = env;
@@ -61,6 +62,7 @@ namespace AtilsonCargoSpa.Pages.Operaciones
             _scopeFactory = scopeFactory;
             _finanzasSync = finanzasSync;
             _logger = logger;
+            _configuration = configuration;
         }
 
         public IList<Operacione> Operaciones { get; set; } = default!;
@@ -120,6 +122,159 @@ namespace AtilsonCargoSpa.Pages.Operaciones
         }
 
         public List<NotificacionPortalDto> NotificacionesPendientes { get; set; } = new();
+
+        // Fuente unificada y liviana para el aviso global. Lectura autorizada cada 30 s;
+        // sólo devuelve avisos pendientes, no contenido financiero ni datos sensibles.
+        public async Task<IActionResult> OnGetAvisosPendientesAsync()
+        {
+            if (User.Identity?.IsAuthenticated != true || User.IsInRole("Cliente"))
+                return Forbid();
+
+            var usuario = User.Identity?.Name ?? "";
+            var descartadas = await _context.NotificacionesDescartadas.AsNoTracking()
+                .Where(x => x.Usuario == usuario).Select(x => new { x.Tipo, x.IdReferencia })
+                .ToListAsync();
+            var ignoradas = descartadas.Select(x => x.Tipo + ":" + x.IdReferencia).ToHashSet();
+            var avisos = new List<(string Tipo, int Id, string Titulo, DateTime Fecha, string Url)>();
+
+            var cotizaciones = await _context.Cotizaciones.AsNoTracking()
+                .Where(x => x.Estado == "NUEVA SOLICITUD" && x.Activo == true)
+                .OrderByDescending(x => x.FechaSolicitud).Take(100)
+                .Select(x => new { x.Id, x.TipoSolicitud, x.FechaSolicitud }).ToListAsync();
+            foreach (var c in cotizaciones)
+                if (!ignoradas.Contains("COTIZACION:" + c.Id))
+                    avisos.Add(("c", c.Id, c.TipoSolicitud == Cotizacion.TipoCotizacion
+                        ? "Nueva solicitud de cotización" : "Nueva solicitud de reserva",
+                        c.FechaSolicitud ?? DateTime.Now,
+                        c.TipoSolicitud == Cotizacion.TipoCotizacion && PermisosEquipo.PuedeCotizaciones(User)
+                            ? "/Operaciones/Cotizaciones" : "/Operaciones/Index"));
+
+            var roleos = await _context.RoleosCancelaciones.AsNoTracking()
+                .Where(x => x.SolicitadoPorCliente && !x.Atendido &&
+                    x.IdOperacionNavigation != null &&
+                    !x.IdOperacionNavigation.IsDeleted && !x.IdOperacionNavigation.EsHistorica)
+                .OrderByDescending(x => x.FechaCreacion).Take(100)
+                .Select(x => new { x.Id, x.Tipo, x.FechaCreacion }).ToListAsync();
+            foreach (var ro in roleos)
+                if (!ignoradas.Contains("ROLEO:" + ro.Id))
+                    avisos.Add(("r", ro.Id,
+                        ro.Tipo switch
+                        {
+                            "ROLEO" => "Solicitud de roleo",
+                            "NO_SHOW" => "Solicitud de No Show",
+                            _ => "Solicitud de cancelación"
+                        },
+                        ro.FechaCreacion, "/Operaciones/Index"));
+
+            bool admin = PermisosEquipo.EsAdmin(User);
+            if (admin || PermisosEquipo.EsJefatura(User) || User.IsInRole("Ventas"))
+            {
+                var registros = await _context.SolicitudesRegistroCliente.AsNoTracking()
+                    .Where(x => x.Estado == SolicitudRegistroCliente.EstadoPendiente)
+                    .OrderByDescending(x => x.FechaSolicitud).Take(100)
+                    .Select(x => new { x.Id, x.RazonSocial, x.FechaSolicitud }).ToListAsync();
+                foreach (var reg in registros)
+                    if (!ignoradas.Contains("REGISTRO_CLIENTE:" + reg.Id))
+                        avisos.Add(("e", reg.Id, "Registro de empresa: " + reg.RazonSocial,
+                            reg.FechaSolicitud, "/App/Clientes/Solicitudes"));
+            }
+            if (admin)
+            {
+                var registros = await _context.SolicitudesRegistroEquipo.AsNoTracking()
+                    .Where(x => x.Estado == SolicitudRegistroEquipo.EstadoPendiente)
+                    .OrderByDescending(x => x.FechaSolicitud).Take(100)
+                    .Select(x => new { x.Id, x.NombreCompleto, x.FechaSolicitud }).ToListAsync();
+                foreach (var reg in registros)
+                    if (!ignoradas.Contains("REGISTRO_EQUIPO:" + reg.Id))
+                        avisos.Add(("q", reg.Id, "Registro de equipo: " + reg.NombreCompleto,
+                            reg.FechaSolicitud, "/App/Equipo/Index?vista=solicitudes"));
+            }
+
+            Response.Headers["Cache-Control"] = "no-store";
+            return new JsonResult(avisos.OrderByDescending(x => x.Fecha).Take(100)
+                .Select(x => new { tipo = x.Tipo, id = x.Id, titulo = x.Titulo,
+                                   fecha = x.Fecha.ToString("dd-MM HH:mm"), url = x.Url }));
+        }
+
+        // Sólo archiva el aviso visual de este usuario; no cambia el estado de la solicitud.
+        public async Task<IActionResult> OnPostDescartarNotificacionAsync(string tipo, int idReferencia)
+        {
+            if (User.Identity?.IsAuthenticated != true || User.IsInRole("Cliente"))
+                return Forbid();
+            var usuario = User.Identity?.Name;
+            if (string.IsNullOrWhiteSpace(usuario) || idReferencia <= 0 ||
+                (tipo != "COTIZACION" && tipo != "ROLEO" && tipo != "REGISTRO_CLIENTE" && tipo != "REGISTRO_EQUIPO"))
+                return BadRequest();
+            bool esAdminAviso = PermisosEquipo.EsAdmin(User);
+            if (tipo == "REGISTRO_CLIENTE" &&
+                !(esAdminAviso || PermisosEquipo.EsJefatura(User) || User.IsInRole("Ventas")))
+                return Forbid();
+            if (tipo == "REGISTRO_EQUIPO" && !esAdminAviso)
+                return Forbid();
+
+            bool existe = tipo switch
+            {
+                "COTIZACION" => await _context.Cotizaciones.AnyAsync(x => x.Id == idReferencia),
+                "ROLEO" => await _context.RoleosCancelaciones.AnyAsync(x => x.Id == idReferencia),
+                "REGISTRO_CLIENTE" => await _context.SolicitudesRegistroCliente.AnyAsync(x => x.Id == idReferencia),
+                "REGISTRO_EQUIPO" => await _context.SolicitudesRegistroEquipo.AnyAsync(x => x.Id == idReferencia),
+                _ => false
+            };
+            if (!existe) return NotFound();
+
+            if (!await _context.NotificacionesDescartadas.AnyAsync(x =>
+                x.Usuario == usuario && x.Tipo == tipo && x.IdReferencia == idReferencia))
+            {
+                _context.NotificacionesDescartadas.Add(new NotificacionDescartada
+                {
+                    Usuario = usuario, Tipo = tipo, IdReferencia = idReferencia
+                });
+                await _context.SaveChangesAsync();
+            }
+            return new JsonResult(new { success = true });
+        }
+
+        // Despeje inicial o masivo de la bandeja. No toca estados de negocio.
+        public async Task<IActionResult> OnPostDescartarTodasNotificacionesAsync()
+        {
+            if (User.Identity?.IsAuthenticated != true || User.IsInRole("Cliente"))
+                return Forbid();
+            var usuario = User.Identity?.Name;
+            if (string.IsNullOrWhiteSpace(usuario)) return BadRequest();
+
+            var pares = new List<(string Tipo, int Id)>();
+            pares.AddRange((await _context.Cotizaciones.AsNoTracking()
+                .Where(x => x.Estado == "NUEVA SOLICITUD" && x.Activo == true)
+                .Select(x => x.Id).ToListAsync()).Select(id => ("COTIZACION", id)));
+            pares.AddRange((await _context.RoleosCancelaciones.AsNoTracking()
+                .Where(x => x.SolicitadoPorCliente && !x.Atendido &&
+                    x.IdOperacionNavigation != null &&
+                    !x.IdOperacionNavigation.IsDeleted && !x.IdOperacionNavigation.EsHistorica)
+                .Select(x => x.Id).ToListAsync()).Select(id => ("ROLEO", id)));
+
+            bool admin = PermisosEquipo.EsAdmin(User);
+            if (admin || PermisosEquipo.EsJefatura(User) || User.IsInRole("Ventas"))
+                pares.AddRange((await _context.SolicitudesRegistroCliente.AsNoTracking()
+                    .Where(x => x.Estado == SolicitudRegistroCliente.EstadoPendiente)
+                    .Select(x => x.Id).ToListAsync()).Select(id => ("REGISTRO_CLIENTE", id)));
+            if (admin)
+                pares.AddRange((await _context.SolicitudesRegistroEquipo.AsNoTracking()
+                    .Where(x => x.Estado == SolicitudRegistroEquipo.EstadoPendiente)
+                    .Select(x => x.Id).ToListAsync()).Select(id => ("REGISTRO_EQUIPO", id)));
+
+            var yaDescartadas = await _context.NotificacionesDescartadas.AsNoTracking()
+                .Where(x => x.Usuario == usuario)
+                .Select(x => new { x.Tipo, x.IdReferencia }).ToListAsync();
+            var existentes = yaDescartadas.Select(x => x.Tipo + ":" + x.IdReferencia).ToHashSet();
+            foreach (var (tipo, id) in pares)
+                if (existentes.Add(tipo + ":" + id))
+                    _context.NotificacionesDescartadas.Add(new NotificacionDescartada
+                    {
+                        Usuario = usuario, Tipo = tipo, IdReferencia = id
+                    });
+            await _context.SaveChangesAsync();
+            return new JsonResult(new { success = true });
+        }
 
         public string? PatenteRampla { get; private set; }
         public string? RutConductor { get; private set; }
@@ -239,6 +394,17 @@ namespace AtilsonCargoSpa.Pages.Operaciones
         public const int DiasCerradasVisibles = 30;
         [BindProperty(SupportsGet = true)]
         public bool Historial { get; set; }
+        [BindProperty(SupportsGet = true)]
+        public string? Buscar { get; set; }
+        [BindProperty(SupportsGet = true)]
+        public string? FiltroMatriz { get; set; }
+        [BindProperty(SupportsGet = true)]
+        public string? FiltroStacking { get; set; }
+        [BindProperty(SupportsGet = true)]
+        public int Pagina { get; set; } = 1;
+        public const int TamanoPagina = 20;
+        public int TotalOperaciones { get; set; }
+        public int TotalPaginas { get; set; }
         public int CerradasOcultas { get; set; }
 
         public async Task OnGetAsync()
@@ -248,7 +414,7 @@ namespace AtilsonCargoSpa.Pages.Operaciones
             // de TODAS las operaciones, sin usarlos en esta vista. Además, las operaciones con el
             // vacío devuelto hace más de 30 días se ocultan salvo que se pida el historial.
             var limiteCerradas = DateTime.Now.AddDays(-DiasCerradasVisibles);
-            var consulta = _context.Operaciones.AsNoTracking().Where(o => o.IsDeleted == false);
+            var consulta = _context.Operaciones.AsNoTracking().Where(o => o.IsDeleted == false && !o.EsHistorica);
             if (!Historial)
             {
                 var cerradasAntiguas = consulta.Where(o => o.FechaDevolucionVacio != null && o.FechaDevolucionVacio < limiteCerradas
@@ -257,7 +423,65 @@ namespace AtilsonCargoSpa.Pages.Operaciones
                 consulta = consulta.Where(o => !(o.FechaDevolucionVacio != null && o.FechaDevolucionVacio < limiteCerradas
                     && o.Unidadestecnicas.All(u => u.FechaDevolucionVacio != null && u.FechaDevolucionVacio < limiteCerradas)));
             }
+
+            if (!string.IsNullOrWhiteSpace(Buscar))
+            {
+                string s = Buscar.Trim();
+                consulta = consulta.Where(o =>
+                    (o.NumeroBooking != null && o.NumeroBooking.Contains(s)) ||
+                    (o.Nave != null && o.Nave.Contains(s)) ||
+                    (o.NumeroContenedor != null && o.NumeroContenedor.Contains(s)) ||
+                    (o.IdClienteNavigation != null &&
+                        ((o.IdClienteNavigation.RazonSocial != null && o.IdClienteNavigation.RazonSocial.Contains(s)) ||
+                         (o.IdClienteNavigation.NombreCliente != null && o.IdClienteNavigation.NombreCliente.Contains(s)))) ||
+                    o.Unidadestecnicas.Any(u => u.NroContenedor != null && u.NroContenedor.Contains(s)));
+            }
+
+            // Los filtros rápidos deben operar sobre TODO el conjunto antes de paginar,
+            // no solo sobre las 20 filas que el navegador ya recibió.
+            int[] serviciosMatriz = { 1, 2, 3, 4, 5, 7, 8, 9, 10, 11, 12, 14 };
+            int[] serviciosMaritimos = { 1, 2, 3, 5, 8, 9, 10, 12 };
+            DateTime inicioHoy = DateTime.Today;
+            DateTime inicioManana = inicioHoy.AddDays(1);
+
+            FiltroMatriz = (FiltroMatriz ?? "all").Trim().ToLowerInvariant();
+            if (FiltroMatriz == "pend")
+            {
+                consulta = consulta.Where(o =>
+                    o.IdTipoServicio.HasValue && serviciosMatriz.Contains(o.IdTipoServicio.Value) &&
+                    !o.OperacionesDocumentales.Any(d => d.IdUnidadTecnica == null && d.MatrizPresentada == true));
+            }
+            else if (FiltroMatriz == "today")
+            {
+                consulta = consulta.Where(o => o.CutOffMatriz.HasValue &&
+                    o.CutOffMatriz.Value >= inicioHoy && o.CutOffMatriz.Value < inicioManana);
+            }
+            else FiltroMatriz = "all";
+
+            FiltroStacking = (FiltroStacking ?? "all").Trim().ToLowerInvariant();
+            if (FiltroStacking == "pend")
+            {
+                consulta = consulta.Where(o =>
+                    o.IdTipoServicio.HasValue && serviciosMaritimos.Contains(o.IdTipoServicio.Value) &&
+                    !o.ContenedorIngresado);
+            }
+            else if (FiltroStacking == "today")
+            {
+                consulta = consulta.Where(o =>
+                    (o.LateArrival.HasValue && o.LateArrival.Value >= inicioHoy && o.LateArrival.Value < inicioManana) ||
+                    (!o.LateArrival.HasValue && o.CutOffMatriz.HasValue &&
+                     o.CutOffMatriz.Value >= inicioHoy && o.CutOffMatriz.Value < inicioManana));
+            }
+            else FiltroStacking = "all";
+
+            TotalOperaciones = await consulta.CountAsync();
+            TotalPaginas = Math.Max(1, (int)Math.Ceiling(TotalOperaciones / (double)TamanoPagina));
+            Pagina = Math.Clamp(Pagina, 1, TotalPaginas);
+
             Operaciones = await consulta
+                .OrderByDescending(o => o.Id)
+                .Skip((Pagina - 1) * TamanoPagina)
+                .Take(TamanoPagina)
                 .AsSplitQuery()
                 .Include(o => o.IdClienteNavigation)
                 .Include(o => o.IdNavieraNavigation)
@@ -268,26 +492,37 @@ namespace AtilsonCargoSpa.Pages.Operaciones
                 .Include(o => o.OperacionesDocumentales)
                 .Include(o => o.Unidadestecnicas)
                 .Include(o => o.GestionTransbordo)
-                .OrderByDescending(o => o.Id)
                 .ToListAsync();
-            ViewData["IdNaviera"] = new SelectList(_context.Navieras.Where(n => n.Activo == 1), "Id", "NombreNaviera");
-            ViewData["IdPuertoOrigen"] = new SelectList(_context.Puertos.Where(p => p.Activo == 1), "Id", "NombrePuerto");
-            ViewData["IdTipoServicio"] = new SelectList(_context.Subparametros.Where(p => p.Parametro.Categoria == "TipoMovimiento"), "Id", "Valor");
-            ViewData["PlantasList"] = await _context.Plantas.Include(p => p.Ciudad).Where(p => p.Activo).ToListAsync();
-            ViewData["PuertosList"] = await _context.Puertos.Where(p => p.Activo == 1).OrderBy(p => p.NombrePuerto).ToListAsync();
-            ViewData["DepositosList"] = await _context.Depositos.Where(d => d.Activo == 1).OrderBy(d => d.NombreDeposito).ToListAsync();
-            ViewData["IdAgenciaAduana"] = new SelectList(await _context.AgenciasAduanas.ToListAsync(), "Id", "NombreAgencia");
-            ViewData["PaisesCourier"] = new SelectList(
-    await _context.Puertos.Where(p => p.Activo == 1 && p.Pais != null)
-        .Select(p => p.Pais!.ToUpper()).Distinct().OrderBy(x => x).ToListAsync()
-);
-
-            ViewData["TarifasMaritimo"] = await _context.TarifasMaestras.Where(t => t.EsActiva && t.Categoria == "Marítimo").OrderBy(t => t.Concepto).ToListAsync();
-            ViewData["TarifasTerrestre"] = await _context.TarifasMaestras.Where(t => t.EsActiva && t.Categoria == "Terrestre").OrderBy(t => t.Concepto).ToListAsync();
-            ViewData["TarifasDocumental"] = await _context.TarifasMaestras.Where(t => t.EsActiva && t.Categoria == "Documental").OrderBy(t => t.Concepto).ToListAsync();
+            // Unificar catálogos de la vista para evitar consultas repetidas a SQL
+            // en cada navegación. Los resultados son de lectura: no se persisten.
+            ViewData["IdNaviera"] = new SelectList(_context.Navieras.AsNoTracking().Where(n => n.Activo == 1), "Id", "NombreNaviera");
+            ViewData["IdTipoServicio"] = new SelectList(_context.Subparametros.AsNoTracking().Where(p => p.Parametro.Categoria == "TipoMovimiento"), "Id", "Valor");
+            ViewData["PlantasList"] = await _context.Plantas.AsNoTracking().Include(p => p.Ciudad).Where(p => p.Activo).ToListAsync();
+            var puertosActivos = await _context.Puertos.AsNoTracking()
+                .Where(p => p.Activo == 1).OrderBy(p => p.NombrePuerto).ToListAsync();
+            ViewData["IdPuertoOrigen"] = new SelectList(puertosActivos, "Id", "NombrePuerto");
+            ViewData["PuertosList"] = puertosActivos;
+            ViewData["DepositosList"] = await _context.Depositos.AsNoTracking()
+                .Where(d => d.Activo == 1).OrderBy(d => d.NombreDeposito).ToListAsync();
+            ViewData["IdAgenciaAduana"] = new SelectList(
+                await _context.AgenciasAduanas.AsNoTracking().ToListAsync(), "Id", "NombreAgencia");
+            ViewData["PaisesCourier"] = new SelectList(puertosActivos
+                .Where(p => !string.IsNullOrWhiteSpace(p.Pais))
+                .Select(p => p.Pais!.ToUpperInvariant())
+                .Distinct().OrderBy(p => p).ToList());
+            var conceptosActivos = await _context.TarifasMaestras.AsNoTracking()
+                .Where(t => t.EsActiva && (t.Categoria == "Marítimo" ||
+                     t.Categoria == "Terrestre" || t.Categoria == "Documental"))
+                .ToListAsync();
+            ViewData["TarifasMaritimo"] = conceptosActivos.Where(t => t.Categoria == "Marítimo")
+                .OrderBy(t => t.Concepto).ToList();
+            ViewData["TarifasTerrestre"] = conceptosActivos.Where(t => t.Categoria == "Terrestre")
+                .OrderBy(t => t.Concepto).ToList();
+            ViewData["TarifasDocumental"] = conceptosActivos.Where(t => t.Categoria == "Documental")
+                .OrderBy(t => t.Concepto).ToList();
             await ExtracostoFormulario.CargarListasAsync(_context, ViewData);
 
-            NuevasCotizaciones = await _context.Cotizaciones
+            NuevasCotizaciones = await _context.Cotizaciones.AsNoTracking()
     .Include(c => c.IdClienteNavigation)
     .Include(c => c.IdPuertoOrigenNavigation)
     .Include(c => c.IdPuertoDestinoNavigation)
@@ -298,9 +533,9 @@ namespace AtilsonCargoSpa.Pages.Operaciones
     .OrderByDescending(c => c.FechaSolicitud)
     .ToListAsync();
 
-            var solicitudesRoleoPendientes = await _context.RoleosCancelaciones
+            var solicitudesRoleoPendientes = await _context.RoleosCancelaciones.AsNoTracking()
     .Include(r => r.IdOperacionNavigation)
-    .Where(r => r.SolicitadoPorCliente && !r.Atendido)
+    .Where(r => r.SolicitadoPorCliente && !r.Atendido && r.IdOperacionNavigation != null && !r.IdOperacionNavigation.IsDeleted && !r.IdOperacionNavigation.EsHistorica)
     .OrderByDescending(r => r.FechaCreacion)
     .ToListAsync();
 
@@ -363,19 +598,60 @@ namespace AtilsonCargoSpa.Pages.Operaciones
             {
                 Tipo = "ROLEO",
                 Fecha = r.FechaCreacion,
-                Titulo = $"{(r.Tipo == "ROLEO" ? "Roleo" : "Cancelación / No Show")} solicitado por el cliente",
+                Titulo = $"{RecargoNavieraHelper.NombrePenalidad(r.Tipo)} solicitado por el cliente",
                 Subtitulo = $"BKG: {r.IdOperacionNavigation?.NumeroBooking ?? "S/N"}",
                 Detalle = string.IsNullOrWhiteSpace(r.Comentario) ? "Sin comentario adicional." : r.Comentario,
                 IdReferencia = r.Id,
                 IdOperacion = r.IdOperacion
             }));
+            // El mismo centro incluye solicitudes de registro visibles según rol.
+            bool esAdminAvisos = PermisosEquipo.EsAdmin(User);
+            if (esAdminAvisos || PermisosEquipo.EsJefatura(User) || User.IsInRole("Ventas"))
+            {
+                var registrosClientes = await _context.SolicitudesRegistroCliente.AsNoTracking()
+                    .Where(x => x.Estado == SolicitudRegistroCliente.EstadoPendiente)
+                    .OrderByDescending(x => x.FechaSolicitud).Take(50).ToListAsync();
+                NotificacionesPendientes.AddRange(registrosClientes.Select(x => new NotificacionPortalDto
+                {
+                    Tipo = "REGISTRO_CLIENTE", Fecha = x.FechaSolicitud,
+                    Titulo = "Solicitud de registro de empresa",
+                    Subtitulo = x.RazonSocial, Detalle = x.NombreContacto, IdReferencia = x.Id
+                }));
+            }
+            if (esAdminAvisos)
+            {
+                var registrosEquipo = await _context.SolicitudesRegistroEquipo.AsNoTracking()
+                    .Where(x => x.Estado == SolicitudRegistroEquipo.EstadoPendiente)
+                    .OrderByDescending(x => x.FechaSolicitud).Take(50).ToListAsync();
+                NotificacionesPendientes.AddRange(registrosEquipo.Select(x => new NotificacionPortalDto
+                {
+                    Tipo = "REGISTRO_EQUIPO", Fecha = x.FechaSolicitud,
+                    Titulo = "Solicitud de registro de equipo",
+                    Subtitulo = x.NombreCompleto, Detalle = x.Correo, IdReferencia = x.Id
+                }));
+            }
+
+            // El descarte sólo oculta la tarjeta para quien la descartó.
+            // No altera Cotizaciones ni RoleosCancelaciones y no se confunde con "Atendido".
+            var usuarioAvisos = User.Identity?.Name;
+            if (!string.IsNullOrWhiteSpace(usuarioAvisos))
+            {
+                var descartadas = await _context.NotificacionesDescartadas.AsNoTracking()
+                    .Where(x => x.Usuario == usuarioAvisos)
+                    .Select(x => new { x.Tipo, x.IdReferencia })
+                    .ToListAsync();
+                var claves = descartadas.Select(x => x.Tipo + ":" + x.IdReferencia).ToHashSet();
+                NotificacionesPendientes = NotificacionesPendientes
+                    .Where(n => !n.IdReferencia.HasValue || !claves.Contains(n.Tipo + ":" + n.IdReferencia.Value))
+                    .ToList();
+            }
             NotificacionesPendientes = NotificacionesPendientes.OrderByDescending(n => n.Fecha).ToList();
 
             // Transportistas: todos los proveedores activos menos los depósitos (tipo 12).
             ViewData["ProveedoresTransporteList"] = await AtilsonCargoSpa.Helpers.TransportistaHelper.ListarAsync(_context);
 
             // --- ALMACENAMIENTO: depósitos (IdTipoProveedor 12) y choferes recientes ---
-            var cadenasAlmacen = await _context.Proveedores
+            var cadenasAlmacen = await _context.Proveedores.AsNoTracking()
                 .Include(p => p.IdCiudadNavigation)
                 .Where(p => p.IdTipoProveedor == 12 && p.Activo == 1)
                 .ToListAsync();
@@ -400,7 +676,7 @@ namespace AtilsonCargoSpa.Pages.Operaciones
                 .Select(x => new SelectListItem { Value = x.Id.ToString(), Text = x.Nombre, Group = ObtenerGrupoAlmacen(x.Ciudad) })
                 .ToList();
 
-            ChoferesHistorialAlmacen = await _context.Conductores
+            ChoferesHistorialAlmacen = await _context.Conductores.AsNoTracking()
                 .Where(c => c.Activo == true)
                 .Select(c => new ConductorAutoDto { Nombre = c.Nombre, Rut = c.Rut, Telefono = c.Telefono, Patente = c.Patente })
                 .ToListAsync();
@@ -471,18 +747,32 @@ DateTime? LateArrival, DateTime? ElarDate)
                 return RedirectToPage();
             }
 
+            int? polAntesRuta = operacion.IdPuertoOrigen, podAntesRuta = operacion.IdPuertoDestino;
+            var fotoNave = AtilsonCargoSpa.Services.FechasNave.De(operacion);
             if (Request.Form.ContainsKey("IdNaviera") && IdNaviera.HasValue) operacion.IdNaviera = IdNaviera.Value;
             if (Request.Form.ContainsKey("Nave")) operacion.Nave = Nave;
             if (Request.Form.ContainsKey("TipoTarifaMaritima")) operacion.TipoTarifaMaritima = TipoTarifaMaritima;
             if (Request.Form.ContainsKey("Transbordo")) operacion.Transbordo = Transbordo;
             if (Request.Form.ContainsKey("IdPuertoOrigen") && IdPuertoOrigen.HasValue) operacion.IdPuertoOrigen = IdPuertoOrigen.Value;
             if (Request.Form.ContainsKey("IdPuertoDestino") && IdPuertoDestino.HasValue) operacion.IdPuertoDestino = IdPuertoDestino.Value;
-            if (Request.Form.ContainsKey("EtdPol")) operacion.EtdPol = EtdPol;
-            if (Request.Form.ContainsKey("EtaPod")) operacion.EtaPod = EtaPod;
+            // nov-2026: si se cambian los puertos, origen y destino no pueden ser del mismo país.
+            if ((operacion.IdPuertoOrigen != polAntesRuta || operacion.IdPuertoDestino != podAntesRuta)
+                && await AtilsonCargoSpa.Helpers.PuertosHelper.MismoPaisAsync(_context, operacion.IdPuertoOrigen, operacion.IdPuertoDestino) is string paisRuta)
+            {
+                string msgRuta = AtilsonCargoSpa.Helpers.PuertosHelper.MensajeMismoPais(paisRuta);
+                if (Request.Headers["X-Requested-With"] == "XMLHttpRequest") return new JsonResult(new { success = false, message = msgRuta });
+                TempData["ErrorMsg"] = msgRuta;
+                return RedirectToPage();
+            }
+            if (Request.Form.ContainsKey("EtdPol")) operacion.EtdPol = AtilsonCargoSpa.Services.FechasNave.ConservarHora(EtdPol, operacion.EtdPol);
+            if (Request.Form.ContainsKey("EtaPod")) operacion.EtaPod = AtilsonCargoSpa.Services.FechasNave.ConservarHora(EtaPod, operacion.EtaPod);
             if (Request.Form.ContainsKey("FechaStacking")) operacion.FechaStacking = FechaStacking;
             if (Request.Form.ContainsKey("CutOffMatriz")) operacion.CutOffMatriz = CutOffMatriz;
             if (Request.Form.ContainsKey("LateArrival")) operacion.LateArrival = LateArrival;
             if (Request.Form.ContainsKey("ElarDate")) operacion.ElarDate = ElarDate;
+            // Nave escrita a mano: el vínculo con la salida del maestro se conserva solo si coincide.
+            if (Request.Form.ContainsKey("Nave") || Request.Form.ContainsKey("IdNaviera"))
+                await ItinerariosHelper.AlinearConNaveAsync(_context, operacion);
 
             if (Request.Form.ContainsKey("TerminalTerrestreStr"))
             {
@@ -502,9 +792,11 @@ DateTime? LateArrival, DateTime? ElarDate)
 
             await _context.SaveChangesAsync();
             await SincronizarTodaOperacionAFinanzasAsync(IdOperacion);
+            // Fechas de la nave (ETD, ETA, stacking, corte): lo que cambió aquí pasa a la salida y a todos sus bookings.
+            var fechasNave = await AtilsonCargoSpa.Services.FechasNave.DesdeBookingAsync(_context, operacion, fotoNave, User.Identity?.Name ?? "Sistema", "Mainboard");
 
-            if (Request.Headers["X-Requested-With"] == "XMLHttpRequest") return new JsonResult(new { success = true });
-            TempData["SuccessMsg"] = "Información marítima actualizada.";
+            if (Request.Headers["X-Requested-With"] == "XMLHttpRequest") return new JsonResult(new { success = true, stackingOtros = fechasNave.Otros, mensajeNave = fechasNave.Mensaje().Trim() });
+            TempData["SuccessMsg"] = "Información marítima actualizada." + fechasNave.Mensaje();
             return RedirectToPage();
         }
         public async Task<IActionResult> OnPostQuickEditTransporteAsync(
@@ -766,10 +1058,14 @@ DateTime? LateArrival, DateTime? ElarDate)
                     op.OperacionesDocumentales.Add(docDb);
                 }
 
+                // nov-2026: cada campo se actualiza solo si viene en el formulario. Antes, un campo
+                // que no viajaba (un <select> deshabilitado en modo vista, como el Acuerdo Comercial,
+                // o campos que ya no existen en la vista) se guardaba vacío y se perdía el dato al
+                // marcar SAG/Sernapesca o al guardar Documentos Base.
                 string? F(string key) { var val = Request.Form[key].FirstOrDefault(); return string.IsNullOrWhiteSpace(val) ? null : val.Trim(); }
                 bool FBoolPreserve(string key, bool valorActual) => Request.Form.ContainsKey(key) ? Request.Form[key].Any(v => v == "true" || v == "on") : valorActual;
                 int? FInt(string key) { var val = Request.Form[key].FirstOrDefault(); return int.TryParse(val, out var r) ? r : null; }
-                int? ParseDinero(string key) { var val = Request.Form[key].FirstOrDefault(); if (string.IsNullOrWhiteSpace(val)) return null; var clean = new string(val.Where(c => char.IsDigit(c) || c == '-').ToArray()); if (string.IsNullOrWhiteSpace(clean)) return null; return int.TryParse(clean, out var r) ? r : null; }
+                int? ParseDinero(string key) => AtilsonCargoSpa.Helpers.MontoHelper.ParseEntero(Request.Form[key].FirstOrDefault()); // nov-2026: "25000,00" ya no queda en 2.500.000
 
                 docDb.AplicaSag = Request.Form["docUpdates.AplicaSag"].Contains("true");
                 docDb.AplicaSernapesca = Request.Form["docUpdates.AplicaSernapesca"].Contains("true");
@@ -789,56 +1085,56 @@ DateTime? LateArrival, DateTime? ElarDate)
 
                 if (Request.Form.ContainsKey("docUpdates.IdAgenciaAduana"))
                     docDb.IdAgenciaAduana = FInt("docUpdates.IdAgenciaAduana");
-                docDb.DusDin = F("docUpdates.Dus");
-                docDb.Din = F("docUpdates.Din");
-                docDb.ValorDus = ParseDinero("docUpdates.ValorDus");
-                docDb.ValorDin = ParseDinero("docUpdates.ValorDin");
-                docDb.ValorAclaracion = ParseDinero("docUpdates.ValorAclaracion");
-                docDb.ValorCancelacion = ParseDinero("docUpdates.ValorCancelacion");
-                docDb.ValorRoleo = ParseDinero("docUpdates.ValorRoleo");
+                if (Request.Form.ContainsKey("docUpdates.Dus")) docDb.DusDin = F("docUpdates.Dus");
+                if (Request.Form.ContainsKey("docUpdates.Din")) docDb.Din = F("docUpdates.Din");
+                if (Request.Form.ContainsKey("docUpdates.ValorDus")) docDb.ValorDus = ParseDinero("docUpdates.ValorDus"); // campo quitado de la vista (nov-2026): no se borra el dato
+                if (Request.Form.ContainsKey("docUpdates.ValorDin")) docDb.ValorDin = ParseDinero("docUpdates.ValorDin");
+                if (Request.Form.ContainsKey("docUpdates.ValorAclaracion")) docDb.ValorAclaracion = ParseDinero("docUpdates.ValorAclaracion");
+                if (Request.Form.ContainsKey("docUpdates.ValorCancelacion")) docDb.ValorCancelacion = ParseDinero("docUpdates.ValorCancelacion");
+                if (Request.Form.ContainsKey("docUpdates.ValorRoleo")) docDb.ValorRoleo = ParseDinero("docUpdates.ValorRoleo");
 
-                docDb.EstadoDocumental = F("docUpdates.EstadoDocumental");
+                if (Request.Form.ContainsKey("docUpdates.EstadoDocumental")) docDb.EstadoDocumental = F("docUpdates.EstadoDocumental");
                 docDb.ExtensionDocumental = FBoolPreserve("docUpdates.ExtensionDocumental", docDb.ExtensionDocumental == true);
                 docDb.GuiaVisado = FBoolPreserve("docUpdates.GuiaVisado", docDb.GuiaVisado == true);
                 docDb.Roleo = FBoolPreserve("docUpdates.Roleo", docDb.Roleo == true);
                 docDb.GeneracionIvv = FBoolPreserve("docUpdates.GeneracionIvv", docDb.GeneracionIvv == true);
 
-                docDb.AcuerdoOrigen = F("docUpdates.AcuerdoOrigen");
-                docDb.RemisionOrigen1 = F("docUpdates.NumOri1"); docDb.RemisionOrigen2 = F("docUpdates.NumOri2"); docDb.NumOri3 = F("docUpdates.NumOri3"); docDb.NumOri4 = F("docUpdates.NumOri4");
-                docDb.ValOri1 = ParseDinero("docUpdates.ValOri1"); docDb.ValOri2 = ParseDinero("docUpdates.ValOri2"); docDb.ValOri3 = ParseDinero("docUpdates.ValOri3"); docDb.ValOri4 = ParseDinero("docUpdates.ValOri4");
+                if (Request.Form.ContainsKey("docUpdates.AcuerdoOrigen")) docDb.AcuerdoOrigen = F("docUpdates.AcuerdoOrigen");
+                if (Request.Form.ContainsKey("docUpdates.NumOri1")) docDb.RemisionOrigen1 = F("docUpdates.NumOri1"); if (Request.Form.ContainsKey("docUpdates.NumOri2")) docDb.RemisionOrigen2 = F("docUpdates.NumOri2"); if (Request.Form.ContainsKey("docUpdates.NumOri3")) docDb.NumOri3 = F("docUpdates.NumOri3"); if (Request.Form.ContainsKey("docUpdates.NumOri4")) docDb.NumOri4 = F("docUpdates.NumOri4");
+                if (Request.Form.ContainsKey("docUpdates.ValOri1")) docDb.ValOri1 = ParseDinero("docUpdates.ValOri1"); if (Request.Form.ContainsKey("docUpdates.ValOri2")) docDb.ValOri2 = ParseDinero("docUpdates.ValOri2"); if (Request.Form.ContainsKey("docUpdates.ValOri3")) docDb.ValOri3 = ParseDinero("docUpdates.ValOri3"); if (Request.Form.ContainsKey("docUpdates.ValOri4")) docDb.ValOri4 = ParseDinero("docUpdates.ValOri4");
 
-                docDb.CertFitosanitario = F("docUpdates.NumFit1"); docDb.NumFit2 = F("docUpdates.NumFit2"); docDb.NumFit3 = F("docUpdates.NumFit3"); docDb.NumFit4 = F("docUpdates.NumFit4");
-                docDb.ValFit1 = ParseDinero("docUpdates.ValFit1"); docDb.ValFit2 = ParseDinero("docUpdates.ValFit2"); docDb.ValFit3 = ParseDinero("docUpdates.ValFit3"); docDb.ValFit4 = ParseDinero("docUpdates.ValFit4");
+                if (Request.Form.ContainsKey("docUpdates.NumFit1")) docDb.CertFitosanitario = F("docUpdates.NumFit1"); if (Request.Form.ContainsKey("docUpdates.NumFit2")) docDb.NumFit2 = F("docUpdates.NumFit2"); if (Request.Form.ContainsKey("docUpdates.NumFit3")) docDb.NumFit3 = F("docUpdates.NumFit3"); if (Request.Form.ContainsKey("docUpdates.NumFit4")) docDb.NumFit4 = F("docUpdates.NumFit4");
+                if (Request.Form.ContainsKey("docUpdates.ValFit1")) docDb.ValFit1 = ParseDinero("docUpdates.ValFit1"); if (Request.Form.ContainsKey("docUpdates.ValFit2")) docDb.ValFit2 = ParseDinero("docUpdates.ValFit2"); if (Request.Form.ContainsKey("docUpdates.ValFit3")) docDb.ValFit3 = ParseDinero("docUpdates.ValFit3"); if (Request.Form.ContainsKey("docUpdates.ValFit4")) docDb.ValFit4 = ParseDinero("docUpdates.ValFit4");
 
-                docDb.CertSanitario = F("docUpdates.NumSan1"); docDb.NumSan2 = F("docUpdates.NumSan2"); docDb.NumSan3 = F("docUpdates.NumSan3"); docDb.NumSan4 = F("docUpdates.NumSan4");
-                docDb.ValSan1 = ParseDinero("docUpdates.ValSan1"); docDb.ValSan2 = ParseDinero("docUpdates.ValSan2"); docDb.ValSan3 = ParseDinero("docUpdates.ValSan3"); docDb.ValSan4 = ParseDinero("docUpdates.ValSan4");
+                if (Request.Form.ContainsKey("docUpdates.NumSan1")) docDb.CertSanitario = F("docUpdates.NumSan1"); if (Request.Form.ContainsKey("docUpdates.NumSan2")) docDb.NumSan2 = F("docUpdates.NumSan2"); if (Request.Form.ContainsKey("docUpdates.NumSan3")) docDb.NumSan3 = F("docUpdates.NumSan3"); if (Request.Form.ContainsKey("docUpdates.NumSan4")) docDb.NumSan4 = F("docUpdates.NumSan4");
+                if (Request.Form.ContainsKey("docUpdates.ValSan1")) docDb.ValSan1 = ParseDinero("docUpdates.ValSan1"); if (Request.Form.ContainsKey("docUpdates.ValSan2")) docDb.ValSan2 = ParseDinero("docUpdates.ValSan2"); if (Request.Form.ContainsKey("docUpdates.ValSan3")) docDb.ValSan3 = ParseDinero("docUpdates.ValSan3"); if (Request.Form.ContainsKey("docUpdates.ValSan4")) docDb.ValSan4 = ParseDinero("docUpdates.ValSan4");
 
-                docDb.NumCod1 = F("docUpdates.NumCod1"); docDb.NumCla1 = F("docUpdates.NumCla1"); docDb.NumNep1 = F("docUpdates.NumNep1");
+                if (Request.Form.ContainsKey("docUpdates.NumCod1")) docDb.NumCod1 = F("docUpdates.NumCod1"); if (Request.Form.ContainsKey("docUpdates.NumCla1")) docDb.NumCla1 = F("docUpdates.NumCla1"); if (Request.Form.ContainsKey("docUpdates.NumNep1")) docDb.NumNep1 = F("docUpdates.NumNep1");
 
-                docDb.FacturaExportacion = F("docUpdates.FacturaExportacion");
-                docDb.InstructivoCliente = F("docUpdates.InstructivoCliente");
-                docDb.NotificarA = F("docUpdates.NotificarA");
-                docDb.CertExtra = F("docUpdates.CertExtra");
-                docDb.CertLibreVenta = F("docUpdates.CertLibreVenta");
-                docDb.BookingAtilson = F("docUpdates.BookingAtilson");
-                docDb.NumGuiaDespacho = F("docUpdates.NumGuiaDespacho");
-                docDb.NumFullSet = F("docUpdates.NumFullSet");
-                docDb.TrackingDhl = F("docUpdates.TrackingDhl");
+                if (Request.Form.ContainsKey("docUpdates.FacturaExportacion")) docDb.FacturaExportacion = F("docUpdates.FacturaExportacion");
+                if (Request.Form.ContainsKey("docUpdates.InstructivoCliente")) docDb.InstructivoCliente = F("docUpdates.InstructivoCliente");
+                if (Request.Form.ContainsKey("docUpdates.NotificarA")) docDb.NotificarA = F("docUpdates.NotificarA");
+                if (Request.Form.ContainsKey("docUpdates.CertExtra")) docDb.CertExtra = F("docUpdates.CertExtra");
+                if (Request.Form.ContainsKey("docUpdates.CertLibreVenta")) docDb.CertLibreVenta = F("docUpdates.CertLibreVenta");
+                if (Request.Form.ContainsKey("docUpdates.BookingAtilson")) docDb.BookingAtilson = F("docUpdates.BookingAtilson");
+                if (Request.Form.ContainsKey("docUpdates.NumGuiaDespacho")) docDb.NumGuiaDespacho = F("docUpdates.NumGuiaDespacho");
+                if (Request.Form.ContainsKey("docUpdates.NumFullSet")) docDb.NumFullSet = F("docUpdates.NumFullSet");
+                if (Request.Form.ContainsKey("docUpdates.TrackingDhl")) docDb.TrackingDhl = F("docUpdates.TrackingDhl");
 
                 // ... (El resto del método sigue igual con el bloque await SaveFile(...) de tu código) ...
 
-                docDb.LogGuia = F("docUpdates.LogGuia");
-                docDb.LogInstructivo = F("docUpdates.LogInstructivo");
-                docDb.LogBookingAtilson = F("docUpdates.LogBookingAtilson");
-                docDb.LogFullSet = F("docUpdates.LogFullSet");
-                docDb.LogDhl = F("docUpdates.LogDhl");
-                docDb.LogFactura = F("docUpdates.LogFactura");
-                docDb.LogPacking = F("docUpdates.LogPacking");
-                docDb.LogExtra = F("docUpdates.LogExtra");
-                docDb.LogLibreVenta = DocumentalHelpers.SanitizarLogHtml(Request.Form["docUpdates.LogLibreVenta"].FirstOrDefault());
+                if (Request.Form.ContainsKey("docUpdates.LogGuia")) docDb.LogGuia = F("docUpdates.LogGuia");
+                if (Request.Form.ContainsKey("docUpdates.LogInstructivo")) docDb.LogInstructivo = F("docUpdates.LogInstructivo");
+                if (Request.Form.ContainsKey("docUpdates.LogBookingAtilson")) docDb.LogBookingAtilson = F("docUpdates.LogBookingAtilson");
+                if (Request.Form.ContainsKey("docUpdates.LogFullSet")) docDb.LogFullSet = F("docUpdates.LogFullSet");
+                if (Request.Form.ContainsKey("docUpdates.LogDhl")) docDb.LogDhl = F("docUpdates.LogDhl");
+                if (Request.Form.ContainsKey("docUpdates.LogFactura")) docDb.LogFactura = F("docUpdates.LogFactura");
+                if (Request.Form.ContainsKey("docUpdates.LogPacking")) docDb.LogPacking = F("docUpdates.LogPacking");
+                if (Request.Form.ContainsKey("docUpdates.LogExtra")) docDb.LogExtra = F("docUpdates.LogExtra");
+                if (Request.Form.ContainsKey("docUpdates.LogLibreVenta")) docDb.LogLibreVenta = DocumentalHelpers.SanitizarLogHtml(Request.Form["docUpdates.LogLibreVenta"].FirstOrDefault());
 
-                docDb.NumCap1 = F("docUpdates.NumCap1"); docDb.NumCap2 = F("docUpdates.NumCap2"); docDb.NumCap3 = F("docUpdates.NumCap3"); docDb.NumCap4 = F("docUpdates.NumCap4");
-                docDb.NumCoa1 = F("docUpdates.NumCoa1"); docDb.NumDt1 = F("docUpdates.NumDt1");
+                if (Request.Form.ContainsKey("docUpdates.NumCap1")) docDb.NumCap1 = F("docUpdates.NumCap1"); if (Request.Form.ContainsKey("docUpdates.NumCap2")) docDb.NumCap2 = F("docUpdates.NumCap2"); if (Request.Form.ContainsKey("docUpdates.NumCap3")) docDb.NumCap3 = F("docUpdates.NumCap3"); if (Request.Form.ContainsKey("docUpdates.NumCap4")) docDb.NumCap4 = F("docUpdates.NumCap4");
+                if (Request.Form.ContainsKey("docUpdates.NumCoa1")) docDb.NumCoa1 = F("docUpdates.NumCoa1"); if (Request.Form.ContainsKey("docUpdates.NumDt1")) docDb.NumDt1 = F("docUpdates.NumDt1");
 
                 string uploadsFolder = Path.Combine(_env.WebRootPath ?? Path.Combine(Directory.GetCurrentDirectory(), "wwwroot"), "uploads", "documentos");
                 if (!Directory.Exists(uploadsFolder)) Directory.CreateDirectory(uploadsFolder);
@@ -893,17 +1189,17 @@ DateTime? LateArrival, DateTime? ElarDate)
                 await SaveFile(UploadFullSet, p => docDb.RutaFullSet = p);
                 await SaveFile(UploadCapturaAga, p => docDb.RutaCapturaAga = p);
 
-                docDb.ObsOrigen = F("docUpdates.ObsOrigen");
-                docDb.ObsCaptura = F("docUpdates.ObsCaptura");
-                docDb.LogOrigen = DocumentalHelpers.SanitizarLogHtml(Request.Form["docUpdates.LogOrigen"].FirstOrDefault());
-                docDb.LogFitosanitario = DocumentalHelpers.SanitizarLogHtml(Request.Form["docUpdates.LogFitosanitario"].FirstOrDefault());
-                docDb.LogSanitario = DocumentalHelpers.SanitizarLogHtml(Request.Form["docUpdates.LogSanitario"].FirstOrDefault());
-                docDb.LogCaptura = DocumentalHelpers.SanitizarLogHtml(Request.Form["docUpdates.LogCaptura"].FirstOrDefault());
-                docDb.LogCoa = DocumentalHelpers.SanitizarLogHtml(Request.Form["docUpdates.LogCoa"].FirstOrDefault());
-                docDb.LogDt = DocumentalHelpers.SanitizarLogHtml(Request.Form["docUpdates.LogDt"].FirstOrDefault());
-                docDb.LogCodaut = DocumentalHelpers.SanitizarLogHtml(Request.Form["docUpdates.LogCodaut"].FirstOrDefault());
-                docDb.LogClave = DocumentalHelpers.SanitizarLogHtml(Request.Form["docUpdates.LogClave"].FirstOrDefault());
-                docDb.LogNeppex = DocumentalHelpers.SanitizarLogHtml(Request.Form["docUpdates.LogNeppex"].FirstOrDefault());
+                if (Request.Form.ContainsKey("docUpdates.ObsOrigen")) docDb.ObsOrigen = F("docUpdates.ObsOrigen");
+                if (Request.Form.ContainsKey("docUpdates.ObsCaptura")) docDb.ObsCaptura = F("docUpdates.ObsCaptura");
+                if (Request.Form.ContainsKey("docUpdates.LogOrigen")) docDb.LogOrigen = DocumentalHelpers.SanitizarLogHtml(Request.Form["docUpdates.LogOrigen"].FirstOrDefault());
+                if (Request.Form.ContainsKey("docUpdates.LogFitosanitario")) docDb.LogFitosanitario = DocumentalHelpers.SanitizarLogHtml(Request.Form["docUpdates.LogFitosanitario"].FirstOrDefault());
+                if (Request.Form.ContainsKey("docUpdates.LogSanitario")) docDb.LogSanitario = DocumentalHelpers.SanitizarLogHtml(Request.Form["docUpdates.LogSanitario"].FirstOrDefault());
+                if (Request.Form.ContainsKey("docUpdates.LogCaptura")) docDb.LogCaptura = DocumentalHelpers.SanitizarLogHtml(Request.Form["docUpdates.LogCaptura"].FirstOrDefault());
+                if (Request.Form.ContainsKey("docUpdates.LogCoa")) docDb.LogCoa = DocumentalHelpers.SanitizarLogHtml(Request.Form["docUpdates.LogCoa"].FirstOrDefault());
+                if (Request.Form.ContainsKey("docUpdates.LogDt")) docDb.LogDt = DocumentalHelpers.SanitizarLogHtml(Request.Form["docUpdates.LogDt"].FirstOrDefault());
+                if (Request.Form.ContainsKey("docUpdates.LogCodaut")) docDb.LogCodaut = DocumentalHelpers.SanitizarLogHtml(Request.Form["docUpdates.LogCodaut"].FirstOrDefault());
+                if (Request.Form.ContainsKey("docUpdates.LogClave")) docDb.LogClave = DocumentalHelpers.SanitizarLogHtml(Request.Form["docUpdates.LogClave"].FirstOrDefault());
+                if (Request.Form.ContainsKey("docUpdates.LogNeppex")) docDb.LogNeppex = DocumentalHelpers.SanitizarLogHtml(Request.Form["docUpdates.LogNeppex"].FirstOrDefault());
 
                 if (sagModalidadCambio)
                 {
@@ -1077,7 +1373,7 @@ DateTime? LateArrival, DateTime? ElarDate)
             string? F(string key) { var v = Request.Form[key].FirstOrDefault(); return string.IsNullOrWhiteSpace(v) ? null : v.Trim(); }
             bool FBoolPreserve(string key, bool valorActual) { if (Request.Form.TryGetValue(key, out var vals)) return vals.Any(v => v == "true" || v == "on"); return valorActual; }
             int? FInt(string key) { var val = Request.Form[key].FirstOrDefault(); return int.TryParse(val, out var r) ? r : null; }
-            int? ParseDinero(string key) { var val = Request.Form[key].FirstOrDefault(); if (string.IsNullOrWhiteSpace(val)) return null; var clean = new string(val.Where(c => char.IsDigit(c) || c == '-').ToArray()); if (string.IsNullOrWhiteSpace(clean)) return null; return int.TryParse(clean, out var r) ? r : null; }
+            int? ParseDinero(string key) => AtilsonCargoSpa.Helpers.MontoHelper.ParseEntero(Request.Form[key].FirstOrDefault()); // nov-2026: "25000,00" ya no queda en 2.500.000
 
             // Certificados con reemisiones: determina en qué slot (1=Principal,
             // 2..4=Reemisión 1..3) debe guardarse esta información, según cuáles ya
@@ -1154,7 +1450,7 @@ DateTime? LateArrival, DateTime? ElarDate)
                     if (Request.Form.ContainsKey("docUpdates.IdAgenciaAduana"))
                         docDb.IdAgenciaAduana = FInt("docUpdates.IdAgenciaAduana");
                     docDb.DusDin = F("docUpdates.Dus"); docDb.Din = F("docUpdates.Din");
-                    docDb.ValorDus = ParseDinero("docUpdates.ValorDus"); docDb.ValorDin = ParseDinero("docUpdates.ValorDin");
+                    if (Request.Form.ContainsKey("docUpdates.ValorDus")) docDb.ValorDus = ParseDinero("docUpdates.ValorDus"); if (Request.Form.ContainsKey("docUpdates.ValorDin")) docDb.ValorDin = ParseDinero("docUpdates.ValorDin");
                     docDb.ValorAclaracion = ParseDinero("docUpdates.ValorAclaracion"); docDb.ValorCancelacion = ParseDinero("docUpdates.ValorCancelacion"); docDb.ValorRoleo = ParseDinero("docUpdates.ValorRoleo");
                     docDb.EstadoDocumental = F("docUpdates.EstadoDocumental");
                     docDb.MatrizPresentada = FBoolPreserve("docUpdates.MatrizPresentada", docDb.MatrizPresentada == true);
@@ -1339,7 +1635,7 @@ DateTime? LateArrival, DateTime? ElarDate)
         public string? ObtenerAcuerdoSugerido(Operacione op)
         {
             // Esta sugerencia (y el "no cobro" que implica) es una condición comercial
-            // exclusiva del cliente especial (Promar) — nunca se ofrece a un cliente
+            // exclusiva del cliente especial (Marfrio) — nunca se ofrece a un cliente
             // estándar, aunque el puerto de destino coincida con una regla de ReglasTlc.
             if (op.IdClienteNavigation?.EsClienteEspecial != true) return null;
 
@@ -1410,31 +1706,18 @@ DateTime? LateArrival, DateTime? ElarDate)
                     RegistrarHito(op, "MARITIMO", $"LAR/ELAR actualizado — Estado: {EstadoLar ?? "Sin estado"} | LAR: {LateArrival?.ToString("dd/MM HH:mm") ?? "-"} | ELAR: {ElarDate?.ToString("dd/MM HH:mm") ?? "-"} | Ingresado: {(ContenedorIngresado ? "Sí" : "No")}");
                 }
 
-                // El extracosto de LAR se mantiene agrupado a nivel de booking, sin
-                // importar qué contenedor lo gatilló (decisión confirmada).
                 if (EstadoLar == "AUTORIZADO LAR" || EstadoLar == "INGRESADO CON LAR" || ElarDate.HasValue)
                 {
-                    var costoLar = op.ExtracostosOperacions.FirstOrDefault(e => e.TipoCosto == "Late Arrival (LAR)");
+                    // Late Arrival POR CONTENEDOR (nov-2026): cada contenedor atrasado tiene su propio
+                    // cobro, con la etiqueta del contenedor en el motivo (antes era uno por booking).
                     string elarMsg = ElarDate.HasValue ? $" | ELAR: {ElarDate.Value.ToString("dd/MM/yyyy HH:mm")}" : "";
-                    if (costoLar == null)
-                    {
-                        // Fase 2: precarga el monto desde el catálogo de recargos por naviera si
-                        // hay un match claro (naviera + tipo de contenedor, cuando se conoce);
-                        // si no, queda en 0 igual que antes, para que alguien lo complete a mano.
-                        string? tipoContenedorLar = IdUnidadTecnica.HasValue
-                            ? op.Unidadestecnicas.FirstOrDefault(u => u.Id == IdUnidadTecnica.Value)?.TipoContenedor
-                            : null;
-                        var sugerenciaLar = await RecargoNavieraHelper.SugerirLateArrivalAsync(_context, op.IdNaviera, tipoContenedorLar);
-                        string motivoLar = $"LAR {(EstadoLar == "AUTORIZADO LAR" ? "Autorizado" : "Ingresado")}. Nuevo Cut-Off: {LateArrival?.ToString("dd/MM/yyyy HH:mm") ?? "N/A"}{elarMsg}";
-                        if (sugerenciaLar != null) motivoLar += $" | {sugerenciaLar.NotaCatalogo}";
-                        op.ExtracostosOperacions.Add(new ExtracostosOperacion { TipoCosto = "Late Arrival (LAR)", Motivo = motivoLar, Monto = sugerenciaLar?.Monto ?? 0, Moneda = sugerenciaLar?.Moneda ?? "USD", Evidencia = evidenciaGuardada ?? op.EvidenciaLar ?? "Generado automáticamente por sistema", FechaCreacion = DateTime.Now, UsuarioCreador = User.Identity?.Name ?? "Sistema" });
-                    }
-                    else if (ElarDate.HasValue && !costoLar.Motivo.Contains("ELAR"))
-                    {
+                    var costoLar = await RecargoNavieraHelper.AsegurarLateArrivalAsync(_context, op, IdUnidadTecnica,
+                        $"LAR {(EstadoLar == "AUTORIZADO LAR" ? "Autorizado" : EstadoLar == "INGRESADO CON LAR" ? "Ingresado" : "por ELAR")}. Nuevo Cut-Off: {LateArrival?.ToString("dd/MM/yyyy HH:mm") ?? "N/A"}{elarMsg}",
+                        evidenciaGuardada ?? op.EvidenciaLar, User.Identity?.Name ?? "Sistema");
+                    if (ElarDate.HasValue && !(costoLar.Motivo ?? "").Contains("ELAR") && (costoLar.Motivo ?? "").Length + elarMsg.Length <= 500)
                         costoLar.Motivo += elarMsg;
-                    }
-                    // ELAR: además del aviso en el LAR, genera su propio cobro Marítimo.
-                    await RecargoNavieraHelper.AsegurarExtraLateArrivalAsync(_context, op, ElarDate, evidenciaGuardada ?? op.EvidenciaLar, User.Identity?.Name ?? "Sistema");
+                    // ELAR: genera su propio cobro Marítimo, también por contenedor.
+                    await RecargoNavieraHelper.AsegurarExtraLateArrivalAsync(_context, op, ElarDate, evidenciaGuardada ?? op.EvidenciaLar, User.Identity?.Name ?? "Sistema", IdUnidadTecnica);
                 }
 
                 op.FechaModificacion = DateTime.Now; op.CorreoClienteEnviado = false;
@@ -1458,7 +1741,7 @@ DateTime? LateArrival, DateTime? ElarDate)
     string? nuevaNave, DateTime? nuevoEtd, DateTime? nuevoEta, DateTime? nuevoStacking, DateTime? nuevoCierreDocumental,
     bool datosNuevosPendientes)
         {
-            if (tipo != "ROLEO" && tipo != "CANCELACION_NOSHOW")
+            if (!RecargoNavieraHelper.TipoRegistroValido(tipo))
                 return new JsonResult(new { success = false, message = "Tipo no reconocido." });
 
             var op = await _context.Operaciones
@@ -1476,6 +1759,18 @@ DateTime? LateArrival, DateTime? ElarDate)
                 ? penalidadOverride
                 : (sugerida ? "SI" : "NO");
 
+            // nov-2026: monto desde la tarifa de Comercial (Roleo / Cancelación / No-Show).
+            bool dentroDelPlazo = dias.HasValue && dias.Value <= (op.IdNavieraNavigation?.DiasPenalidadRoleo ?? 7);
+            var tarifaPenalidad = await RecargoNavieraHelper.SugerirPenalidadAsync(_context, op.IdNaviera, RecargoNavieraHelper.GrupoPenalidad(tipo, dentroDelPlazo));
+            string monedaPenalidad = tarifaPenalidad?.Moneda ?? "USD";
+            // Cancelación y No Show no modifican nave/ETD ni esperan itinerario.
+            if (tipo != "ROLEO")
+            {
+                datosNuevosPendientes = false;
+                nuevaNave = null; nuevoEtd = null; nuevoEta = null;
+                nuevoStacking = null; nuevoCierreDocumental = null;
+            }
+
             var registro = new RoleoCancelacion
             {
                 IdOperacion = idOperacion,
@@ -1488,7 +1783,7 @@ DateTime? LateArrival, DateTime? ElarDate)
                 PenalidadSistemaSugiere = sugerida,
                 PenalidadConfirmada = penalidadFinal,
                 CantidadContenedoresAfectados = cantidadContenedoresAfectados < 1 ? 1 : cantidadContenedoresAfectados,
-                MontoPenalidadUnitarioUsd = op.IdNavieraNavigation?.MontoPenalidadRoleoUsd,
+                MontoPenalidadUnitarioUsd = tarifaPenalidad?.Monto ?? op.IdNavieraNavigation?.MontoPenalidadRoleoUsd,
                 Comentario = comentario?.Trim(),
                 NuevaNave = nuevaNave,
                 NuevoEtd = nuevoEtd,
@@ -1505,16 +1800,20 @@ DateTime? LateArrival, DateTime? ElarDate)
             // vez (mismos campos que usa el resto del sistema: Nave/EtdPol/EtaPod/
             // FechaStacking/CutOffMatriz) — así el resto de pestañas (alertas,
             // Gest. LAR, etc.) quedan sincronizadas sin trabajo adicional.
+            var fotoNaveRoleo = AtilsonCargoSpa.Services.FechasNave.De(op);
             if (!datosNuevosPendientes)
             {
-                if (!string.IsNullOrWhiteSpace(nuevaNave)) op.Nave = nuevaNave;
+                if (!string.IsNullOrWhiteSpace(nuevaNave)) { op.Nave = nuevaNave; await ItinerariosHelper.AlinearConNaveAsync(_context, op); }
                 if (nuevoEtd.HasValue) op.EtdPol = nuevoEtd;
                 if (nuevoEta.HasValue) op.EtaPod = nuevoEta;
                 if (nuevoStacking.HasValue) op.FechaStacking = nuevoStacking;
                 if (nuevoCierreDocumental.HasValue) op.CutOffMatriz = nuevoCierreDocumental;
+                // Cambió el itinerario del booking: queda pendiente reenviar la confirmación al cliente.
+                if (!string.IsNullOrWhiteSpace(nuevaNave) || nuevoEtd.HasValue || nuevoEta.HasValue || nuevoStacking.HasValue || nuevoCierreDocumental.HasValue)
+                    op.CorreoClienteEnviado = false;
             }
 
-            string nombreTipo = tipo == "ROLEO" ? "Roleo Marítimo" : "Cancelación / No Show Marítimo";
+            string nombreTipo = RecargoNavieraHelper.NombreExtracostoPenalidad(tipo);
             string textoPenalidad = penalidadFinal switch { "SI" => "CON penalidad.", "NO" => "SIN penalidad.", _ => "Penalidad por determinar." };
             string textoDias = dias.HasValue ? $" (a {dias} días del zarpe" + (op.IdNavieraNavigation?.PenalidadRoleoSiempreAplica == true ? ", naviera con umbral especial)" : $", umbral {op.IdNavieraNavigation?.DiasPenalidadRoleo ?? 7} días)") : "";
 
@@ -1527,7 +1826,8 @@ DateTime? LateArrival, DateTime? ElarDate)
                 TipoCosto = nombreTipo,
                 Motivo = $"{textoPenalidad}{textoDias} — {registro.CantidadContenedoresAfectados} contenedor(es) afectado(s).{(string.IsNullOrWhiteSpace(comentario) ? "" : $" {comentario.Trim()}")}",
                 Monto = montoTotal,
-                Moneda = "USD",
+                Moneda = monedaPenalidad,
+                GrupoOperativo = "Marítimo",
                 Evidencia = "Generado automáticamente por sistema",
                 FechaCreacion = DateTime.Now,
                 UsuarioCreador = usuario
@@ -1537,6 +1837,8 @@ DateTime? LateArrival, DateTime? ElarDate)
 
             await _context.SaveChangesAsync();
             await SincronizarTodaOperacionAFinanzasAsync(idOperacion);
+            if (!datosNuevosPendientes)
+                await AtilsonCargoSpa.Services.FechasNave.DesdeBookingAsync(_context, op, fotoNaveRoleo, User.Identity?.Name ?? "Sistema", $"roleo {op.NumeroBooking}");
 
             return new JsonResult(new
             {
@@ -1564,18 +1866,24 @@ DateTime? LateArrival, DateTime? ElarDate)
             registro.DatosNuevosPendientes = false;
 
             var op = registro.IdOperacionNavigation;
+            var fotoNaveRoleo = op != null ? AtilsonCargoSpa.Services.FechasNave.De(op) : null;
             if (op != null)
             {
-                if (!string.IsNullOrWhiteSpace(nuevaNave)) op.Nave = nuevaNave;
+                if (!string.IsNullOrWhiteSpace(nuevaNave)) { op.Nave = nuevaNave; await ItinerariosHelper.AlinearConNaveAsync(_context, op); }
                 if (nuevoEtd.HasValue) op.EtdPol = nuevoEtd;
                 if (nuevoEta.HasValue) op.EtaPod = nuevoEta;
                 if (nuevoStacking.HasValue) op.FechaStacking = nuevoStacking;
                 if (nuevoCierreDocumental.HasValue) op.CutOffMatriz = nuevoCierreDocumental;
+                // Cambió el itinerario del booking: queda pendiente reenviar la confirmación al cliente.
+                if (!string.IsNullOrWhiteSpace(nuevaNave) || nuevoEtd.HasValue || nuevoEta.HasValue || nuevoStacking.HasValue || nuevoCierreDocumental.HasValue)
+                    op.CorreoClienteEnviado = false;
                 RegistrarHito(op, "MARITIMO", $"Itinerario de roleo confirmado — Nueva nave: {nuevaNave ?? "-"} | ETD: {nuevoEtd?.ToString("dd/MM HH:mm") ?? "-"}");
             }
 
             await _context.SaveChangesAsync();
             if (op != null) await SincronizarTodaOperacionAFinanzasAsync(op.Id);
+            if (op != null && fotoNaveRoleo != null)
+                await AtilsonCargoSpa.Services.FechasNave.DesdeBookingAsync(_context, op, fotoNaveRoleo, User.Identity?.Name ?? "Sistema", $"roleo {op.NumeroBooking}");
 
             return new JsonResult(new { success = true });
         }
@@ -1592,10 +1900,18 @@ DateTime? LateArrival, DateTime? ElarDate)
 
             registro.PenalidadConfirmada = penalidad;
             var op = registro.IdOperacionNavigation;
+            // Sin monto guardado: la tarifa de Comercial (nov-2026).
+            if (penalidad == "SI" && !registro.MontoPenalidadUnitarioUsd.HasValue && op != null)
+            {
+                var navPen = await _context.Navieras.AsNoTracking().FirstOrDefaultAsync(n => n.Id == op.IdNaviera);
+                bool dentro = registro.DiasAnticipacion.HasValue && registro.DiasAnticipacion.Value <= (navPen?.DiasPenalidadRoleo ?? 7);
+                var tarifaPen = await RecargoNavieraHelper.SugerirPenalidadAsync(_context, op.IdNaviera, RecargoNavieraHelper.GrupoPenalidad(registro.Tipo, dentro));
+                registro.MontoPenalidadUnitarioUsd = tarifaPen?.Monto ?? navPen?.MontoPenalidadRoleoUsd;
+            }
 
             if (op != null)
             {
-                string nombreTipo = registro.Tipo == "ROLEO" ? "Roleo Marítimo" : "Cancelación / No Show Marítimo";
+                string nombreTipo = RecargoNavieraHelper.NombreExtracostoPenalidad(registro.Tipo);
                 string textoPenalidad = penalidad switch { "SI" => "CON penalidad.", "NO" => "SIN penalidad.", _ => "Penalidad por determinar." };
                 decimal montoTotal = 0;
                 if (penalidad == "SI" && registro.MontoPenalidadUnitarioUsd.HasValue)
@@ -1931,8 +2247,11 @@ DateTime? FechaSalida, string? ConductorSalidaNombre, string? ConductorSalidaRut
             if (SalidaPuerto.HasValue) terr.SalidaPuerto = SalidaPuerto;
             terr.SorteoEscaner = SorteoEscaner;
 
-            double horasLibresPlanta = 7; if (double.TryParse(Request.Form["HorasLibresPlanta"], out double hp)) horasLibresPlanta = hp;
-            double horasLibresPuerto = 3; if (double.TryParse(Request.Form["HorasLibresPuerto"], out double hpu)) horasLibresPuerto = hpu;
+            // Cultura invariante: con el servidor en es-CL "7.5" se leía como 75 horas.
+            static bool LeerHoras(string? t, out double h) => double.TryParse((t ?? "").Trim().Replace(',', '.'),
+                System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out h);
+            double horasLibresPlanta = 7; if (LeerHoras(Request.Form["HorasLibresPlanta"], out double hp)) horasLibresPlanta = hp;
+            double horasLibresPuerto = 3; if (LeerHoras(Request.Form["HorasLibresPuerto"], out double hpu)) horasLibresPuerto = hpu;
 
             if (LlegadaPlanta.HasValue && SalidaPlanta.HasValue) { var diff = SalidaPlanta.Value - LlegadaPlanta.Value; if (diff.TotalHours > horasLibresPlanta) { string m = $"[{contenedorLabel}] Camión en planta desde {LlegadaPlanta.Value:HH:mm} hasta {SalidaPlanta.Value:HH:mm}. Total espera: {diff.TotalHours:0.1} hrs. (Límite {horasLibresPlanta}h)"; op.ExtracostosOperacions.Add(new ExtracostosOperacion { TipoCosto = "Sobreestadía Planta", Motivo = m, Monto = 0, Moneda = "USD", Evidencia = "Generado por sistema interno", FechaCreacion = DateTime.Now, UsuarioCreador = User.Identity?.Name ?? "Sistema" }); } }
             if (SalidaPuerto.HasValue) { var diffPuerto = SalidaPuerto.Value - LlegadaPuerto; if (diffPuerto.TotalHours > horasLibresPuerto) { string m = $"[{contenedorLabel}] Camión en puerto desde {LlegadaPuerto:HH:mm} hasta {SalidaPuerto.Value:HH:mm}. Total espera: {diffPuerto.TotalHours:0.1} hrs. (Límite {horasLibresPuerto}h)"; op.ExtracostosOperacions.Add(new ExtracostosOperacion { TipoCosto = "Sobreestadía Puerto", Motivo = m, Monto = 0, Moneda = "USD", Evidencia = "Generado por sistema interno", FechaCreacion = DateTime.Now, UsuarioCreador = User.Identity?.Name ?? "Sistema" }); } }
@@ -1945,15 +2264,10 @@ DateTime? FechaSalida, string? ConductorSalidaNombre, string? ConductorSalidaRut
             {
                 if (unidad != null) unidad.EstadoLar = "INGRESADO CON LAR"; else op.EstadoLar = "INGRESADO CON LAR";
                 string m = $"[{contenedorLabel}] Ingreso a puerto {LlegadaPuerto:dd/MM HH:mm}, superando el Cut-Off. Criterio: {ResponsableLar}";
-                var extCosto = op.ExtracostosOperacions.FirstOrDefault(e => e.TipoCosto == "Late Arrival (LAR)");
-                if (extCosto == null)
-                {
-                    // Fase 2: acá sí se conoce el contenedor que gatilló el LAR (cuando
-                    // aplica), así que se puede sugerir la tarifa Dry/Reefer específica.
-                    var sugerenciaLar = await RecargoNavieraHelper.SugerirLateArrivalAsync(_context, op.IdNaviera, unidad?.TipoContenedor);
-                    string motivoLar = sugerenciaLar != null ? $"{m} | {sugerenciaLar.NotaCatalogo}" : m;
-                    op.ExtracostosOperacions.Add(new ExtracostosOperacion { TipoCosto = "Late Arrival (LAR)", Motivo = motivoLar, Monto = sugerenciaLar?.Monto ?? 0, Moneda = sugerenciaLar?.Moneda ?? "USD", Evidencia = "Generado automáticamente por hora de acceso", FechaCreacion = DateTime.Now, UsuarioCreador = User.Identity?.Name ?? "Sistema" });
-                }
+                // Un cobro de Late Arrival por contenedor (nov-2026), con la tarifa Dry/Reefer del contenedor.
+                await RecargoNavieraHelper.AsegurarLateArrivalAsync(_context, op, idUnidadTecnica,
+                    $"Ingreso a puerto {LlegadaPuerto:dd/MM HH:mm}, superando el Cut-Off. Criterio: {ResponsableLar}",
+                    "Generado automáticamente por hora de acceso", User.Identity?.Name ?? "Sistema");
             }
             if (unidad != null) unidad.ContenedorIngresado = true; else op.ContenedorIngresado = true;
 
@@ -2010,13 +2324,173 @@ DateTime? FechaSalida, string? ConductorSalidaNombre, string? ConductorSalidaRut
             return mainPendiente || unidadPendiente;
         }
 
-        public void GenerarAlertasProactivas(Operacione op, OperacionesTerrestre? t, OperacionesDocumentale? d, bool reqMar, bool reqDoc, bool reqMatriz, bool reqTerrestre, out string alertMatriz, out string alertStacking, out string alertTransporte, out string alertTransbordo, out string alertArribo, out string alertDevolucion)
+        public void GenerarAlertasProactivas(Operacione op, OperacionesTerrestre? t, OperacionesDocumentale? d, bool reqMar, bool reqDoc, bool reqMatriz, bool reqTerrestre, out string alertMatriz, out string alertStacking, out string alertTransporte, out string alertDhl, out string alertTransbordo, out string alertArribo, out string alertDevolucion)
         {
-            alertMatriz = ""; alertStacking = ""; alertTransporte = ""; alertTransbordo = ""; alertArribo = ""; alertDevolucion = ""; DateTime now = DateTime.Now;
-            if (reqMatriz && (d == null || d.MatrizPresentada != true) && op.CutOffMatriz.HasValue) { TimeSpan diff = op.CutOffMatriz.Value - now; if (diff.TotalHours <= 24 && diff.TotalHours > 12) alertMatriz = $"<div class='p-2 mb-1 rounded bg-light border-start border-3 border-info text-dark shadow-sm' style='font-size: 11px;'><strong class='d-block text-info'><i class='bi bi-info-circle me-1'></i> MATRIZ DOCUMENTAL</strong> Vence en {Math.Round(diff.TotalHours)} hrs ({op.CutOffMatriz.Value:dd/MM HH:mm}).</div>"; else if (diff.TotalHours <= 12 && diff.TotalHours > 3) alertMatriz = $"<div class='p-2 mb-1 rounded bg-light border-start border-3 border-warning text-dark shadow-sm' style='font-size: 11px;'><strong class='d-block' style='color:#d97706;'><i class='bi bi-exclamation-triangle me-1'></i> MATRIZ DOCUMENTAL</strong> Vence en {Math.Round(diff.TotalHours)} hrs. Urge confirmación.</div>"; else if (diff.TotalHours <= 3 && diff.TotalHours > 0) alertMatriz = $"<div class='p-2 mb-1 rounded bg-light border-start border-3 border-danger text-dark shadow-sm' style='font-size: 11px;'><strong class='d-block text-danger'><i class='bi bi-x-octagon me-1'></i> MATRIZ CRÍTICA</strong> Vence en {Math.Round(diff.TotalHours)} hrs. Riesgo de multa.</div>"; else if (diff.TotalHours <= 0) alertMatriz = $"<div class='p-2 mb-1 rounded bg-danger bg-opacity-10 border-start border-3 border-danger text-danger shadow-sm' style='font-size: 11px;'><strong class='d-block'><i class='bi bi-x-octagon-fill me-1'></i> MATRIZ VENCIDA</strong> ¡Corte finalizado! Gestión urgente.</div>"; }
-            if (reqMar) { DateTime? deadline = op.LateArrival ?? op.CutOffMatriz; if (deadline.HasValue) { TimeSpan travelTime = GetTravelTime(t?.PlantaCarga, op.IdPuertoOrigenNavigation?.NombrePuerto); DateTime maxDeparture = deadline.Value.Subtract(travelTime); TimeSpan timeToDeparture = maxDeparture - now; if (timeToDeparture.TotalHours <= 3) { if (timeToDeparture.TotalHours <= 0) alertStacking = $"<div class='p-2 mb-1 rounded bg-danger bg-opacity-10 border-start border-3 border-danger text-danger shadow-sm alert-stacking' style='font-size: 11px;'><strong class='d-block'><i class='bi bi-truck me-1'></i> ATRASO A PUERTO</strong> Camión debió salir a las {maxDeparture:HH:mm}. <br/><span class='text-muted text-danger'>Riesgo de pérdida de nave.</span></div>"; else alertStacking = $"<div class='p-2 mb-1 rounded bg-light border-start border-3 border-warning text-dark shadow-sm alert-stacking' style='font-size: 11px;'><strong class='d-block' style='color:#d97706;'><i class='bi bi-cone-striped me-1'></i> TRÁNSITO A PUERTO</strong> Salida límite: {maxDeparture:HH:mm}.</div>"; } } }
-            if (reqTerrestre && op.FechaStacking.HasValue) { TimeSpan diffTrans = op.FechaStacking.Value - now; bool transportAsignado = !string.IsNullOrWhiteSpace(t?.EmpresaTransporte); bool asignacionNotificada = t?.AsignacionEnviada == true; bool solicitudEnviada = t?.SolicitudEnviada == true; if (transportAsignado || asignacionNotificada) { alertTransporte = ""; } else if (solicitudEnviada) { alertTransporte = $"<div class='p-2 mb-1 rounded bg-light border-start border-3 border-primary text-dark shadow-sm' style='font-size: 11px;'><strong class='d-block text-primary'><i class='bi bi-envelope-check me-1'></i> LOGÍSTICA EN PROCESO</strong> Solicitud enviada, esperando chofer.</div>"; } else { if (diffTrans.TotalDays <= 5 && diffTrans.TotalDays > 3) alertTransporte = $"<div class='p-2 mb-1 rounded bg-light border-start border-3 border-info text-dark shadow-sm' style='font-size: 11px;'><strong class='d-block text-info'><i class='bi bi-truck me-1'></i> LOGÍSTICA</strong> Faltan {diffTrans.TotalDays:0} días para Stacking. <br/><span class='text-muted'>Sugerencia: Solicitar transporte.</span></div>"; else if (diffTrans.TotalDays <= 3 && diffTrans.TotalDays > 2) alertTransporte = $"<div class='p-2 mb-1 rounded bg-light border-start border-3 border-warning text-dark shadow-sm' style='font-size: 11px;'><strong class='d-block' style='color:#d97706;'><i class='bi bi-truck me-1'></i> ALERTA LOGÍSTICA</strong> Faltan {diffTrans.TotalDays:0} días para Stacking. <br/><span class='text-muted'>Debe confirmar camión.</span></div>"; else if (diffTrans.TotalDays <= 2 && diffTrans.TotalDays > 1) alertTransporte = $"<div class='p-2 mb-1 rounded bg-light border-start border-3 border-danger text-dark shadow-sm' style='font-size: 11px;'><strong class='d-block text-danger'><i class='bi bi-truck me-1'></i> LOGÍSTICA CRÍTICA</strong> Menos de 48 hrs y NO hay transporte.</div>"; else if (diffTrans.TotalDays <= 1 && diffTrans.TotalDays >= 0) alertTransporte = $"<div class='p-2 mb-1 rounded bg-danger bg-opacity-10 border-start border-3 border-danger text-danger shadow-sm' style='font-size: 11px;'><strong class='d-block'><i class='bi bi-truck me-1'></i> PELIGRO LOGÍSTICO</strong> Stacking abre mañana. <br/><span class='text-muted text-danger'>¡Asignación URGENTE!</span></div>"; else if (diffTrans.TotalDays < 0) alertTransporte = $"<div class='p-2 mb-1 rounded bg-danger text-white border-start border-3 border-dark shadow-sm' style='font-size: 11px;'><strong class='d-block'><i class='bi bi-exclamation-octagon-fill me-1'></i> LOGÍSTICA VENCIDA</strong> STACKING ABIERTO SIN CAMIÓN.</div>"; } }
-            if (op.EtdPol.HasValue && (d == null || d.DhlEnviadoCliente != true)) { TimeSpan diffPostZarpe = now - op.EtdPol.Value; bool aplicaSernapesca = (d != null && d.AplicaSernapesca == true); if (aplicaSernapesca && diffPostZarpe.TotalDays >= 3) { alertMatriz += $"<div class='p-2 mb-1 mt-1 rounded bg-light border-start border-3 border-warning text-dark shadow-sm' style='font-size: 11px;'><strong class='d-block' style='color:#d97706;'><i class='bi bi-exclamation-triangle me-1'></i> ALERTA DHL</strong> Han pasado {diffPostZarpe.Days} días post-zarpe.<span class='text-muted d-block'>Urge gestión con AGA.</span></div>"; } else if (!aplicaSernapesca && diffPostZarpe.TotalDays >= 5) { alertMatriz += $"<div class='p-2 mb-1 mt-1 rounded bg-light border-start border-3 border-warning text-dark shadow-sm' style='font-size: 11px;'><strong class='d-block' style='color:#d97706;'><i class='bi bi-exclamation-triangle me-1'></i> ALERTA DHL</strong> Han pasado {diffPostZarpe.Days} días post-zarpe.<span class='text-muted d-block'>Enviar Full Set a cliente.</span></div>"; } }
+            alertMatriz = "";
+            alertStacking = "";
+            alertTransporte = "";
+            alertDhl = "";
+            alertTransbordo = "";
+            alertArribo = "";
+            alertDevolucion = "";
+
+            DateTime now = DateTime.Now;
+
+            string EtiquetaUnidad(OperacionesTerrestre terr)
+            {
+                if (!terr.IdUnidadTecnica.HasValue)
+                    return AtilsonCargoSpa.Helpers.ContenedorEtiquetaHelper.EtiquetaCompleta(op.NumeroContenedor, 1);
+
+                var unidades = (op.Unidadestecnicas ?? new List<Unidadestecnica>()).OrderBy(x => x.Id).ToList();
+                int idx = unidades.FindIndex(x => x.Id == terr.IdUnidadTecnica.Value);
+                if (idx < 0) return $"Contenedor U{terr.IdUnidadTecnica.Value}";
+                return AtilsonCargoSpa.Helpers.ContenedorEtiquetaHelper.EtiquetaCompleta(unidades[idx].NroContenedor, idx + 2);
+            }
+
+            var terrestres = (op.OperacionesTerrestres ?? new List<OperacionesTerrestre>())
+                .Where(x => x.Activo != false)
+                .OrderBy(x => x.IdUnidadTecnica.HasValue ? 1 : 0)
+                .ThenBy(x => x.IdUnidadTecnica)
+                .ToList();
+            if (!terrestres.Any() && t != null) terrestres.Add(t);
+
+            // MATRIZ / CORTE DOCUMENTAL: una única fuente (backend).
+            if (reqMatriz && (d == null || d.MatrizPresentada != true) && op.CutOffMatriz.HasValue)
+            {
+                TimeSpan diff = op.CutOffMatriz.Value - now;
+                if (diff.TotalHours <= 24 && diff.TotalHours > 12)
+                    alertMatriz = $"<div class='p-2 mb-1 rounded bg-light border-start border-3 border-info text-dark shadow-sm' style='font-size:11px;'><strong class='d-block text-info'><i class='bi bi-info-circle me-1'></i> MATRIZ DOCUMENTAL</strong> Vence en {Math.Ceiling(diff.TotalHours)} hrs ({op.CutOffMatriz.Value:dd/MM HH:mm}).</div>";
+                else if (diff.TotalHours <= 12 && diff.TotalHours > 3)
+                    alertMatriz = $"<div class='p-2 mb-1 rounded bg-light border-start border-3 border-warning text-dark shadow-sm' style='font-size:11px;'><strong class='d-block' style='color:#d97706;'><i class='bi bi-exclamation-triangle me-1'></i> MATRIZ DOCUMENTAL</strong> Vence en {Math.Ceiling(diff.TotalHours)} hrs ({op.CutOffMatriz.Value:dd/MM HH:mm}). Urge confirmación.</div>";
+                else if (diff.TotalHours <= 3 && diff.TotalHours > 0)
+                    alertMatriz = $"<div class='p-2 mb-1 rounded bg-light border-start border-3 border-danger text-dark shadow-sm' style='font-size:11px;'><strong class='d-block text-danger'><i class='bi bi-x-octagon me-1'></i> MATRIZ CRÍTICA</strong> Vence en {Math.Max(1, Math.Ceiling(diff.TotalHours))} hrs ({op.CutOffMatriz.Value:dd/MM HH:mm}).</div>";
+                else if (diff.TotalHours <= 0)
+                    alertMatriz = $"<div class='p-2 mb-1 rounded bg-danger bg-opacity-10 border-start border-3 border-danger text-danger shadow-sm' style='font-size:11px;'><strong class='d-block'><i class='bi bi-x-octagon-fill me-1'></i> MATRIZ VENCIDA</strong> Corte vencido el {op.CutOffMatriz.Value:dd/MM HH:mm}. Gestión urgente.</div>";
+            }
+
+            // CITACIÓN / CAMIÓN EN PLANTA: se evalúa por contenedor. De esta forma,
+            // modificar la citación de una unidad secundaria también recalcula el tablero.
+            if (reqTerrestre)
+            {
+                var avisos = new List<(double Prioridad, string Html)>();
+                foreach (var terr in terrestres)
+                {
+                    string etiqueta = System.Net.WebUtility.HtmlEncode(EtiquetaUnidad(terr));
+
+                    if (terr.FechaCarga.HasValue && !terr.LlegadaPlanta.HasValue)
+                    {
+                        TimeSpan diffCarga = terr.FechaCarga.Value - now;
+                        if (diffCarga.TotalHours <= 24)
+                        {
+                            string html;
+                            if (diffCarga.TotalHours > 6)
+                                html = $"<div class='p-2 mb-1 rounded bg-light border-start border-3 border-info text-dark shadow-sm' style='font-size:11px;'><strong class='d-block text-info'><i class='bi bi-clock me-1'></i> CITACIÓN EN PLANTA · {etiqueta}</strong> Presentación: {terr.FechaCarga.Value:dd/MM HH:mm}. Faltan {Math.Ceiling(diffCarga.TotalHours)} hrs.</div>";
+                            else if (diffCarga.TotalHours > 0)
+                                html = $"<div class='p-2 mb-1 rounded bg-light border-start border-3 border-warning text-dark shadow-sm' style='font-size:11px;'><strong class='d-block' style='color:#d97706;'><i class='bi bi-truck me-1'></i> CITACIÓN PRÓXIMA · {etiqueta}</strong> Presentación: {terr.FechaCarga.Value:dd/MM HH:mm}. Faltan {Math.Max(1, Math.Ceiling(diffCarga.TotalHours))} hrs.</div>";
+                            else
+                                html = $"<div class='p-2 mb-1 rounded bg-danger bg-opacity-10 border-start border-3 border-danger text-danger shadow-sm' style='font-size:11px;'><strong class='d-block'><i class='bi bi-exclamation-octagon-fill me-1'></i> CITACIÓN VENCIDA · {etiqueta}</strong> Debía presentarse el {terr.FechaCarga.Value:dd/MM HH:mm} y aún no se registra llegada a planta.</div>";
+
+                            avisos.Add((diffCarga.TotalHours, html));
+                        }
+                    }
+                    else if (terr.LlegadaPlanta.HasValue && !terr.SalidaPlanta.HasValue)
+                    {
+                        TimeSpan enPlanta = now - terr.LlegadaPlanta.Value;
+                        if (enPlanta.TotalMinutes >= 30)
+                        {
+                            string html = $"<div class='p-2 mb-1 rounded bg-light border-start border-3 border-warning text-dark shadow-sm' style='font-size:11px;'><strong class='d-block' style='color:#d97706;'><i class='bi bi-truck-flatbed me-1'></i> CAMIÓN EN PLANTA · {etiqueta}</strong> Llegó a las {terr.LlegadaPlanta.Value:HH:mm}; aún no se registra salida. Tiempo: {Math.Floor(enPlanta.TotalHours)}h {enPlanta.Minutes}m.</div>";
+                            avisos.Add((-enPlanta.TotalHours, html));
+                        }
+                    }
+                }
+                alertTransporte = string.Concat(avisos.OrderBy(x => x.Prioridad).Take(3).Select(x => x.Html));
+            }
+
+            // SALIDA LÍMITE HACIA PUERTO: solo en servicios con tramo terrestre.
+            // Cada contenedor usa su planta vigente; no se conserva ningún cálculo anterior.
+            // nov-2026: solo exportaciones (en importación el camión va del puerto a planta) y
+            // con el plazo de CADA contenedor: ELAR > LAR > Cut-Off, igual que el cierre en
+            // "Aviso Servicio Finalizado". Se omiten los contenedores ya ingresados a puerto.
+            bool esExportacionAlerta = new[] { 1, 2, 3, 4, 5, 6, 7 }.Contains(op.IdTipoServicio ?? 0);
+            if (reqMar && reqTerrestre && esExportacionAlerta)
+            {
+                DateTime? DeadlineContenedor(OperacionesTerrestre terrD)
+                {
+                    var unidadD = terrD.IdUnidadTecnica.HasValue
+                        ? op.Unidadestecnicas?.FirstOrDefault(u => u.Id == terrD.IdUnidadTecnica.Value)
+                        : null;
+                    return unidadD != null
+                        ? (unidadD.ElarDate ?? unidadD.LateArrival ?? op.ElarDate ?? op.LateArrival ?? op.CutOffMatriz)
+                        : (op.ElarDate ?? op.LateArrival ?? op.CutOffMatriz);
+                }
+                bool YaIngresado(OperacionesTerrestre terrI)
+                {
+                    if (!terrI.IdUnidadTecnica.HasValue) return op.ContenedorIngresado == true;
+                    return op.Unidadestecnicas?.FirstOrDefault(u => u.Id == terrI.IdUnidadTecnica.Value)?.ContenedorIngresado == true;
+                }
+                {
+                    var avisosSalida = new List<(double Prioridad, string Html)>();
+                    foreach (var terr in terrestres.Where(x => !x.SalidaPlanta.HasValue && !x.LlegadaPuerto.HasValue && !YaIngresado(x)))
+                    {
+                        DateTime? deadline = DeadlineContenedor(terr);
+                        if (!deadline.HasValue) continue;
+                        TimeSpan travelTime = GetTravelTime(terr.PlantaCarga, op.IdPuertoOrigenNavigation?.NombrePuerto);
+                        DateTime maxDeparture = deadline.Value.Subtract(travelTime);
+                        TimeSpan restante = maxDeparture - now;
+                        if (restante.TotalHours <= 3)
+                        {
+                            string etiqueta = System.Net.WebUtility.HtmlEncode(EtiquetaUnidad(terr));
+                            string html = restante.TotalHours <= 0
+                                ? $"<div class='p-2 mb-1 rounded bg-danger bg-opacity-10 border-start border-3 border-danger text-danger shadow-sm alert-stacking' style='font-size:11px;'><strong class='d-block'><i class='bi bi-truck me-1'></i> ATRASO A PUERTO · {etiqueta}</strong> Salida límite recalculada: {maxDeparture:dd/MM HH:mm}. Riesgo de pérdida de nave.</div>"
+                                : $"<div class='p-2 mb-1 rounded bg-light border-start border-3 border-warning text-dark shadow-sm alert-stacking' style='font-size:11px;'><strong class='d-block' style='color:#d97706;'><i class='bi bi-cone-striped me-1'></i> SALIDA A PUERTO · {etiqueta}</strong> Salida límite: {maxDeparture:dd/MM HH:mm} ({Math.Max(1, Math.Ceiling(restante.TotalHours))} hrs).</div>";
+                            avisosSalida.Add((restante.TotalHours, html));
+                        }
+                    }
+                    alertStacking = string.Concat(avisosSalida.OrderBy(x => x.Prioridad).Take(3).Select(x => x.Html));
+                }
+            }
+
+            // ASIGNACIÓN DE TRANSPORTE: solo se muestra si no existe una alerta de
+            // citación/planta más específica. Se consideran todas las unidades.
+            if (string.IsNullOrEmpty(alertTransporte) && reqTerrestre && op.FechaStacking.HasValue)
+            {
+                var pendientes = terrestres.Where(x => string.IsNullOrWhiteSpace(x.EmpresaTransporte) && !x.AsignacionEnviada).ToList();
+                if (pendientes.Any() || !terrestres.Any())
+                {
+                    TimeSpan diffTrans = op.FechaStacking.Value - now;
+                    int cantidad = pendientes.Any() ? pendientes.Count : 1;
+                    string alcance = cantidad > 1 ? $"{cantidad} contenedores sin transporte." : "Falta asignar transporte.";
+                    bool solicitudesEnviadas = pendientes.Any() && pendientes.All(x => x.SolicitudEnviada);
+
+                    if (solicitudesEnviadas)
+                        alertTransporte = $"<div class='p-2 mb-1 rounded bg-light border-start border-3 border-primary text-dark shadow-sm' style='font-size:11px;'><strong class='d-block text-primary'><i class='bi bi-envelope-check me-1'></i> LOGÍSTICA EN PROCESO</strong> {alcance} Solicitud enviada; esperando asignación.</div>";
+                    else if (diffTrans.TotalDays <= 5 && diffTrans.TotalDays > 3)
+                        alertTransporte = $"<div class='p-2 mb-1 rounded bg-light border-start border-3 border-info text-dark shadow-sm' style='font-size:11px;'><strong class='d-block text-info'><i class='bi bi-truck me-1'></i> LOGÍSTICA</strong> {alcance} Faltan {Math.Ceiling(diffTrans.TotalDays)} días para Stacking.</div>";
+                    else if (diffTrans.TotalDays <= 3 && diffTrans.TotalDays > 2)
+                        alertTransporte = $"<div class='p-2 mb-1 rounded bg-light border-start border-3 border-warning text-dark shadow-sm' style='font-size:11px;'><strong class='d-block' style='color:#d97706;'><i class='bi bi-truck me-1'></i> ALERTA LOGÍSTICA</strong> {alcance} Faltan {Math.Ceiling(diffTrans.TotalDays)} días para Stacking.</div>";
+                    else if (diffTrans.TotalDays <= 2 && diffTrans.TotalDays > 1)
+                        alertTransporte = $"<div class='p-2 mb-1 rounded bg-light border-start border-3 border-danger text-dark shadow-sm' style='font-size:11px;'><strong class='d-block text-danger'><i class='bi bi-truck me-1'></i> LOGÍSTICA CRÍTICA</strong> {alcance} Menos de 48 hrs para Stacking.</div>";
+                    else if (diffTrans.TotalDays <= 1 && diffTrans.TotalDays >= 0)
+                        alertTransporte = $"<div class='p-2 mb-1 rounded bg-danger bg-opacity-10 border-start border-3 border-danger text-danger shadow-sm' style='font-size:11px;'><strong class='d-block'><i class='bi bi-truck me-1'></i> PELIGRO LOGÍSTICO</strong> {alcance} Stacking abre en menos de 24 hrs.</div>";
+                    else if (diffTrans.TotalDays < 0)
+                        alertTransporte = $"<div class='p-2 mb-1 rounded bg-danger text-white border-start border-3 border-dark shadow-sm' style='font-size:11px;'><strong class='d-block'><i class='bi bi-exclamation-octagon-fill me-1'></i> LOGÍSTICA VENCIDA</strong> {alcance} Stacking ya está abierto.</div>";
+                }
+            }
+
+            // Documentación post-zarpe separada de Matriz para que no aparezca como
+            // una segunda "Matriz" dentro del mismo panel de alertas.
+            var docs = op.OperacionesDocumentales ?? new List<OperacionesDocumentale>();
+            bool dhlPendiente = docs.Any() ? docs.Any(x => x.DhlEnviadoCliente != true) : (d == null || d.DhlEnviadoCliente != true);
+            // Solo si Atilson gestiona la parte documental (el Full Set/courier es de esa pestaña).
+            if (reqDoc && op.EtdPol.HasValue && dhlPendiente)
+            {
+                TimeSpan diffPostZarpe = now - op.EtdPol.Value;
+                bool aplicaSernapesca = docs.Any(x => x.AplicaSernapesca == true) || d?.AplicaSernapesca == true;
+                if (aplicaSernapesca && diffPostZarpe.TotalDays >= 3)
+                    alertDhl = $"<div class='p-2 mb-1 rounded bg-light border-start border-3 border-warning text-dark shadow-sm' style='font-size:11px;'><strong class='d-block' style='color:#d97706;'><i class='bi bi-send-exclamation me-1'></i> DOCUMENTOS POST-ZARPE</strong> Han pasado {diffPostZarpe.Days} días desde el zarpe. Urge gestión con AGA / envío correspondiente.</div>";
+                else if (!aplicaSernapesca && diffPostZarpe.TotalDays >= 5)
+                    alertDhl = $"<div class='p-2 mb-1 rounded bg-light border-start border-3 border-warning text-dark shadow-sm' style='font-size:11px;'><strong class='d-block' style='color:#d97706;'><i class='bi bi-send-exclamation me-1'></i> DOCUMENTOS POST-ZARPE</strong> Han pasado {diffPostZarpe.Days} días desde el zarpe. Enviar Full Set al cliente.</div>";
+            }
 
             if (reqMar && !string.IsNullOrWhiteSpace(op.Transbordo))
             {
@@ -2026,29 +2500,22 @@ DateTime? FechaSalida, string? ConductorSalidaNombre, string? ConductorSalidaRut
                 if (estadoTr == "CRITICO" && limiteTr.HasValue)
                 {
                     int diasRest = Math.Max(0, (int)Math.Ceiling((limiteTr.Value - now).TotalDays));
-                    // op.Transbordo es texto libre ingresado por el usuario: se HTML-encodea antes de
-                    // interpolarlo porque el resto del string se renderiza con @Html.Raw (XSS almacenado).
                     string transbordoSeguro = System.Net.WebUtility.HtmlEncode(op.Transbordo);
-                    alertTransbordo = $"<div class='p-2 mb-1 rounded bg-light border-start border-3 border-warning text-dark shadow-sm' style='font-size: 11px;'><strong class='d-block' style='color:#d97706;'><i class='bi bi-arrow-left-right me-1'></i> TRANSBORDO</strong> Quedan {diasRest} día(s) para gestionar la nueva nave en {transbordoSeguro}.</div>";
+                    alertTransbordo = $"<div class='p-2 mb-1 rounded bg-light border-start border-3 border-warning text-dark shadow-sm' style='font-size:11px;'><strong class='d-block' style='color:#d97706;'><i class='bi bi-arrow-left-right me-1'></i> TRANSBORDO</strong> Quedan {diasRest} día(s) para gestionar la nueva nave en {transbordoSeguro}.</div>";
                 }
                 else if (estadoTr == "VENCIDO")
                 {
                     string transbordoSeguro = System.Net.WebUtility.HtmlEncode(op.Transbordo);
-                    alertTransbordo = $"<div class='p-2 mb-1 rounded bg-danger bg-opacity-10 border-start border-3 border-danger text-danger shadow-sm' style='font-size: 11px;'><strong class='d-block'><i class='bi bi-exclamation-octagon-fill me-1'></i> TRANSBORDO VENCIDO</strong> Plazo en {transbordoSeguro} superado sin nueva nave confirmada.</div>";
+                    alertTransbordo = $"<div class='p-2 mb-1 rounded bg-danger bg-opacity-10 border-start border-3 border-danger text-danger shadow-sm' style='font-size:11px;'><strong class='d-block'><i class='bi bi-exclamation-octagon-fill me-1'></i> TRANSBORDO VENCIDO</strong> Plazo en {transbordoSeguro} superado sin nueva nave confirmada.</div>";
                 }
             }
 
             if (PendienteGestionRetiro(op))
-            {
-                alertArribo = $"<div class='p-2 mb-1 rounded bg-light border-start border-3 border-success text-dark shadow-sm' style='font-size: 11px;'><strong class='d-block text-success'><i class='bi bi-box-seam me-1'></i> RETIRO PENDIENTE</strong> El contenedor arribó a destino. Gestionar retiro con el cliente y marcar \"Contenedor Retirado\".</div>";
-            }
+                alertArribo = $"<div class='p-2 mb-1 rounded bg-light border-start border-3 border-success text-dark shadow-sm' style='font-size:11px;'><strong class='d-block text-success'><i class='bi bi-box-seam me-1'></i> RETIRO PENDIENTE</strong> El contenedor arribó a destino. Gestionar retiro con el cliente y marcar \"Contenedor Retirado\".</div>";
 
             if (PendienteDevolucionVacio(op))
-            {
-                alertDevolucion = $"<div class='p-2 mb-1 rounded bg-light border-start border-3 border-info text-dark shadow-sm' style='font-size: 11px;'><strong class='d-block text-info'><i class='bi bi-arrow-return-left me-1'></i> PENDIENTE DEVOLUCIÓN</strong> El contenedor fue retirado. Falta confirmar la devolución del vacío al depósito.</div>";
-            }
+                alertDevolucion = $"<div class='p-2 mb-1 rounded bg-light border-start border-3 border-info text-dark shadow-sm' style='font-size:11px;'><strong class='d-block text-info'><i class='bi bi-arrow-return-left me-1'></i> PENDIENTE DEVOLUCIÓN</strong> El contenedor fue retirado. Falta confirmar la devolución del vacío al depósito.</div>";
         }
-
         public async Task<IActionResult> OnGetBuscarEmpresaAsync(string term)
         {
             if (string.IsNullOrWhiteSpace(term) || term.Length < 2) return new JsonResult(new List<object>());
@@ -2084,8 +2551,12 @@ DateTime? FechaSalida, string? ConductorSalidaNombre, string? ConductorSalidaRut
                         </div>
                     </div>";
 
-                await _emailService.EnviarCorreoAsync(correoDestino, asunto, htmlFinal);
-                RegistrarHito(op, "TRANSPORTE", $"Correo de transporte ({tipoCorreo}) enviado a: {correoDestino}");
+                if (string.IsNullOrWhiteSpace(correoDestino))
+                    return new JsonResult(new { success = false, message = "Falta el correo del destinatario." });
+
+                await _emailService.EnviarCorreoAsync(correoDestino, asunto, htmlFinal, copiaCc);
+                RegistrarHito(op, "TRANSPORTE", $"Correo de transporte ({tipoCorreo}) enviado a: {correoDestino}" +
+                    (string.IsNullOrWhiteSpace(copiaCc) ? "" : $" · CC: {copiaCc}"));
                 await _context.SaveChangesAsync();
                 return new JsonResult(new { success = true });
             }
@@ -2107,7 +2578,7 @@ DateTime? FechaSalida, string? ConductorSalidaNombre, string? ConductorSalidaRut
                 string anterior = op.ModalidadCobroAgencia ?? "INDIVIDUAL";
                 op.ModalidadCobroAgencia = modalidad;
                 op.FechaModificacion = DateTime.Now;
-                RegistrarHito(op, "DOCUMENTAL", $"Cobro al cliente de Honorarios y DUS: {(modalidad == "GRUPAL" ? "un solo cobro (grupal)" : "por contenedor")} (antes: {(anterior == "GRUPAL" ? "grupal" : "por contenedor")})");
+                RegistrarHito(op, "DOCUMENTAL", $"Cobro al cliente de Honorarios y DUS: {(modalidad == "GRUPAL" ? "por booking (un solo cobro)" : "por contenedor")} (antes: {(anterior == "GRUPAL" ? "por booking" : "por contenedor")})");
                 await _context.SaveChangesAsync();
                 await _finanzasSync.SincronizarAsync(idOperacion, User.Identity?.Name ?? "Sistema");
                 return new JsonResult(new { success = true });
@@ -2135,7 +2606,160 @@ DateTime? FechaSalida, string? ConductorSalidaNombre, string? ConductorSalidaRut
             }
 
             op.FechaModificacion = DateTime.Now;
-            RegistrarHito(op, "DOCUMENTAL", $"Modalidad de {certKey.ToUpper()} cambiada a: {modalidad}");
+            RegistrarHito(op, "DOCUMENTAL", $"Certificado {certKey.ToUpper()}: cobro al cliente {(modalidad == "GRUPAL" ? "por booking" : "por contenedor")}.");
+            await _context.SaveChangesAsync();
+            // Las tarifas deben cambiar en Finanzas inmediatamente, sin que el
+            // usuario tenga que guardar por segunda vez los documentos.
+            await _finanzasSync.SincronizarAsync(idOperacion, User.Identity?.Name ?? "Sistema");
+            return new JsonResult(new { success = true });
+        }
+
+        // =====================================================================================
+        // Ciclo de la nave (13-nov-2026): Zarpe Real y Arribo Efectivo bajo ETD/ETA en la columna
+        // Fechas, aviso de llegada y chequeos de demoras. La lógica vive en Services/CicloNaveServicio.cs.
+        // =====================================================================================
+        private Task<Operacione?> OperacionCicloNaveAsync(int id) =>
+            _context.Operaciones
+                .Include(o => o.IdClienteNavigation)
+                .Include(o => o.IdNavieraNavigation)
+                .Include(o => o.IdPuertoOrigenNavigation)
+                .Include(o => o.IdPuertoDestinoNavigation)
+                .Include(o => o.Unidadestecnicas)
+                .FirstOrDefaultAsync(o => o.Id == id && !o.IsDeleted);
+
+        private string? CorreoUsuarioActual() =>
+            User.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value;
+
+        public async Task<IActionResult> OnPostCicloNaveFechaAsync(int id, string tipo, string? fecha, bool notificar = true)
+        {
+            bool esZarpe = string.Equals(tipo, "zarpe", StringComparison.OrdinalIgnoreCase);
+            if (!esZarpe && !string.Equals(tipo, "arribo", StringComparison.OrdinalIgnoreCase))
+                return new JsonResult(new { success = false, message = "Tipo de fecha no reconocido." });
+
+            var op = await OperacionCicloNaveAsync(id);
+            if (op == null) return new JsonResult(new { success = false, message = "Operación no encontrada." });
+            if (op.EsHistorica) return new JsonResult(new { success = false, message = "Las operaciones históricas son de solo lectura." });
+            if (!CicloNave.TieneMaritimo(op)) return new JsonResult(new { success = false, message = "El Zarpe Real y el Arribo Efectivo solo aplican a operaciones con servicio marítimo." });
+
+            DateTime? valor = null;
+            if (!string.IsNullOrWhiteSpace(fecha))
+            {
+                if (!DateTime.TryParse(fecha, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out var f))
+                    return new JsonResult(new { success = false, message = "La fecha no es válida." });
+                valor = new DateTime(f.Year, f.Month, f.Day, f.Hour, f.Minute, 0);
+                if (valor > DateTime.Now.AddHours(2))
+                    return new JsonResult(new { success = false, message = esZarpe ? "El Zarpe Real no puede ser una fecha futura." : "El Arribo Efectivo no puede ser una fecha futura." });
+                if (!esZarpe && op.EtdReal.HasValue && valor < op.EtdReal.Value)
+                    return new JsonResult(new { success = false, message = $"El Arribo Efectivo no puede ser anterior al Zarpe Real ({op.EtdReal:dd/MM/yyyy HH:mm})." });
+                if (esZarpe && op.EtaReal.HasValue && valor > op.EtaReal.Value)
+                    return new JsonResult(new { success = false, message = $"El Zarpe Real no puede ser posterior al Arribo Efectivo ({op.EtaReal:dd/MM/yyyy HH:mm})." });
+            }
+
+            string usuario = User.Identity?.Name ?? "Sistema";
+            string nombre = esZarpe ? "Zarpe Real" : "Arribo Efectivo";
+
+            // 13-nov: la fecha real es de la NAVE. Si el booking va en una salida del maestro de
+            // Itinerarios, se registra en la salida y se copia a sus demás bookings (con sus correos),
+            // igual que desde Itinerarios. Borrar desde aquí solo corrige este booking.
+            var salida = valor != null ? await CicloNave.SalidaDeAsync(_context, op) : null;
+            if (salida != null)
+            {
+                var otra = esZarpe ? salida.ArriboEfectivo : salida.ZarpeEfectivo;
+                if (esZarpe && otra != null && valor > otra)
+                    return new JsonResult(new { success = false, message = $"El Zarpe Real no puede ser posterior al arribo efectivo de la salida ({otra:dd/MM/yyyy HH:mm})." });
+                if (!esZarpe && otra != null && valor < otra)
+                    return new JsonResult(new { success = false, message = $"El Arribo Efectivo no puede ser anterior al zarpe efectivo de la salida ({otra:dd/MM/yyyy HH:mm})." });
+                var res = await CicloNave.RegistrarEnSalidaAsync(_context, _emailService, salida, valor, esZarpe, notificar, usuario,
+                    CorreoUsuarioActual(), $"Mainboard, booking {op.NumeroBooking}", op.Id);
+                await _context.SaveChangesAsync();
+                int otros = res.Actualizados.Count(o => o.Id != op.Id);
+                bool enviadoEste = notificar && !res.SinEnviar.Any(x => x.StartsWith(op.NumeroBooking + " ("));
+                string msg = $"{nombre} registrado en la salida {salida.NaveViaje}"
+                    + (otros > 0 ? $" y copiado a {otros} booking(s) más de esa nave." : ".")
+                    + (notificar ? $" Confirmación enviada a {res.Enviados} cliente(s)." : " Sin correo a los clientes.")
+                    + (res.SinEnviar.Count > 0 ? $" Sin enviar: {string.Join("; ", res.SinEnviar.Take(4))}." : "");
+                return new JsonResult(new { success = true, message = msg, correoEnviado = notificar && enviadoEste, avisoCorreo = notificar && res.SinEnviar.Count > 0 });
+            }
+
+            bool cambio = esZarpe
+                ? CicloNave.AplicarZarpe(op, valor, usuario, "Mainboard")
+                : CicloNave.AplicarArribo(op, valor, usuario, "Mainboard");
+            if (!cambio) return new JsonResult(new { success = true, message = "Sin cambios." });
+
+            string? errorCorreo = null;
+            bool correoEnviado = false;
+            if (valor != null && notificar)
+            {
+                errorCorreo = await CicloNave.NotificarAsync(_emailService, op, esZarpe, usuario, CorreoUsuarioActual());
+                correoEnviado = errorCorreo == null;
+            }
+            await _context.SaveChangesAsync();
+
+            string mensaje = valor == null ? $"{nombre} borrado."
+                : correoEnviado ? $"{nombre} registrado y confirmación enviada a {op.IdClienteNavigation?.Correo}."
+                : notificar ? $"{nombre} registrado. No se envió el correo: {errorCorreo}."
+                : $"{nombre} registrado (sin correo al cliente).";
+            return new JsonResult(new { success = true, message = mensaje, correoEnviado, avisoCorreo = valor != null && notificar && !correoEnviado });
+        }
+
+        public async Task<IActionResult> OnPostPrevisualizarAvisoLlegadaAsync(int id, string? mensaje)
+        {
+            var op = await OperacionCicloNaveAsync(id);
+            if (op == null) return new JsonResult(new { success = false, message = "Operación no encontrada." });
+            if (mensaje?.Length > 1500) return new JsonResult(new { success = false, message = "El mensaje es demasiado largo." });
+            var (asunto, html) = CicloNave.CorreoAvisoLlegada(op, mensaje);
+            var smtp = _emailService.DiagnosticarConfiguracion();
+            return new JsonResult(new
+            {
+                success = true,
+                correo = op.IdClienteNavigation?.Correo ?? "",
+                asunto,
+                html,
+                mensajeDefault = CicloNave.IntroAvisoLlegada,
+                enviado = op.AvisoLlegadaEnviado?.ToString("dd/MM/yyyy HH:mm"),
+                smtpConfigurado = smtp.Valido,
+                smtpMensaje = smtp.Mensaje
+            });
+        }
+
+        public async Task<IActionResult> OnPostEnviarAvisoLlegadaAsync(int id, string correoDestino, string? mensaje)
+        {
+            var op = await OperacionCicloNaveAsync(id);
+            if (op == null) return new JsonResult(new { success = false, message = "Operación no encontrada." });
+            if (op.EsHistorica) return new JsonResult(new { success = false, message = "Las operaciones históricas son de solo lectura." });
+            if (string.IsNullOrWhiteSpace(correoDestino) || correoDestino.Length > 300 || correoDestino.Contains('\n') || correoDestino.Contains('\r'))
+                return new JsonResult(new { success = false, message = "Indica el correo del cliente." });
+            if (mensaje?.Length > 1500) return new JsonResult(new { success = false, message = "El mensaje es demasiado largo." });
+
+            var (asunto, html) = CicloNave.CorreoAvisoLlegada(op, mensaje);
+            try
+            {
+                await _emailService.EnviarCorreoAsync(correoDestino.Trim(), asunto, html, CorreoUsuarioActual());
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "No se pudo enviar el aviso de llegada del booking {Booking}", op.NumeroBooking);
+                return new JsonResult(new { success = false, message = "No se pudo enviar: " + ex.Message });
+            }
+            string usuario = User.Identity?.Name ?? "Sistema";
+            op.AvisoLlegadaEnviado = DateTime.Now;
+            op.UsuarioAvisoLlegada = usuario;
+            CicloNave.RegistrarHito(op, usuario, "CORREO", $"Aviso de llegada enviado a: {correoDestino.Trim()}");
+            await _context.SaveChangesAsync();
+            return new JsonResult(new { success = true, message = $"Aviso de llegada enviado a {correoDestino.Trim()}." });
+        }
+
+        public async Task<IActionResult> OnPostRevisionNaveAsync(int id, int dias)
+        {
+            if (dias != 5 && dias != 3) return new JsonResult(new { success = false, message = "Chequeo no reconocido." });
+            var op = await _context.Operaciones.FirstOrDefaultAsync(o => o.Id == id && !o.IsDeleted);
+            if (op == null) return new JsonResult(new { success = false, message = "Operación no encontrada." });
+            string usuario = User.Identity?.Name ?? "Sistema";
+            if (dias == 5) op.RevisionNave5 = DateTime.Now; else op.RevisionNave3 = DateTime.Now;
+            // El chequeo de 3 días cubre también el de 5 si quedó pendiente.
+            if (dias == 3 && op.RevisionNave5 == null) op.RevisionNave5 = DateTime.Now;
+            op.UsuarioRevisionNave = usuario;
+            CicloNave.RegistrarHito(op, usuario, "MARÍTIMO", $"Nave revisada a {dias} días de la ETA: sin demoras.");
             await _context.SaveChangesAsync();
             return new JsonResult(new { success = true });
         }
@@ -2164,29 +2788,254 @@ DateTime? FechaSalida, string? ConductorSalidaNombre, string? ConductorSalidaRut
             doc.LogFitosanitario = entrada + (doc.LogFitosanitario ?? "");
         }
 
-        public async Task<IActionResult> OnPostEnviarCorreoReservaAsync(int id, string correoDestino, int nuevaVersion)
-        {
-            try
-            {
-                var op = await _context.Operaciones.Include(o => o.IdClienteNavigation).Include(o => o.IdNavieraNavigation).Include(o => o.IdPuertoOrigenNavigation).Include(o => o.IdPuertoDestinoNavigation).Include(o => o.OperacionesTerrestres).FirstOrDefaultAsync(o => o.Id == id);
-                if (op == null) return new JsonResult(new { success = false, message = "Operación no encontrada" });
-                var t = op.OperacionesTerrestres?.FirstOrDefault();
 
-                string cliente = op.IdClienteNavigation?.RazonSocial ?? "Cliente"; string booking = op.NumeroBooking ?? "S/N"; string naviera = op.IdNavieraNavigation?.NombreNaviera ?? "-"; string nave = op.Nave ?? "Por confirmar"; string pol = op.IdPuertoOrigenNavigation?.NombrePuerto ?? "-"; string pod = op.IdPuertoDestinoNavigation?.NombrePuerto ?? "-"; string etd = op.EtdPol?.ToString("dd/MM/yyyy") ?? "Por confirmar"; string eta = op.EtaPod?.ToString("dd/MM/yyyy") ?? "Por confirmar"; string contenedor = op.NumeroContenedor ?? "Por asignar"; string sello = op.NumeroSello ?? "Por asignar"; string tipoConte = op.TipoContenedor ?? "-"; string cutOff = op.CutOffMatriz?.ToString("dd/MM/yyyy HH:mm") ?? "Pendiente"; string stacking = op.FechaStacking?.ToString("dd/MM/yyyy HH:mm") ?? "Pendiente"; string lar = op.LateArrival?.ToString("dd/MM/yyyy HH:mm") ?? "No activado"; string planta = t?.PlantaCarga ?? "-"; string deposito = t?.DepositoRetiro ?? "-"; string conductor = t?.NombreConductor ?? "-"; string patente = t?.Patente ?? "-"; string fechaCarga = t?.FechaCarga?.ToString("dd/MM/yyyy HH:mm") ?? "-";
+        // La misma función construye la previsualización y el correo que se envía.
+        // El operador solo edita asunto y mensaje adicional: los datos logísticos
+        // vienen de la BD para que no contradigan el booking oficial.
+        private static string E(string? texto) => System.Net.WebUtility.HtmlEncode(texto ?? "");
+
+        private async Task<Operacione?> BuscarBookingParaCorreoAsync(int id) =>
+            await _context.Operaciones
+                .AsSplitQuery()
+                .Include(o => o.IdClienteNavigation)
+                .Include(o => o.IdNavieraNavigation)
+                .Include(o => o.IdPuertoOrigenNavigation)
+                .Include(o => o.IdPuertoDestinoNavigation)
+                .Include(o => o.OperacionesTerrestres)
+                .Include(o => o.Unidadestecnicas)
+                .FirstOrDefaultAsync(o => o.Id == id && !o.IsDeleted && !o.EsHistorica);
+
+        // VersionCorreo=1 puede haberse asignado ANTES del primer envío: no basta HasValue.
+        private static bool BookingEnviadoAlgunaVez(Operacione op) =>
+            op.CorreoClienteEnviado == true ||
+            op.FechaUltimoEnvioCorreo.HasValue ||
+            (op.HistorialCorreos?.Contains("Correo reserva V", StringComparison.OrdinalIgnoreCase) == true) ||
+            (op.HistorialCorreos?.Contains("Confirmación V", StringComparison.OrdinalIgnoreCase) == true);
+
+        private static int VersionSiguienteCorreo(Operacione op) =>
+            BookingEnviadoAlgunaVez(op) ? Math.Max(1, op.VersionCorreo ?? 1) + 1 : 1;
+
+        private const string IntroduccionCorreoReserva = "A continuación encontrará el detalle de la reserva. Puede revisar sus documentos desde el portal de clientes.";
+
+        private static string HuellaCorreoReserva(string html) =>
+            Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(
+                System.Text.Encoding.UTF8.GetBytes(html)));
+
+        private (string Asunto, string Html) PrepararCorreoReserva(
+            Operacione op, int nuevaVersion, string? mensajePersonalizado, string? introduccion)
+        {
+            if (mensajePersonalizado?.Length > 1200 || introduccion?.Length > 1500)
+                throw new ArgumentException("El mensaje supera la longitud permitida.");
+            string intro = E(string.IsNullOrWhiteSpace(introduccion)
+                ? IntroduccionCorreoReserva : introduccion.Trim())
+                .Replace("\r\n", "\n").Replace("\n", "<br>");
+
+                // Transporte del contenedor principal (IdUnidadTecnica null); si no existe, el primero.
+                var terrestresActivos = (op.OperacionesTerrestres ?? new List<OperacionesTerrestre>())
+                    .Where(x => x.Activo != false).OrderBy(x => x.IdUnidadTecnica.HasValue ? 1 : 0).ThenBy(x => x.IdUnidadTecnica).ToList();
+                var t = terrestresActivos.FirstOrDefault(x => !x.IdUnidadTecnica.HasValue) ?? terrestresActivos.FirstOrDefault();
+                var unidadesCorreo = (op.Unidadestecnicas ?? new List<Unidadestecnica>()).OrderBy(u => u.Id).ToList();
+                bool multiContenedor = unidadesCorreo.Count > 0;
+
+                string cliente = E(op.IdClienteNavigation?.RazonSocial ?? "Cliente"); string booking = E(op.NumeroBooking ?? "S/N"); string naviera = E(op.IdNavieraNavigation?.NombreNaviera ?? "-"); string nave = E(op.Nave ?? "Por confirmar"); string pol = E(op.IdPuertoOrigenNavigation?.NombrePuerto ?? "-"); string pod = E(op.IdPuertoDestinoNavigation?.NombrePuerto ?? "-"); string etd = op.EtdPol?.ToString("dd/MM/yyyy") ?? "Por confirmar"; string eta = op.EtaPod?.ToString("dd/MM/yyyy") ?? "Por confirmar"; string contenedor = E(op.NumeroContenedor ?? "Por asignar"); string sello = E(op.NumeroSello ?? "Por asignar"); string tipoConte = E(op.TipoContenedor ?? "-"); string cutOff = op.CutOffMatriz?.ToString("dd/MM/yyyy HH:mm") ?? "Pendiente"; string stacking = op.FechaStacking?.ToString("dd/MM/yyyy HH:mm") ?? "Pendiente"; string lar = op.LateArrival?.ToString("dd/MM/yyyy HH:mm") ?? "No activado"; string planta = E(t?.PlantaCarga ?? "-"); string deposito = E(t?.DepositoRetiro ?? "-"); string conductor = E(t?.NombreConductor ?? "-"); string patente = E(t?.Patente ?? "-"); string fechaCarga = t?.FechaCarga?.ToString("dd/MM/yyyy HH:mm") ?? "-";
                 int s = op.IdTipoServicio ?? 0; string nombreServicio = s switch { 1 => "Exportación Integral", 2 => "Exportación Marítimo + Terrestre", 3 => "Exportación Marítimo + Documental", 5 => "Exportación Marítimo", 6 => "Exportación Terrestre", 8 => "Importación Integral", 12 => "Importación Marítimo", _ => "Por confirmar" };
 
-                var req = HttpContext.Request; string baseUrl = $"{req.Scheme}://{req.Host}"; string pdfUrl = $"{baseUrl}/Operaciones/ReservaPdf/{id}";
-                string versionTxt = nuevaVersion > 1 ? $" (V{nuevaVersion} — ACTUALIZACIÓN)" : ""; string asunto = $"[ATILSON CARGO] Confirmación de Reserva — BKG: {booking}{versionTxt}";
+                // El PDF de /Operaciones/ReservaPdf requiere rol interno y NO puede usarse
+                // como enlace de descarga para clientes. Enviar el acceso autorizado al portal.
+                // En producción el enlace debe usar el dominio público configurado,
+                // nunca un localhost o un host interno de la aplicación detrás del proxy.
+                string rutaPortal = $"/PortalCliente/Operaciones?abrir={op.Id}";
+                string? origenPublico = _configuration["SitioWeb:UrlPublica"];
+                string destinoPortal = Uri.TryCreate(origenPublico, UriKind.Absolute, out var basePublica)
+                    && basePublica.Scheme == Uri.UriSchemeHttps && !basePublica.IsLoopback
+                    ? new Uri(basePublica, rutaPortal).AbsoluteUri
+                    : (Url.Page("/PortalCliente/Operaciones", null,
+                        new { abrir = op.Id }, HttpContext.Request.Scheme) ?? rutaPortal);
+                string portalUrl = E(destinoPortal);
+                string versionTxt = nuevaVersion > 1 ? $" (V{nuevaVersion} — ACTUALIZACIÓN)" : "";
+                string asunto = $"[ATILSON CARGO] Confirmación de Reserva — BKG: {op.NumeroBooking ?? "S/N"}{versionTxt}";
+                string mensajeExtra = string.IsNullOrWhiteSpace(mensajePersonalizado) ? "" :
+                    "<div style='background:#f6f3fc;border-left:4px solid #6d2d9e;padding:12px 16px;margin:16px 0;color:#31244f;font-size:14px;line-height:1.6;white-space:pre-line;'>" +
+                    E(mensajePersonalizado.Trim()) + "</div>";
                 string rowAlt = "background:#f8fafc;"; string td1 = "padding:10px 14px; border-bottom:0.5px solid #e2e8f0; font-size:13px; color:#64748b; width:200px;"; string td2 = "padding:10px 14px; border-bottom:0.5px solid #e2e8f0; font-size:13px; font-weight:700; color:#0f172a;"; string tdCrit = "padding:10px 14px; border-bottom:0.5px solid #e2e8f0; font-size:13px; font-weight:700; color:#dc2626;"; string secHead = "font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:0.8px; color:#6d2d9e; margin:24px 0 8px; padding-bottom:6px; border-bottom:2px solid #f3e8ff;";
+                string condicionPago = E(AtilsonCargoSpa.Helpers.AcuerdoCollectHelper.TextoCondicionPago(op.CondicionPago));
+                string filaCondicion = string.IsNullOrEmpty(condicionPago) ? "" :
+                    $"<tr><td style='{td1}'>Condición de flete</td><td style='{td2}'>{condicionPago}</td></tr>";
+
+                // Varios contenedores (nov-2026): antes el correo mostraba solo el primero.
+                // Con un contenedor el formato no cambia.
+                string filasContenedorUnico = $"<tr><td style='{td1}'>Tipo de contenedor</td><td style='{td2}'>{tipoConte}</td></tr><tr style='{rowAlt}'><td style='{td1}'>N° Contenedor</td><td style='{td2}'>{contenedor}</td></tr><tr><td style='{td1}'>N° Sello</td><td style='{td2}'>{sello}</td></tr>";
+                string bloqueContenedores = "";
+                string bloqueTerrestre = $"<h2 style='{secHead}'>Logística terrestre</h2><table style='width:100%; border-collapse:collapse; border:0.5px solid #e2e8f0; border-radius:6px;'><tr><td style='{td1}'>Planta de carga</td><td style='{td2}'>{planta}</td></tr><tr style='{rowAlt}'><td style='{td1}'>Depósito retiro vacío</td><td style='{td2}'>{deposito}</td></tr><tr><td style='{td1}'>Fecha presentación planta</td><td style='{td2}'>{fechaCarga}</td></tr><tr style='{rowAlt}'><td style='{td1}'>Conductor asignado</td><td style='{td2}'>{conductor}</td></tr><tr><td style='{td1}'>Patente tracto</td><td style='{td2}'>{patente}</td></tr></table>";
+                if (multiContenedor)
+                {
+                    string th = "padding:8px 10px; border-bottom:1px solid #e2e8f0; font-size:11px; color:#64748b; text-align:left; text-transform:uppercase; letter-spacing:0.4px;";
+                    string tdc = "padding:8px 10px; border-bottom:0.5px solid #e2e8f0; font-size:12.5px; color:#0f172a; font-weight:700;";
+                    var filas = new System.Text.StringBuilder();
+                    var filasTer = new System.Text.StringBuilder();
+                    void AgregarContenedor(int pos, string? tipo, string? numero, string? selloC, OperacionesTerrestre? ter)
+                    {
+                        string bg = pos % 2 == 0 ? rowAlt : "";
+                        filas.Append($"<tr style='{bg}'><td style='{tdc}'>{pos}</td><td style='{tdc}'>{E(string.IsNullOrWhiteSpace(tipo) ? "-" : tipo)}</td><td style='{tdc}'>{E(string.IsNullOrWhiteSpace(numero) ? "Por asignar" : numero)}</td><td style='{tdc}'>{E(string.IsNullOrWhiteSpace(selloC) ? "Por asignar" : selloC)}</td></tr>");
+                        filasTer.Append($"<tr style='{bg}'><td style='{tdc}'>{pos}</td><td style='{tdc}'>{E(ter?.PlantaCarga ?? "-")}</td><td style='{tdc}'>{ter?.FechaCarga?.ToString("dd/MM/yyyy HH:mm") ?? "-"}</td><td style='{tdc}'>{E(ter?.NombreConductor ?? "-")}</td><td style='{tdc}'>{E(ter?.Patente ?? "-")}</td></tr>");
+                    }
+                    AgregarContenedor(1, op.TipoContenedor, op.NumeroContenedor, op.NumeroSello, t);
+                    int posicion = 2;
+                    foreach (var u in unidadesCorreo)
+                    {
+                        var terU = terrestresActivos.FirstOrDefault(x => x.IdUnidadTecnica == u.Id);
+                        AgregarContenedor(posicion++, u.TipoContenedor ?? op.TipoContenedor, u.NroContenedor, u.NumeroSello ?? u.SelloNaviera, terU);
+                    }
+                    int totalContenedores = unidadesCorreo.Count + 1;
+                    filasContenedorUnico = "";
+                    bloqueContenedores = $"<h2 style='{secHead}'>Contenedores ({totalContenedores})</h2><table style='width:100%; border-collapse:collapse; border:0.5px solid #e2e8f0; border-radius:6px;'><tr><th style='{th}'>#</th><th style='{th}'>Tipo</th><th style='{th}'>N° Contenedor</th><th style='{th}'>N° Sello</th></tr>{filas}</table>";
+                    bloqueTerrestre = $"<h2 style='{secHead}'>Logística terrestre</h2><table style='width:100%; border-collapse:collapse; border:0.5px solid #e2e8f0; border-radius:6px;'><tr><td style='{td1}'>Depósito retiro vacío</td><td style='{td2}'>{deposito}</td></tr></table><table style='width:100%; border-collapse:collapse; border:0.5px solid #e2e8f0; border-radius:6px; margin-top:8px;'><tr><th style='{th}'>#</th><th style='{th}'>Planta</th><th style='{th}'>Presentación</th><th style='{th}'>Conductor</th><th style='{th}'>Patente</th></tr>{filasTer}</table>";
+                }
                 string alertaBanner = nuevaVersion > 1 ? $@"<div style='background:#fef3c7; border-left:4px solid #d97706; padding:10px 16px; margin-bottom:20px; border-radius:4px; font-size:13px; color:#92400e;'><strong>Actualización V{nuevaVersion}:</strong> Este documento reemplaza la confirmación anterior del Booking {booking}.</div>" : "";
 
-                string html = $@"<div style='font-family:Arial,sans-serif; max-width:640px; margin:0 auto;'><div style='background:linear-gradient(135deg,#0f172a 0%,#6d2d9e 100%); padding:28px 32px; border-radius:8px 8px 0 0;'><p style='color:#cbd5e1; font-size:10px; text-transform:uppercase; letter-spacing:1px; margin:0 0 4px;'>Atilson Cargo SpA — Confirmación Logística</p><h1 style='color:#fff; font-size:22px; margin:0; letter-spacing:-0.3px;'>Reserva Confirmada</h1><p style='color:#a78bfa; font-size:13px; margin:6px 0 0;'>Booking: <strong style='color:#fff;'>{booking}</strong>  ·  {nombreServicio}</p></div><div style='background:#fff; padding:28px 32px; border:0.5px solid #e2e8f0; border-top:none; border-radius:0 0 8px 8px;'>{alertaBanner}<p style='font-size:15px; color:#0f172a;'>Estimado/a <strong>{cliente}</strong>,</p><p style='font-size:14px; color:#475569; line-height:1.6; margin-bottom:0;'>A continuación encontrará el detalle completo de su reserva. Para descargar el documento oficial en PDF, haga clic en el botón al final de este correo.</p><h2 style='{secHead}'>Itinerario marítimo</h2><table style='width:100%; border-collapse:collapse; border:0.5px solid #e2e8f0; border-radius:6px;'><tr><td style='{td1}'>Naviera</td><td style='{td2}'>{naviera}</td></tr><tr style='{rowAlt}'><td style='{td1}'>Nave / Viaje</td><td style='{td2}'>{nave}</td></tr><tr><td style='{td1}'>Puerto Origen (POL)</td><td style='{td2}'>{pol}</td></tr><tr style='{rowAlt}'><td style='{td1}'>Puerto Destino (POD)</td><td style='{td2}'>{pod}</td></tr><tr><td style='{td1}'>ETD — Zarpe estimado</td><td style='{td2}'>{etd}</td></tr><tr style='{rowAlt}'><td style='{td1}'>ETA — Arribo estimado</td><td style='{td2}'>{eta}</td></tr><tr><td style='{td1}'>Tipo de contenedor</td><td style='{td2}'>{tipoConte}</td></tr><tr style='{rowAlt}'><td style='{td1}'>N° Contenedor</td><td style='{td2}'>{contenedor}</td></tr><tr><td style='{td1}'>N° Sello</td><td style='{td2}'>{sello}</td></tr></table><h2 style='{secHead}'>Fechas clave</h2><table style='width:100%; border-collapse:collapse; border:0.5px solid #e2e8f0; border-radius:6px;'><tr><td style='{td1}'>Apertura Stacking (IN)</td><td style='{td2}'>{stacking}</td></tr><tr style='{rowAlt}'><td style='{td1}'>Cut-Off Físico (OUT)</td><td style='{tdCrit}'>{cutOff}</td></tr><tr><td style='{td1}'>Late Arrival (LAR)</td><td style='{td2}'>{lar}</td></tr></table><h2 style='{secHead}'>Logística terrestre</h2><table style='width:100%; border-collapse:collapse; border:0.5px solid #e2e8f0; border-radius:6px;'><tr><td style='{td1}'>Planta de carga</td><td style='{td2}'>{planta}</td></tr><tr style='{rowAlt}'><td style='{td1}'>Depósito retiro vacío</td><td style='{td2}'>{deposito}</td></tr><tr><td style='{td1}'>Fecha presentación planta</td><td style='{td2}'>{fechaCarga}</td></tr><tr style='{rowAlt}'><td style='{td1}'>Conductor asignado</td><td style='{td2}'>{conductor}</td></tr><tr><td style='{td1}'>Patente tracto</td><td style='{td2}'>{patente}</td></tr></table><div style='text-align:center; margin:32px 0 8px;'><a href='{pdfUrl}' target='_blank' style='background:#0f172a; color:#fff; padding:14px 32px; text-decoration:none; border-radius:6px; font-weight:800; font-size:14px; display:inline-block; letter-spacing:0.3px;'>Descargar documento PDF</a></div><p style='font-size:11px; color:#94a3b8; text-align:center; margin:6px 0 0;'>El link abrirá el documento directamente en su navegador.</p><hr style='border:0; border-top:0.5px solid #e2e8f0; margin:28px 0;'><p style='font-size:11px; color:#94a3b8; text-align:center; margin:0;'><strong>Atilson Cargo SpA</strong> · Operaciones Logísticas<br>Ante cualquier consulta responda este correo electrónico.</p></div></div>";
+                string html = $@"<div style='font-family:Arial,sans-serif; max-width:640px; margin:0 auto;'><div style='background:linear-gradient(135deg,#0f172a 0%,#6d2d9e 100%); padding:28px 32px; border-radius:8px 8px 0 0;'><p style='color:#cbd5e1; font-size:10px; text-transform:uppercase; letter-spacing:1px; margin:0 0 4px;'>Atilson Cargo SpA — Confirmación Logística</p><h1 style='color:#fff; font-size:22px; margin:0; letter-spacing:-0.3px;'>Reserva Confirmada</h1><p style='color:#a78bfa; font-size:13px; margin:6px 0 0;'>Booking: <strong style='color:#fff;'>{booking}</strong>  ·  {nombreServicio}</p></div><div style='background:#fff; padding:28px 32px; border:0.5px solid #e2e8f0; border-top:none; border-radius:0 0 8px 8px;'>{alertaBanner}<p style='font-size:15px; color:#0f172a;'>Estimado/a <strong>{cliente}</strong>,</p><p style='font-size:14px; color:#475569; line-height:1.6; margin-bottom:0;'>{intro}</p>{mensajeExtra}<h2 style='{secHead}'>Itinerario marítimo</h2><table style='width:100%; border-collapse:collapse; border:0.5px solid #e2e8f0; border-radius:6px;'><tr><td style='{td1}'>Naviera</td><td style='{td2}'>{naviera}</td></tr><tr style='{rowAlt}'><td style='{td1}'>Nave / Viaje</td><td style='{td2}'>{nave}</td></tr><tr><td style='{td1}'>Puerto Origen (POL)</td><td style='{td2}'>{pol}</td></tr><tr style='{rowAlt}'><td style='{td1}'>Puerto Destino (POD)</td><td style='{td2}'>{pod}</td></tr><tr><td style='{td1}'>ETD — Zarpe estimado</td><td style='{td2}'>{etd}</td></tr><tr style='{rowAlt}'><td style='{td1}'>ETA — Arribo estimado</td><td style='{td2}'>{eta}</td></tr>{filaCondicion}{filasContenedorUnico}</table>{bloqueContenedores}<h2 style='{secHead}'>Fechas clave</h2><table style='width:100%; border-collapse:collapse; border:0.5px solid #e2e8f0; border-radius:6px;'><tr><td style='{td1}'>Apertura Stacking (IN)</td><td style='{td2}'>{stacking}</td></tr><tr style='{rowAlt}'><td style='{td1}'>Cut-Off Físico (OUT)</td><td style='{tdCrit}'>{cutOff}</td></tr><tr><td style='{td1}'>Late Arrival (LAR)</td><td style='{td2}'>{lar}</td></tr></table>{bloqueTerrestre}<div style='text-align:center; margin:32px 0 8px;'><a href='{portalUrl}' target='_blank' style='background:#0f172a; color:#fff; padding:14px 32px; text-decoration:none; border-radius:6px; font-weight:800; font-size:14px; display:inline-block; letter-spacing:0.3px;'>Ver reserva en el Portal Cliente</a></div><p style='font-size:11px; color:#94a3b8; text-align:center; margin:6px 0 0;'>Por seguridad, deberá iniciar sesión con su cuenta de cliente para ver la operación y los archivos publicados.</p><hr style='border:0; border-top:0.5px solid #e2e8f0; margin:28px 0;'><p style='font-size:11px; color:#94a3b8; text-align:center; margin:0;'><strong>Atilson Cargo SpA</strong> · Operaciones Logísticas<br>Ante cualquier consulta responda este correo electrónico.</p></div></div>";
+            return (asunto, html);
+        }
 
-                await _emailService.EnviarCorreoAsync(correoDestino, asunto, html);
-                op.CorreoClienteEnviado = true; op.VersionCorreo = nuevaVersion; string nota = $"[{DateTime.Now:dd/MM/yyyy HH:mm} OPERACIONES] Confirmación V{nuevaVersion} enviada a {correoDestino}.\n"; op.Comentarios = nota + (op.Comentarios ?? ""); RegistrarHito(op, "GENERAL", $"Correo reserva V{nuevaVersion} enviado a: {correoDestino}");
-                await _context.SaveChangesAsync(); return new JsonResult(new { success = true });
+        // Prueba SMTP para Administradores. No envía un booking real, no incrementa
+        // versiones ni toca datos operativos, y usa exclusivamente el correo del
+        // usuario interno autenticado. No permite actuar como relay a terceros.
+        public async Task<IActionResult> OnPostProbarCorreoSmtpAsync()
+        {
+            if (!PermisosEquipo.EsAdmin(User)) return Forbid();
+            string? correo = User.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value?.Trim();
+            if (string.IsNullOrWhiteSpace(correo))
+                return BadRequest(new { success = false, message = "Tu cuenta no tiene un correo válido." });
+            var diagnostico = _emailService.DiagnosticarConfiguracion();
+            if (!diagnostico.Valido)
+                return BadRequest(new { success = false, message = diagnostico.Mensaje });
+
+            var memoria = HttpContext.RequestServices
+                .GetRequiredService<Microsoft.Extensions.Caching.Memory.IMemoryCache>();
+            string clave = "smtp-prueba-atilson:" + correo.ToLowerInvariant();
+            if (memoria.TryGetValue(clave, out _))
+                return StatusCode(429, new { success = false, message = "Ya solicitaste una prueba. Verifica tu buzón antes de repetirla." });
+            memoria.Set(clave, true, TimeSpan.FromMinutes(1));
+            try
+            {
+                string cuerpo = "<div style='font:15px Arial,sans-serif;max-width:580px;margin:auto;padding:24px;'>" +
+                    "<h2 style='color:#443094;'>ATILSON · Diagnóstico de correo</h2>" +
+                    "<p>Esta es una prueba solicitada desde una sesión administrativa del ERP.</p>" +
+                    "<p>Si recibes este mensaje, el servidor de correo aceptó el envío y tu buzón pudo recibirlo.</p>" +
+                    "<p>No corresponde a ningún Booking ni modifica el estado de una operación.</p></div>";
+                await _emailService.EnviarCorreoAsync(correo,
+                    "[ATILSON CARGO] Prueba SMTP · " + DateTime.Now.ToString("dd/MM/yyyy HH:mm"), cuerpo);
+                _logger.LogInformation("Prueba SMTP aceptada por servidor para usuario administrativo {Correo}", correo);
+                return new JsonResult(new
+                {
+                    success = true,
+                    message = "El servidor SMTP aceptó el mensaje de prueba. Confirma que llegó a tu correo y revisa también Spam."
+                });
             }
-            catch (Exception ex) { _logger.LogError(ex, "Error no controlado en {Clase}", nameof(IndexModel)); return new JsonResult(new { success = false, message = ex.Message }); }
+            catch (Exception ex)
+            {
+                memoria.Remove(clave);
+                _logger.LogError(ex, "Error al realizar prueba SMTP del ERP para {Correo}", correo);
+                return StatusCode(502, new
+                {
+                    success = false,
+                    message = "El servidor SMTP rechazó o no completó el envío. Revisa las credenciales, puerto, TLS y los registros del servidor."
+                });
+            }
+        }
+
+        public async Task<IActionResult> OnPostPrevisualizarCorreoReservaAsync(int id, string? mensajePersonalizado, string? introduccion)
+        {
+            if (id <= 0 || mensajePersonalizado?.Length > 1200 || introduccion?.Length > 1500)
+                return BadRequest(new { success = false, message = "Datos de previsualización inválidos." });
+            var op = await BuscarBookingParaCorreoAsync(id);
+            if (op == null) return NotFound(new { success = false, message = "Booking no encontrado." });
+            var version = VersionSiguienteCorreo(op);
+            var contenido = PrepararCorreoReserva(op, version, mensajePersonalizado, introduccion);
+            Response.Headers["Cache-Control"] = "private, no-store";
+            var diagnosticoSmtp = _emailService.DiagnosticarConfiguracion();
+            return new JsonResult(new
+            {
+                success = true,
+                version,
+                enviadoAlgunaVez = BookingEnviadoAlgunaVez(op),
+                correo = op.IdClienteNavigation?.Correo ?? "",
+                asunto = contenido.Asunto,
+                html = contenido.Html,
+                introduccionDefault = IntroduccionCorreoReserva,
+                huella = HuellaCorreoReserva(contenido.Html),
+                smtpConfigurado = diagnosticoSmtp.Valido,
+                smtpMensaje = diagnosticoSmtp.Mensaje
+            });
+        }
+
+        public async Task<IActionResult> OnPostEnviarCorreoReservaAsync(
+            int id, string correoDestino, int nuevaVersion, string? asunto, string? mensajePersonalizado,
+            string? introduccion, string? huellaVistaPrevia)
+        {
+            bool aceptadoPorSmtp = false;
+            try
+            {
+                if (id <= 0 || string.IsNullOrWhiteSpace(correoDestino)
+                    || asunto?.Length > 200 || mensajePersonalizado?.Length > 1200
+                    || introduccion?.Length > 1500 || string.IsNullOrWhiteSpace(huellaVistaPrevia))
+                    return BadRequest(new { success = false, message = "Revisa destinatario, asunto y mensaje." });
+                // No aceptar saltos de línea en asunto ni emails malformados.
+                if (asunto != null && (asunto.Contains('\r') || asunto.Contains('\n')))
+                    return BadRequest(new { success = false, message = "El asunto contiene caracteres no permitidos." });
+
+                var op = await BuscarBookingParaCorreoAsync(id);
+                if (op == null)
+                    return NotFound(new { success = false, message = "Booking no encontrado." });
+                int versionCorrecta = VersionSiguienteCorreo(op);
+                if (nuevaVersion != versionCorrecta)
+                    return new JsonResult(new
+                    {
+                        success = false,
+                        message = $"Esta operación cambió de versión. Cierra la previsualización y ábrela de nuevo (V{versionCorrecta})."
+                    });
+                var contenido = PrepararCorreoReserva(op, versionCorrecta, mensajePersonalizado, introduccion);
+                if (!System.Security.Cryptography.CryptographicOperations.FixedTimeEquals(
+                    System.Text.Encoding.ASCII.GetBytes(HuellaCorreoReserva(contenido.Html)),
+                    System.Text.Encoding.ASCII.GetBytes(huellaVistaPrevia.Trim().ToUpperInvariant())))
+                    return new JsonResult(new
+                    {
+                        success = false,
+                        message = "El booking o el texto del correo cambió después de previsualizarlo. Actualiza la vista previa antes de enviar."
+                    });
+                string asuntoFinal = string.IsNullOrWhiteSpace(asunto) ? contenido.Asunto : asunto.Trim();
+                await _emailService.EnviarCorreoAsync(correoDestino.Trim(), asuntoFinal, contenido.Html);
+                aceptadoPorSmtp = true;
+
+                // Nunca marcar E antes de que SMTP haya aceptado el correo.
+                var ahora = DateTime.Now;
+                op.CorreoClienteEnviado = true;
+                op.VersionCorreo = versionCorrecta;
+                op.FechaUltimoEnvioCorreo = ahora;
+                string nota = $"[{ahora:dd/MM/yyyy HH:mm} OPERACIONES] Confirmación V{versionCorrecta} enviada a {correoDestino.Trim()}.\n";
+                op.Comentarios = nota + (op.Comentarios ?? "");
+                RegistrarHito(op, "GENERAL", $"Correo reserva V{versionCorrecta} enviado a: {correoDestino.Trim()}");
+                await _context.SaveChangesAsync();
+                return new JsonResult(new { success = true, version = versionCorrecta });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Fallo de correo booking {IdOperacion}, estado SMTP aceptado={Aceptado}", id, aceptadoPorSmtp);
+                if (aceptadoPorSmtp)
+                    return new JsonResult(new
+                    {
+                        success = false, enviado = true,
+                        message = "El servidor SMTP aceptó el correo, pero no se pudo registrar el estado de envío en SQL. NO lo reenvíes todavía: revisa el historial y el destinatario para evitar un duplicado."
+                    });
+                string motivo = ex is InvalidOperationException && !string.IsNullOrWhiteSpace(ex.Message)
+                    ? " Motivo: " + ex.Message
+                    : " Verifica remitente, destinatario y conexión.";
+                return new JsonResult(new
+                {
+                    success = false,
+                    message = "No se pudo entregar el mensaje al servidor SMTP." + motivo + " El booking permanece pendiente de envío."
+                });
+            }
         }
 
         public async Task<IActionResult> OnPostEnviarBorradorBLAsync(string idOperacion, string correoDestino, IFormFile? ArchivoBL)
@@ -2197,12 +3046,33 @@ DateTime? FechaSalida, string? ConductorSalidaNombre, string? ConductorSalidaRut
                 var op = await _context.Operaciones.Include(o => o.OperacionesDocumentales).FirstOrDefaultAsync(o => o.Id == realId);
                 if (op == null) return new JsonResult(new { success = false, message = "Operación no encontrada" });
 
-                var doc = op.OperacionesDocumentales.FirstOrDefault();
-                if (doc != null && doc.EstadoDocumental != "B/L APROBADO" && doc.EstadoDocumental != "CAMBIOS B/L") doc.EstadoDocumental = "BORRADOR ENVIADO";
+                var doc = op.OperacionesDocumentales.OrderBy(x => x.IdUnidadTecnica.HasValue).ThenBy(x => x.Id).FirstOrDefault();
+                if (doc == null)
+                    return new JsonResult(new { success = false, message = "Primero crea la ficha documental de esta operación." });
+                if (ArchivoBL is { Length: > 0 })
+                {
+                    if (ArchivoBL.Length > 15 * 1024 * 1024 ||
+                        !new[] { ".pdf", ".jpg", ".jpeg", ".png" }.Contains(Path.GetExtension(ArchivoBL.FileName).ToLowerInvariant()))
+                        return new JsonResult(new { success = false, message = "El borrador BL debe ser PDF/JPG/PNG y pesar máximo 15 MB." });
+                    string ruta = Path.Combine(_env.WebRootPath, "uploads", "evidencias");
+                    Directory.CreateDirectory(ruta);
+                    string nombre = $"{op.Id}_BorradorBL_{Guid.NewGuid():N}{Path.GetExtension(ArchivoBL.FileName).ToLowerInvariant()}";
+                    await using (var stream = new FileStream(Path.Combine(ruta, nombre), FileMode.CreateNew))
+                        await ArchivoBL.CopyToAsync(stream);
+                    doc.RutaBL = $"/uploads/evidencias/{nombre}";
+                }
+                if (string.IsNullOrWhiteSpace(doc.RutaBL))
+                    return new JsonResult(new { success = false, message = "Adjunta primero el borrador BL para que el cliente pueda revisarlo." });
+                if (doc.EstadoDocumental != "B/L APROBADO" && doc.EstadoDocumental != "CAMBIOS B/L")
+                    doc.EstadoDocumental = "BORRADOR ENVIADO";
 
-                var req = HttpContext.Request; string baseUrl = $"{req.Scheme}://{req.Host}";
-                string urlAprobar = $"{baseUrl}/Operaciones/Index?handler=RespuestaBorradorBL&id={idOperacion}&respuesta=aprobar"; string urlRechazar = $"{baseUrl}/Operaciones/Index?handler=RespuestaBorradorBL&id={idOperacion}&respuesta=rechazar";
-                string html = $@"<div style='font-family: Arial, sans-serif; color: #333; max-width: 600px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 8px;'><div style='background: linear-gradient(135deg, #0f172a 0%, #6d2d9e 100%); padding: 25px; text-align: center; border-radius: 8px 8px 0 0;'><h2 style='color: #fff; margin: 0;'>Revisión de Borrador de B/L</h2><p style='color:#cbd5e1; margin-top:5px;'>Booking: <strong>{op.NumeroBooking}</strong></p></div><div style='padding: 30px; background-color: #ffffff;'><p>Estimado cliente, junto con saludar,</p><p>A continuación enviamos borrador de BL adjunto para su revisión y aprobación.</p><p>En caso de aprobar o requerir modificaciones, haga click en los botones correspondientes a continuación (Esto actualizará automáticamente la plataforma logística):</p><div style='text-align: center; margin-top: 40px; margin-bottom: 20px;'><a href='{urlAprobar}' style='background-color: #16a34a; color: white; padding: 14px 28px; text-decoration: none; border-radius: 6px; font-weight: bold; margin-right: 10px; display: inline-block;'>APROBAR DRAFT</a><a href='{urlRechazar}' style='background-color: #dc2626; color: white; padding: 14px 28px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;'>RECHAZAR / SOLICITAR CAMBIO</a></div><hr style='border: 0; border-top: 1px solid #e2e8f0; margin: 30px 0;'><p style='font-size: 11px; color: #94a3b8; text-align: center; margin: 0;'>Atilson Cargo SpA.</p></div></div>";
+                // El correo no debe ofrecer acciones GET bajo /Operaciones: esa
+                // carpeta requiere rol interno y el cliente no puede entrar.
+                // El Portal Cliente valida IdCliente y confirma por POST autenticado.
+                string urlRevision = Url.Page("/PortalCliente/AprobarBL", null,
+                    new { id = op.Id }, HttpContext.Request.Scheme)
+                    ?? $"/PortalCliente/AprobarBL/{op.Id}";
+                string html = $@"<div style='font-family: Arial, sans-serif; color: #333; max-width: 600px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 8px;'><div style='background: linear-gradient(135deg, #0f172a 0%, #6d2d9e 100%); padding: 25px; text-align: center; border-radius: 8px 8px 0 0;'><h2 style='color: #fff; margin: 0;'>Revisión de Borrador de B/L</h2><p style='color:#cbd5e1; margin-top:5px;'>Booking: <strong>{System.Net.WebUtility.HtmlEncode(op.NumeroBooking)}</strong></p></div><div style='padding: 30px; background-color: #ffffff;'><p>Estimado cliente, junto con saludar,</p><p>El borrador BL está disponible para revisión en el Portal Cliente. Ingresa con tu cuenta para ver el documento, aprobarlo o solicitar modificaciones.</p><div style='text-align: center; margin-top: 40px; margin-bottom: 20px;'><a href='{System.Net.WebUtility.HtmlEncode(urlRevision)}' style='background-color: #0f172a; color: white; padding: 14px 28px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;'>REVISAR BORRADOR EN EL PORTAL</a></div><hr style='border: 0; border-top: 1px solid #e2e8f0; margin: 30px 0;'><p style='font-size: 11px; color: #94a3b8; text-align: center; margin: 0;'>Atilson Cargo SpA.</p></div></div>";
 
                 await _emailService.EnviarCorreoAsync(correoDestino, $"[ATILSON CARGO] Borrador BL para Revisión - BKG {op.NumeroBooking}", html);
                 RegistrarHito(op, "DOCUMENTAL", $"Borrador de BL enviado al cliente para revisión a: {correoDestino}");
@@ -2252,7 +3122,7 @@ DateTime? FechaSalida, string? ConductorSalidaNombre, string? ConductorSalidaRut
                 op.FechaModificacion = DateTime.Now; await _context.SaveChangesAsync();
 
                 // TEMPORIZADOR INTELIGENTE
-                if (estado == "proceso" && tipoDoc == "guia")
+                if (estado == "proceso" && tipoDoc == "guia" && _configuration.GetValue<bool>("Correos:RecordatorioVisacionAutomatico"))
                 {
                     var req = HttpContext.Request; string baseUrl = $"{req.Scheme}://{req.Host}"; int idOperacion = op.Id; string bookingStr = op.NumeroBooking ?? "S/N";
                     _ = Task.Run(async () =>
@@ -2270,7 +3140,22 @@ DateTime? FechaSalida, string? ConductorSalidaNombre, string? ConductorSalidaRut
                                     if (!logActual.Contains("GUÍA VISADA") && !logActual.Contains("GUIA VISADA") && !logActual.Contains("✅"))
                                     {
                                         string linkVisado = $"{baseUrl}/Operaciones/Index?handler=RespuestaGuiaAgencia&id={idOperacion}&estado=visado";
-                                        string correoDestino = "pruebas@demo.cl"; // <-- OJO EN PRODUCCIÓN
+                                        string? correoDestino = docActual?.IdAgenciaAduana.HasValue == true
+                                            ? await db.AgenciasAduanas.AsNoTracking()
+                                                .Where(a => a.Id == docActual.IdAgenciaAduana.Value)
+                                                .Select(a => a.CorreoContacto)
+                                                .FirstOrDefaultAsync()
+                                            : null;
+                                        if (string.IsNullOrWhiteSpace(correoDestino))
+                                        {
+                                            if (docActual != null)
+                                            {
+                                                string logSinCorreo = $"<div style='border-left:2px solid #64748b; padding:6px; margin-bottom:6px; background:#f8fafc;'><div style='font-weight:800; color:#475569; font-size:10px;'>RECORDATORIO NO ENVIADO</div><div style='font-size:10px; color:#64748b;'>La agencia asignada no tiene correo configurado.</div></div>\n";
+                                                docActual.LogGuia = logSinCorreo + (docActual.LogGuia ?? "");
+                                                await db.SaveChangesAsync();
+                                            }
+                                            return;
+                                        }
                                         string htmlRecordatorio = $@"<div style='font-family:Arial,sans-serif;max-width:580px;margin:0 auto;'><div style='background:linear-gradient(135deg,#b91c1c 0%,#7f1d1d 100%);padding:24px 28px;border-radius:8px 8px 0 0;text-align:center;'><h2 style='color:#fff;margin:0;font-size:18px;'>⏰ Recordatorio: Visación Pendiente</h2><p style='color:#fecaca;margin:6px 0 0;font-size:13px;'>Booking: <strong style='color:#fff;'>{bookingStr}</strong></p></div><div style='background:#fff;padding:28px;border:1px solid #e2e8f0;border-top:none;border-radius:0 0 8px 8px;'><p style='font-size:14px;color:#475569;line-height:1.6;'>Estimado equipo de Agencia,</p><p style='font-size:14px;color:#475569;line-height:1.6;'>El sistema detecta que han pasado <strong>más de 30 minutos</strong> desde que se marcó el inicio del proceso de visación para el Booking <strong style='color:#0f172a;'>{bookingStr}</strong>, y aún no se ha confirmado su término.</p><div style='background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:20px;margin:24px 0;text-align:center;'><p style='font-size:13px;font-weight:700;color:#0f172a;text-transform:uppercase;margin:0 0 14px;'>Si la guía ya fue visada, por favor confírmelo aquí:</p><a href='{linkVisado}' style='background:#16a34a;color:#fff;padding:14px 22px;text-decoration:none;border-radius:6px;font-weight:800;font-size:13px;display:inline-block;'>✅ CONFIRMAR GUÍA VISADA</a></div></div></div>";
                                         await emailSvc.EnviarCorreoAsync(correoDestino, $"[ALERTA AUTOMÁTICA] Visación Pendiente — BKG: {bookingStr}", htmlRecordatorio);
                                         string logAuto = $"<div style='border-left:2px solid #f59e0b; padding:6px; margin-bottom:6px; background:#fffbeb; border-top:1px solid #fde68a; border-right:1px solid #fde68a; border-bottom:1px solid #fde68a;'><div style='display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;'><span style='font-weight:800; color:#d97706; text-transform:uppercase; font-size:10px;'>⏰ RECORDATORIO ENVIADO</span><span style='color:#64748b; font-size:9px;'>{DateTime.Now:dd/MM/yyyy HH:mm}</span></div><div style='color:#475569; font-size:10px; margin-bottom:3px;'>Por: <strong>Sistema Automático</strong></div><div style='color:#1e293b; font-size:11px; line-height:1.2;'>Alerta por demora enviada a {correoDestino}</div></div>\n";
@@ -2613,14 +3498,14 @@ DateTime? FechaSalida, string? ConductorSalidaNombre, string? ConductorSalidaRut
                 if (doc != null) doc.LogGuia = logEntry + (doc.LogGuia ?? "");
                 RegistrarHito(op, "DOCUMENTAL", $"Agencia confirmó estado de Guía de Despacho: {textoEstado}"); op.FechaModificacion = DateTime.Now; await _context.SaveChangesAsync();
 
-                if (estado == "proceso")
+                if (estado == "proceso" && _configuration.GetValue<bool>("Correos:RecordatorioVisacionAutomatico"))
                 {
                     var req = HttpContext.Request; string baseUrl = $"{req.Scheme}://{req.Host}"; int idOperacion = op.Id; string bookingStr = op.NumeroBooking ?? "S/N";
                     _ = Task.Run(async () =>
                     {
                         try
                         {
-                            await Task.Delay(TimeSpan.FromMinutes(1)); // Prueba a 1 minuto
+                            await Task.Delay(TimeSpan.FromMinutes(30)); // Producción: recordatorio a los 30 minutos
                             using (var scope = _scopeFactory.CreateScope())
                             {
                                 var db = scope.ServiceProvider.GetRequiredService<AtilsonContext>(); var emailSvc = scope.ServiceProvider.GetRequiredService<EmailService>();
@@ -2631,7 +3516,22 @@ DateTime? FechaSalida, string? ConductorSalidaNombre, string? ConductorSalidaRut
                                     if (!logActual.Contains("GUÍA VISADA") && !logActual.Contains("GUIA VISADA") && !logActual.Contains("✅"))
                                     {
                                         string linkVisado = $"{baseUrl}/Operaciones/Index?handler=RespuestaGuiaAgencia&id={idOperacion}&estado=visado";
-                                        string correoDestino = "pruebas@demo.cl"; // <-- OJO EN PRODUCCIÓN
+                                        string? correoDestino = docActual?.IdAgenciaAduana.HasValue == true
+                                            ? await db.AgenciasAduanas.AsNoTracking()
+                                                .Where(a => a.Id == docActual.IdAgenciaAduana.Value)
+                                                .Select(a => a.CorreoContacto)
+                                                .FirstOrDefaultAsync()
+                                            : null;
+                                        if (string.IsNullOrWhiteSpace(correoDestino))
+                                        {
+                                            if (docActual != null)
+                                            {
+                                                string logSinCorreo = $"<div style='border-left:2px solid #64748b; padding:6px; margin-bottom:6px; background:#f8fafc;'><div style='font-weight:800; color:#475569; font-size:10px;'>RECORDATORIO NO ENVIADO</div><div style='font-size:10px; color:#64748b;'>La agencia asignada no tiene correo configurado.</div></div>\n";
+                                                docActual.LogGuia = logSinCorreo + (docActual.LogGuia ?? "");
+                                                await db.SaveChangesAsync();
+                                            }
+                                            return;
+                                        }
                                         string htmlRecordatorio = $@"<div style='font-family:Arial,sans-serif;max-width:580px;margin:0 auto;'><div style='background:linear-gradient(135deg,#b91c1c 0%,#7f1d1d 100%);padding:24px 28px;border-radius:8px 8px 0 0;text-align:center;'><h2 style='color:#fff;margin:0;font-size:18px;'>⏰ Recordatorio: Visación Pendiente</h2><p style='color:#fecaca;margin:6px 0 0;font-size:13px;'>Booking: <strong style='color:#fff;'>{bookingStr}</strong></p></div><div style='background:#fff;padding:28px;border:1px solid #e2e8f0;border-top:none;border-radius:0 0 8px 8px;'><p style='font-size:14px;color:#475569;line-height:1.6;'>Estimado equipo de Agencia,</p><p style='font-size:14px;color:#475569;line-height:1.6;'>El sistema detecta que han pasado <strong>más de 30 minutos</strong> desde que se marcó el inicio del proceso de visación para el Booking <strong style='color:#0f172a;'>{bookingStr}</strong>, y aún no se ha confirmado su término.</p><div style='background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:20px;margin:24px 0;text-align:center;'><p style='font-size:13px;font-weight:700;color:#0f172a;text-transform:uppercase;margin:0 0 14px;'>Si la guía ya fue visada, por favor confírmelo aquí:</p><a href='{linkVisado}' style='background:#16a34a;color:#fff;padding:14px 22px;text-decoration:none;border-radius:6px;font-weight:800;font-size:13px;display:inline-block;'>✅ CONFIRMAR GUÍA VISADA</a></div></div></div>";
                                         await emailSvc.EnviarCorreoAsync(correoDestino, $"[ALERTA AUTOMÁTICA] Visación Pendiente — BKG: {bookingStr}", htmlRecordatorio);
                                         string logAuto = $"<div style='border-left:2px solid #f59e0b; padding:6px; margin-bottom:6px; background:#fffbeb; border-top:1px solid #fde68a; border-right:1px solid #fde68a; border-bottom:1px solid #fde68a;'><div style='display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;'><span style='font-weight:800; color:#d97706; text-transform:uppercase; font-size:10px;'>⏰ RECORDATORIO ENVIADO</span><span style='color:#64748b; font-size:9px;'>{DateTime.Now:dd/MM/yyyy HH:mm}</span></div><div style='color:#475569; font-size:10px; margin-bottom:3px;'>Por: <strong>Sistema Automático</strong></div><div style='color:#1e293b; font-size:11px; line-height:1.2;'>Alerta por demora enviada a {correoDestino}</div></div>\n";

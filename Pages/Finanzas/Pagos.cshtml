@@ -1,0 +1,631 @@
+@page
+@model AtilsonCargoSpa.Pages.Finanzas.PagosModel
+@using AtilsonCargoSpa.Models
+@{
+    ViewData["Title"] = "Pagos";
+    bool mostrarIngresos = string.Equals(Model.Movimiento, "INGRESO", StringComparison.OrdinalIgnoreCase);
+}
+<style>
+    .pg-workspace{max-width:100%}
+    .pg-card{background:#fff;border:1px solid #e2e8f0;border-radius:10px;box-shadow:0 2px 10px rgba(15,23,42,.045);overflow:hidden}
+    .pg-filter{display:grid;grid-template-columns:minmax(120px,.75fr) minmax(160px,1fr) minmax(140px,.85fr) minmax(140px,.85fr) minmax(130px,.8fr) minmax(150px,.95fr) minmax(160px,1fr) minmax(110px,.65fr) auto;gap:9px;padding:13px 14px;align-items:end}
+    .pg-field label{display:block;margin:0 0 4px 2px;font-size:8.5px;font-weight:800;letter-spacing:.45px;text-transform:uppercase;color:#64748b}
+    .pg-field .form-control,.pg-field .form-select{height:34px;min-height:34px;font-size:10.5px;font-weight:650;border-color:#dbe3ec;background:#f8fafc}
+    .pg-filter-btn{height:34px;font-size:10px;font-weight:800;min-width:82px}
+    .pg-reset{height:34px;width:36px;display:inline-flex;align-items:center;justify-content:center}
+    .pg-tabs{display:flex;gap:6px;padding:6px;border-bottom:1px solid #e2e8f0;background:#f8fafc}
+    .pg-tabs .nav-link{border:0;border-radius:7px;color:#64748b;font-size:10.5px;font-weight:850;padding:8px 15px}
+    .pg-tabs .nav-link.active{background:#0f172a;color:#fff;box-shadow:0 1px 4px rgba(15,23,42,.15)}
+    .pg-count{display:inline-flex;min-width:19px;height:19px;padding:0 5px;border-radius:999px;align-items:center;justify-content:center;margin-left:6px;background:rgba(148,163,184,.18);font-size:9px}
+    .pg-tabs .nav-link.active .pg-count{background:rgba(255,255,255,.18)}
+    .pg-bookings{min-width:960px}
+    .pg-bookings th{font-size:9px;text-transform:uppercase;letter-spacing:.04em;color:#64748b;background:#fff;white-space:nowrap;padding:10px 12px;vertical-align:middle}
+    .pg-bookings td{font-size:11px;vertical-align:middle;padding:10px 12px;border-color:#eef2f7}
+    .pg-booking-row{cursor:pointer}
+    .pg-booking-row:hover>td{background:#f8fafc}
+    .pg-booking-row.pg-completo>td{background:#ecfdf5!important;border-color:#bbf7d0!important}
+    .pg-booking-row.pg-completo:hover>td{background:#dcfce7!important}
+    .pg-booking-row.pg-historico>td{background:#f1f5f9!important;color:#64748b!important;border-color:#d9e0e8!important}
+    .pg-booking-row.pg-historico:hover>td{background:#e9eef4!important}
+    .pg-hist-chip{display:inline-flex;align-items:center;gap:3px;margin-left:6px;padding:2px 6px;border-radius:999px;background:#e5e7eb;color:#4b5563;border:1px solid #d1d5db;font-size:8px;font-weight:850;text-transform:uppercase}
+    .pg-chevron{transition:transform .2s;color:#94a3b8;font-size:10px}
+    .pg-booking-row[aria-expanded="true"] .pg-chevron{transform:rotate(90deg)}
+    .pg-booking{font-size:12px;font-weight:900;color:#0f172a}
+    .pg-sub{display:block;color:#64748b;font-size:9.5px;margin-top:2px;line-height:1.25}
+    .pg-summary{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+    .pg-stat{display:inline-flex;align-items:center;gap:4px;border:1px solid #e2e8f0;background:#fff;border-radius:999px;padding:4px 7px;font-size:8.8px;font-weight:800;color:#475569}
+    .pg-completo-chip{display:inline-flex;align-items:center;gap:4px;border-radius:999px;padding:4px 8px;background:#dcfce7;color:#166534;border:1px solid #bbf7d0;font-size:9px;font-weight:850}
+    .pg-pend-chip{display:inline-flex;align-items:center;gap:4px;border-radius:999px;padding:4px 8px;background:#fff7ed;color:#9a3412;border:1px solid #fed7aa;font-size:9px;font-weight:850}
+    .pg-detail-cell{padding:0!important;background:#f8fafc}
+    .pg-detail-wrap{padding:12px 16px 16px}
+    .pg-service{border:1px solid #e2e8f0;border-radius:9px;background:#fff;overflow:hidden;margin-bottom:10px}
+    .pg-service:last-child{margin-bottom:0}
+    .pg-service-title{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 11px;background:#f8fafc;border-bottom:1px solid #e2e8f0;font-size:10px;font-weight:900;color:#334155;text-transform:uppercase;letter-spacing:.04em}
+    .pg-service-count{font-size:8.5px;color:#64748b;font-weight:800}
+    .pg-detail-table{min-width:940px;margin:0}
+    .pg-detail-table th{background:#fff;font-size:8.5px;padding:8px 10px}
+    .pg-detail-table td{font-size:10.5px;padding:9px 10px}
+    .pg-concepto{font-weight:750;color:#0f172a;line-height:1.3}
+    .pg-provider{font-weight:700;color:#334155}
+    .pg-monto{white-space:nowrap;font-variant-numeric:tabular-nums;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-weight:800}
+    .pg-badge{display:inline-flex;align-items:center;justify-content:center;gap:5px;border-radius:999px;padding:4px 8px;min-width:78px;font-size:8.8px;font-weight:850}
+    .pg-pend{background:#fff7ed;color:#9a3412;border:1px solid #fed7aa}
+    .pg-ok{background:#ecfdf5;color:#166534;border:1px solid #bbf7d0}
+    .pg-doc-ok{color:#166534;font-weight:800}
+    .pg-doc-miss{color:#b45309;font-weight:800}
+    .pg-doc-link{font-size:9px;font-weight:750;text-decoration:none}
+    .pg-pay{display:grid;grid-template-columns:minmax(135px,190px) auto;align-items:center;justify-content:end;gap:6px;margin:0}
+    .pg-pay .form-control{height:31px;font-size:9px;padding:4px 7px}
+    .pg-pay .btn,.pg-ver{height:31px;font-size:9px;font-weight:800;white-space:nowrap}
+    .pg-block{display:inline-flex;align-items:center;justify-content:flex-end;gap:5px;max-width:250px;color:#9a3412;font-size:9.2px;font-weight:750;line-height:1.25}
+    .pg-empty{padding:42px 16px!important;color:#64748b!important}
+    /* 13-nov: pago agrupado (checkboxes + un comprobante). */
+    .pg-sel{width:34px;text-align:center}
+    .pg-sel .form-check-input{width:15px;height:15px;cursor:pointer;margin:0}
+    .pg-sel .form-check-input:disabled{cursor:not-allowed;opacity:.35}
+    .pg-detail-table tr.pg-marcado>td{background:#f5f3ff!important}
+    .pg-service-title .pg-sel-todos{display:inline-flex;align-items:center;gap:6px;font-size:8.5px;font-weight:800;color:#6d2d9e;text-transform:none;letter-spacing:0;cursor:pointer;margin:0}
+    .pg-lote{position:sticky;bottom:12px;z-index:30;margin-top:14px;display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;background:#1d1530;color:#fff;border-radius:12px;padding:10px 14px;box-shadow:0 10px 30px rgba(15,23,42,.25)}
+    .pg-lote[hidden]{display:none!important}
+    .pg-lote-info{font-size:11px;font-weight:700;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+    .pg-lote-info strong{font-size:14px}
+    .pg-lote-chip{background:rgba(255,255,255,.12);border-radius:999px;padding:3px 9px;font-size:10px;font-weight:800}
+    .pg-lote-aviso{color:#fecaca;font-size:10.5px;font-weight:800}
+    .pg-lote form{display:flex;align-items:center;gap:8px;margin:0}
+    .pg-lote .form-control{height:32px;font-size:10px;max-width:240px;background:#fff}
+    .pg-lote .btn{height:32px;font-size:10px;font-weight:800;white-space:nowrap}
+    @@media(max-width:1450px){.pg-filter{grid-template-columns:repeat(4,minmax(0,1fr))}.pg-filter-actions{grid-column:span 4;justify-content:flex-end}}
+    @@media(max-width:900px){.pg-filter{grid-template-columns:1fr 1fr}.pg-filter-actions{grid-column:span 2}}
+    @@media(max-width:560px){.pg-filter{grid-template-columns:1fr}.pg-filter-actions{grid-column:auto}.pg-filter-actions .btn{flex:1}}
+    /* 13-nov: conceptos por contenedor (×N) y modalidad de cobro. */
+    .pg-grp-row{cursor:pointer;background:#fbfcfe}
+    .pg-grp-row:hover>td{background:#f5f3fa}
+    .pg-grp-chev{font-size:9px;color:#94a3b8;margin-right:6px;display:inline-block;transition:transform .2s}
+    .pg-grp-row[aria-expanded="true"] .pg-grp-chev{transform:rotate(90deg)}
+    .pg-grp-n{display:inline-block;margin-left:6px;font-size:9px;font-weight:800;background:#e2e8f0;color:#475569;border-radius:5px;padding:1px 6px}
+    .pg-grp-hint{display:block;margin:4px 0 0 auto;border:0;background:none;padding:0;font-size:10px;font-weight:750;color:#6d2d9e;cursor:pointer}
+    .pg-grp-hint:hover{text-decoration:underline}
+    .pg-pay-grupo{justify-content:flex-end}
+    .pg-grp-faltan{display:block;margin-top:3px;font-size:9.5px;font-weight:750;color:#9a3412}
+    .pg-badge.pg-parcial{background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe}
+    tr.pg-sub-cont>td{background:#fcfbff;border-top:1px dashed #ece6f5}
+    tr.pg-sub-cont>td:nth-child(2){padding-left:26px}
+    .pg-cont-chip{display:inline-block;font-size:10px;font-weight:800;background:#eef2ff;color:#4338ca;border:1px solid #c7d2fe;border-radius:999px;padding:1px 8px}
+    .pg-modalidad{display:inline-block;margin-top:3px;font-size:9px;font-weight:800;color:#6d2d9e;background:#f5f1fa;border:1px solid #e4d9f1;border-radius:999px;padding:1px 7px}
+</style>
+
+<link rel="stylesheet" href="~/css/finanzas-modulo.css" asp-append-version="true" />
+<div class="container-fluid px-4 py-4 pg-workspace fin-modulo">
+    <div class="page-header">
+        <div class="page-header__title-row">
+            <div class="page-header__icon"><i class="bi bi-cash-stack"></i></div>
+            <div>
+                <h1>Pagos</h1>
+                <p class="page-header__subtitle">Pago a proveedores y recaudación de clientes, organizados por booking y servicio.</p>
+            </div>
+        </div>
+    </div>
+
+    <partial name="/Pages/Finanzas/_FinanzasNav.cshtml" model='"Pagos"' />
+
+    @if (TempData["SuccessMsg"] != null)
+    {
+        <div class="alert alert-success py-2 small d-flex align-items-center gap-2"><i class="bi bi-check-circle-fill"></i><span>@TempData["SuccessMsg"]</span></div>
+    }
+    @if (TempData["ErrorMsg"] != null)
+    {
+        <div class="alert alert-danger py-2 small d-flex align-items-center gap-2"><i class="bi bi-exclamation-triangle-fill"></i><span>@TempData["ErrorMsg"]</span></div>
+    }
+
+    <div class="pg-card mb-3">
+        <form method="get" class="pg-filter" id="pgFiltros">
+            <input type="hidden" asp-for="Movimiento" id="pgMovimientoFiltro" />
+            <div class="pg-field">
+                <label asp-for="Booking">Booking</label>
+                <input asp-for="Booking" class="form-control" placeholder="N° booking" autocomplete="off" />
+            </div>
+            <div class="pg-field">
+                <label asp-for="ClienteId">Cliente</label>
+                <select asp-for="ClienteId" class="form-select">
+                    <option value="">Todos los clientes</option>
+                    @foreach(var x in Model.Clientes){<option value="@x.Id">@x.RazonSocial</option>}
+                </select>
+            </div>
+            <div class="pg-field">
+                <label asp-for="NavieraId">Naviera</label>
+                <select asp-for="NavieraId" class="form-select">
+                    <option value="">Todas las navieras</option>
+                    @foreach(var x in Model.Navieras){<option value="@x.Id">@x.NombreNaviera</option>}
+                </select>
+            </div>
+            <div class="pg-field">
+                <label asp-for="Nave">Nave</label>
+                <select asp-for="Nave" class="form-select" data-buscador="si">
+                    <option value="">Todas las naves</option>
+                    @foreach(var x in Model.NavesLista){<option value="@x">@x</option>}
+                </select>
+            </div>
+            <div class="pg-field">
+                <label asp-for="Servicio">Servicio</label>
+                <select asp-for="Servicio" class="form-select">
+                    <option value="">Todos los servicios</option>
+                    @foreach(var x in Model.Servicios){<option value="@x">@x</option>}
+                </select>
+            </div>
+            <div class="pg-field">
+                <label asp-for="Concepto">Concepto</label>
+                <input asp-for="Concepto" class="form-control" placeholder="Elige o escribe: Flete, Honorarios..." autocomplete="off" list="pgConceptos" />
+                <datalist id="pgConceptos">
+                    @foreach (var c in Model.ConceptosLista) { <option value="@c"></option> }
+                </datalist>
+            </div>
+            <div class="pg-field">
+                <label asp-for="Proveedor">Proveedor / Contraparte</label>
+                <select asp-for="Proveedor" class="form-select">
+                    <option value="">Todas las contrapartes</option>
+                    @foreach(var x in Model.Proveedores){<option value="@x">@x</option>}
+                </select>
+            </div>
+            <div class="pg-field">
+                <label asp-for="Estado">Estado</label>
+                <select asp-for="Estado" class="form-select">
+                    <option value="">Todos</option>
+                    <option value="PENDIENTE">Pendientes</option>
+                    <option value="LISTOS">Listos para pagar</option>
+                    <option value="PAGADO">Pagados</option>
+                </select>
+            </div>
+            <div class="pg-filter-actions d-flex gap-2 align-items-end">
+                <button class="btn btn-dark pg-filter-btn"><i class="bi bi-funnel me-1"></i> Filtrar</button>
+                <a asp-page="./Pagos" class="btn btn-outline-secondary pg-reset" title="Limpiar filtros"><i class="bi bi-x-lg"></i></a>
+            </div>
+        </form>
+    </div>
+
+    <div class="pg-card">
+        <ul class="nav pg-tabs" role="tablist">
+            <li class="nav-item">
+                <button class="nav-link @(!mostrarIngresos ? "active" : "")" id="pg-egresos-tab" data-bs-toggle="tab" data-bs-target="#pg-egresos" type="button" role="tab" data-movimiento="EGRESO">
+                    <i class="bi bi-arrow-up-right-circle me-1"></i>Egresos
+                    <span class="pg-count">@Model.Pagos.Count(x => x.TipoMovimiento == "EGRESO")</span>
+                </button>
+            </li>
+            <li class="nav-item">
+                <button class="nav-link @(mostrarIngresos ? "active" : "")" id="pg-ingresos-tab" data-bs-toggle="tab" data-bs-target="#pg-ingresos" type="button" role="tab" data-movimiento="INGRESO">
+                    <i class="bi bi-arrow-down-left-circle me-1"></i>Ingresos
+                    <span class="pg-count">@Model.Pagos.Count(x => x.TipoMovimiento == "INGRESO")</span>
+                </button>
+            </li>
+        </ul>
+
+        <div class="tab-content">
+        @foreach (var tipoMovimiento in new[] { "EGRESO", "INGRESO" })
+        {
+            bool esIngreso = tipoMovimiento == "INGRESO";
+            bool activo = esIngreso ? mostrarIngresos : !mostrarIngresos;
+            string tabId = esIngreso ? "pg-ingresos" : "pg-egresos";
+            var filas = Model.Pagos.Where(x => x.TipoMovimiento == tipoMovimiento).ToList();
+            var bookings = filas.GroupBy(x => x.IdOperacion).OrderByDescending(g => g.Key).ToList();
+
+            <div class="tab-pane fade @(activo ? "show active" : "")" id="@tabId" role="tabpanel">
+                <div class="table-responsive">
+                    <table class="table pg-bookings mb-0">
+                        <thead>
+                            <tr>
+                                <th style="width:24%;">Booking / Cliente</th>
+                                <th style="width:18%;">Naviera</th>
+                                <th>Resumen</th>
+                                <th class="text-center" style="width:14%;">Documentos</th>
+                                <th class="text-center" style="width:13%;">Estado</th>
+                                <th class="text-end" style="width:55px;"></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                        @foreach (var booking in bookings)
+                        {
+                            var primera = booking.First();
+                            bool completo = Model.BookingCompleto(booking.Key, tipoMovimiento);
+                            int total = booking.Count();
+                            int docsListos = booking.Count(Model.DocumentoListo);
+                            int pagados = booking.Count(x => x.EstadoFila == "PAGADO" || x.EstadoFila == "CONCILIADO");
+                            string collapseId = $"pg-{tipoMovimiento.ToLowerInvariant()}-{booking.Key}";
+                            var servicios = booking
+                                .GroupBy(x => AtilsonCargoSpa.Pages.Finanzas.PagosModel.GrupoVisible(x.GrupoCobro))
+                                .OrderBy(g => AtilsonCargoSpa.Pages.Finanzas.PagosModel.OrdenServicio(g.Key))
+                                .ThenBy(g => g.Key)
+                                .ToList();
+
+                            <tr class="pg-booking-row @(completo ? "pg-completo" : "") @(primera.IdOperacionNavigation?.EsHistorica == true ? "pg-historico" : "")" data-bs-toggle="collapse" data-bs-target="#@collapseId" aria-expanded="false" aria-controls="@collapseId">
+                                <td>
+                                    <span class="pg-booking">@primera.IdOperacionNavigation?.NumeroBooking</span>
+                                    @if (primera.IdOperacionNavigation?.EsHistorica == true) { <span class="pg-hist-chip"><i class="bi bi-archive-fill"></i> Histórico Excel</span> }
+                                    <span class="pg-sub">@(primera.IdOperacionNavigation?.IdClienteNavigation?.RazonSocial ?? "Sin cliente")</span>
+                                    @if (esIngreso && (primera.IdOperacionNavigation?.Unidadestecnicas?.Count ?? 0) > 0)
+                                    {
+                                        bool porBooking = AtilsonCargoSpa.Pages.Finanzas.PagosModel.CobroPorBooking(primera.IdOperacionNavigation);
+                                        <span class="pg-modalidad" title="Modalidad de cobro de Honorarios y DUS definida en Operaciones">@(porBooking ? "Cobro agencia por booking" : "Cobro agencia por contenedor")</span>
+                                    }
+                                </td>
+                                <td>
+                                    <span class="fw-bold text-dark">@(primera.IdOperacionNavigation?.IdNavieraNavigation?.NombreNaviera ?? "—")</span>
+                                </td>
+                                <td>
+                                    <div class="pg-summary">
+                                        <span class="pg-stat"><i class="bi bi-list-check"></i>@total conceptos</span>
+                                        <span class="pg-stat"><i class="bi bi-grid"></i>@servicios.Count servicios</span>
+                                        <span class="pg-stat"><i class="bi bi-check2-circle"></i>@pagados/@total pagados</span>
+                                    </div>
+                                </td>
+                                <td class="text-center"><span class="pg-stat">@docsListos/@total completos</span></td>
+                                <td class="text-center">
+                                    @if (completo)
+                                    {
+                                        <span class="pg-completo-chip"><i class="bi bi-check-circle-fill"></i>Completo</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="pg-pend-chip"><i class="bi bi-clock-fill"></i>Pendiente</span>
+                                    }
+                                </td>
+                                <td class="text-end"><i class="bi bi-chevron-right pg-chevron"></i></td>
+                            </tr>
+                            <tr>
+                                <td colspan="6" class="pg-detail-cell">
+                                    <div id="@collapseId" class="collapse">
+                                        <div class="pg-detail-wrap">
+                                        @foreach (var servicio in servicios)
+                                        {
+                                            var conceptos = servicio.OrderBy(x => x.Concepto).ThenBy(x => x.Id).ToList();
+                                            <div class="pg-service">
+                                                @{ int pagablesSrv = conceptos.Count(x => x.EstadoFila != "PAGADO" && x.EstadoFila != "CONCILIADO" && Model.MotivoBloqueoPago(x) == null); }
+                                                <div class="pg-service-title">
+                                                    <span>@servicio.Key</span>
+                                                    <span class="d-flex align-items-center gap-3">
+                                                        @if (pagablesSrv > 1)
+                                                        {
+                                                            <label class="pg-sel-todos" title="Marcar todos los conceptos de este servicio que se pueden pagar">
+                                                                <input type="checkbox" class="form-check-input pg-chk-todos m-0" /> Marcar los @pagablesSrv
+                                                            </label>
+                                                        }
+                                                        <span class="pg-service-count">@conceptos.Count @(conceptos.Count == 1 ? "concepto" : "conceptos")</span>
+                                                    </span>
+                                                </div>
+                                                <div class="table-responsive">
+                                                    <table class="table table-hover pg-detail-table">
+                                                        <thead>
+                                                            <tr>
+                                                                <th class="pg-sel"><span class="visually-hidden">Marcar</span></th>
+                                                                <th>Concepto / Documento</th>
+                                                                <th style="width:19%;">@(esIngreso ? "Cliente / Contraparte" : "Proveedor / Beneficiario")</th>
+                                                                <th class="text-end" style="width:11%;">Monto</th>
+                                                                <th class="text-center" style="width:11%;">Estado</th>
+                                                                <th class="text-end" style="width:28%;">Acción</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody>
+                                                        @foreach (var grpC in conceptos.GroupBy(x => AtilsonCargoSpa.Pages.Finanzas.PagosModel.ConceptoBase(x.Concepto)))
+                                                        {
+                                                            // 13-nov: el mismo concepto en varios contenedores va en una fila ×N que se despliega;
+                                                            // cada contenedor se marca por separado (p. ej. pagar 2 de 3 con un comprobante).
+                                                            var listaC = grpC.OrderBy(x => AtilsonCargoSpa.Pages.Finanzas.PagosModel.PosicionContenedor(x)).ThenBy(x => x.Id).ToList();
+                                                            bool esGrupoC = listaC.Count > 1;
+                                                            if (esGrupoC)
+                                                            {
+                                                                int pagadosC = listaC.Count(x => x.EstadoFila == "PAGADO" || x.EstadoFila == "CONCILIADO");
+                                                                int listosC = listaC.Count(x => x.EstadoFila != "PAGADO" && x.EstadoFila != "CONCILIADO" && Model.MotivoBloqueoPago(x) == null);
+                                                                var provsC = listaC.Select(x => Model.ResolverContraparte(x)).Distinct().ToList();
+                                                                var monedasC = listaC.Select(x => x.Moneda).Distinct().ToList();
+                                                                <tr class="pg-grp-row" onclick="pgGrpToggle(this)" aria-expanded="false" title="Ver cada contenedor">
+                                                                    <td class="pg-sel" onclick="event.stopPropagation();">
+                                                                        @if (listosC > 0)
+                                                                        {
+                                                                            <input type="checkbox" class="form-check-input pg-chk-grupo" title="Marcar los @listosC contenedores que se pueden pagar" aria-label="Marcar todos los contenedores de @grpC.Key" />
+                                                                        }
+                                                                    </td>
+                                                                    <td>
+                                                                        <span class="pg-concepto"><i class="bi bi-chevron-right pg-grp-chev"></i>@grpC.Key</span>
+                                                                        <span class="pg-grp-n">×@listaC.Count</span>
+                                                                        <span class="pg-sub">@(esIngreso ? "Cobro por contenedor" : "Por contenedor") · @pagadosC/@listaC.Count pagados@(listosC > 0 ? $" · {listosC} listos para pagar" : "")</span>
+                                                                    </td>
+                                                                    <td><span class="pg-provider">@string.Join(" / ", provsC)</span></td>
+                                                                    <td class="text-end pg-monto">@(monedasC.Count == 1 ? $"{monedasC[0]} {listaC.Sum(x => x.MontoNeto).ToString(monedasC[0] == "CLP" ? "N0" : "N2")}" : "—")</td>
+                                                                    <td class="text-center">
+                                                                        @if (pagadosC == listaC.Count) { <span class="pg-badge pg-ok"><i class="bi bi-check-circle-fill"></i>PAGADO</span> }
+                                                                        else if (pagadosC > 0) { <span class="pg-badge pg-parcial" title="@pagadosC de @listaC.Count contenedores pagados"><i class="bi bi-circle-half"></i>PARCIAL @pagadosC/@listaC.Count</span> }
+                                                                        else { <span class="pg-badge pg-pend"><i class="bi bi-clock-fill"></i>PENDIENTE</span> }
+                                                                    </td>
+                                                                    <td class="text-end" onclick="event.stopPropagation();">
+                                                                        @{
+                                                                            var idsListosC = listaC.Where(x => x.EstadoFila != "PAGADO" && x.EstadoFila != "CONCILIADO" && Model.MotivoBloqueoPago(x) == null).Select(x => x.Id).ToList();
+                                                                            int pendientesC = listaC.Count - pagadosC;
+                                                                        }
+                                                                        @if (idsListosC.Count > 0 && monedasC.Count == 1)
+                                                                        {
+                                                                            @* 13-nov: un comprobante para todos los contenedores listos del concepto. *@
+                                                                            <form method="post" asp-page-handler="RegistrarPagoMultiple" enctype="multipart/form-data" class="pg-pay pg-pay-grupo"
+                                                                                  onsubmit="return confirm('¿Registrar el @(esIngreso ? "cobro" : "pago") de @idsListosC.Count contenedor(es) de @grpC.Key con este comprobante?');">
+                                                                                <input type="hidden" name="Booking" value="@Model.Booking" />
+                                                                                <input type="hidden" name="ClienteId" value="@Model.ClienteId" />
+                                                                                <input type="hidden" name="NavieraId" value="@Model.NavieraId" />
+                                                                                <input type="hidden" name="Nave" value="@Model.Nave" />
+                                                                                <input type="hidden" name="Servicio" value="@Model.Servicio" />
+                                                                                <input type="hidden" name="Proveedor" value="@Model.Proveedor" />
+                                                                                <input type="hidden" name="Estado" value="@Model.Estado" />
+                                                                                <input type="hidden" name="Concepto" value="@Model.Concepto" />
+                                                                                <input type="hidden" name="Pagina" value="@Model.Pagina" />
+                                                                                <input type="hidden" name="Movimiento" value="@tipoMovimiento" />
+                                                                                @foreach (var idL in idsListosC) { <input type="hidden" name="ids" value="@idL" /> }
+                                                                                <input type="file" name="archivoPago" class="form-control form-control-sm" accept=".pdf,.png,.jpg,.jpeg,.webp" required title="Comprobante: PDF, JPG, PNG o WEBP" />
+                                                                                <button class="btn btn-success btn-sm"><i class="bi bi-check2-all me-1"></i>@(esIngreso ? "Cobrar" : "Pagar") @(idsListosC.Count == pendientesC ? (idsListosC.Count == 2 ? "los 2" : $"los {idsListosC.Count}") : $"{idsListosC.Count} listos")</button>
+                                                                            </form>
+                                                                            @if (idsListosC.Count < pendientesC)
+                                                                            {
+                                                                                <span class="pg-grp-faltan">@(pendientesC - idsListosC.Count) aún no listo(s): ver contenedores</span>
+                                                                            }
+                                                                        }
+                                                                        else if (pendientesC > 0)
+                                                                        {
+                                                                            <span class="pg-block" title="Ningún contenedor tiene todavía N°, documento y valor confirmado"><i class="bi bi-exclamation-triangle-fill"></i>Ningún contenedor listo</span>
+                                                                        }
+                                                                        <button type="button" class="pg-grp-hint" onclick="pgGrpToggle(this.closest('tr'))">Ver contenedores</button>
+                                                                    </td>
+                                                                </tr>
+                                                            }
+                                                        foreach (var tx in listaC)
+                                                        {
+                                                            bool pagado = tx.EstadoFila == "PAGADO" || tx.EstadoFila == "CONCILIADO";
+                                                            string? bloqueo = Model.MotivoBloqueoPago(tx);
+                                                            <tr class="@(esGrupoC ? "pg-sub-cont d-none" : "")">
+                                                                <td class="pg-sel" onclick="event.stopPropagation();">
+                                                                    @if (!pagado)
+                                                                    {
+                                                                        <input type="checkbox" class="form-check-input pg-chk" value="@tx.Id"
+                                                                               data-mov="@tipoMovimiento" data-moneda="@tx.Moneda" data-monto="@tx.MontoNeto.ToString(System.Globalization.CultureInfo.InvariantCulture)"
+                                                                               data-booking="@tx.IdOperacionNavigation?.NumeroBooking" data-prov="@Model.ResolverContraparte(tx)"
+                                                                               disabled="@(bloqueo != null)" title="@(bloqueo ?? "Marcar para pagar con un solo comprobante")"
+                                                                               aria-label="Marcar @tx.Concepto" />
+                                                                    }
+                                                                </td>
+                                                                <td>
+                                                                    @if (esGrupoC)
+                                                                    {
+                                                                        <span class="pg-concepto"><span class="pg-cont-chip">@AtilsonCargoSpa.Pages.Finanzas.PagosModel.EtiquetaContenedor(tx)</span></span>
+                                                                    }
+                                                                    else
+                                                                    {
+                                                                        <span class="pg-concepto">@tx.Concepto</span>
+                                                                        if (esIngreso && (tx.IdOperacionNavigation?.Unidadestecnicas?.Count ?? 0) > 0 && AtilsonCargoSpa.Pages.Finanzas.PagosModel.CobroPorBooking(tx.IdOperacionNavigation)
+                                                                             && (tx.Concepto ?? "").Length > 0 && ((tx.Concepto ?? "").StartsWith("Honorarios", StringComparison.OrdinalIgnoreCase) || (tx.Concepto ?? "").StartsWith("Legalización", StringComparison.OrdinalIgnoreCase)))
+                                                                        {
+                                                                            <span class="pg-modalidad">Un cobro por booking (@(1 + tx.IdOperacionNavigation!.Unidadestecnicas.Count) contenedores)</span>
+                                                                        }
+                                                                    }
+                                                                    @if (!string.IsNullOrWhiteSpace(tx.NumeroDocumento))
+                                                                    {
+                                                                        <span class="pg-sub pg-doc-ok"><i class="bi bi-check2 me-1"></i>N° @tx.NumeroDocumento</span>
+                                                                    }
+                                                                    else
+                                                                    {
+                                                                        <span class="pg-sub pg-doc-miss"><i class="bi bi-exclamation-circle me-1"></i>Sin N° de factura / documento</span>
+                                                                    }
+                                                                    @if (!string.IsNullOrWhiteSpace(tx.RutaFactura))
+                                                                    {
+                                                                        <a href="@tx.RutaFactura" target="_blank" rel="noopener" class="pg-sub pg-doc-link"><i class="bi bi-file-earmark-text me-1"></i>Ver factura / documento</a>
+                                                                    }
+                                                                    else if (tx.IdOperacionNavigation?.EsHistorica == true)
+                                                                    {
+                                                                        <span class="pg-sub text-muted"><i class="bi bi-file-earmark-spreadsheet me-1"></i>Fuente: Excel histórico</span>
+                                                                    }
+                                                                    else
+                                                                    {
+                                                                        <span class="pg-sub pg-doc-miss"><i class="bi bi-cloud-slash me-1"></i>Sin archivo adjunto</span>
+                                                                    }
+                                                                </td>
+                                                                <td><span class="pg-provider">@Model.ResolverContraparte(tx)</span></td>
+                                                                <td class="text-end pg-monto">@tx.Moneda @tx.MontoNeto.ToString(tx.Moneda == "CLP" ? "N0" : "N2")</td>
+                                                                <td class="text-center">
+                                                                    <span class="pg-badge @(pagado ? "pg-ok" : "pg-pend")"><i class="bi @(pagado ? "bi-check-circle-fill" : "bi-clock-fill")"></i>@(pagado ? "PAGADO" : "PENDIENTE")</span>
+                                                                </td>
+                                                                <td class="text-end">
+                                                                    @if (pagado)
+                                                                    {
+                                                                        @if (!string.IsNullOrWhiteSpace(tx.RutaComprobante))
+                                                                        {
+                                                                            <a href="@tx.RutaComprobante" target="_blank" rel="noopener" class="btn btn-outline-success btn-sm pg-ver" onclick="event.stopPropagation();"><i class="bi bi-file-earmark-check me-1"></i>Ver comprobante</a>
+                                                                        }
+                                                                        else
+                                                                        {
+                                                                            <span class="text-muted small">Pagado · sin comprobante asociado</span>
+                                                                        }
+                                                                    }
+                                                                    else if (bloqueo != null)
+                                                                    {
+                                                                        <span class="pg-block" title="@bloqueo"><i class="bi bi-exclamation-triangle-fill"></i>@bloqueo</span>
+                                                                    }
+                                                                    else
+                                                                    {
+                                                                        <form method="post" asp-page-handler="RegistrarPago" enctype="multipart/form-data" class="pg-pay" onclick="event.stopPropagation();">
+                                                                            <input type="hidden" name="transaccionId" value="@tx.Id" />
+                                                                            <input type="hidden" name="Movimiento" value="@tipoMovimiento" />
+                                                                            <input type="file" name="archivoPago" class="form-control form-control-sm" accept=".pdf,.png,.jpg,.jpeg,.webp" required title="Comprobante: PDF, JPG, PNG o WEBP" />
+                                                                            <button class="btn btn-success btn-sm"><i class="bi bi-check2-circle me-1"></i>@(esIngreso ? "Registrar cobro" : "Registrar pago")</button>
+                                                                        </form>
+                                                                    }
+                                                                </td>
+                                                            </tr>
+                                                        }
+                                                        }
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                            </div>
+                                        }
+                                        </div>
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                        @if (!bookings.Any())
+                        {
+                            <tr><td colspan="6" class="text-center pg-empty"><i class="bi bi-inbox me-2"></i>No hay @(esIngreso ? "ingresos" : "egresos") que coincidan con los filtros.</td></tr>
+                        }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        }
+        </div>
+    </div>
+
+    @* 13-nov: pago agrupado. Aparece al marcar conceptos: un comprobante para todos. *@
+    <div class="pg-lote" id="pgLote" hidden>
+        <div class="pg-lote-info">
+            <span><strong id="pgLoteN">0</strong> <span id="pgLoteTxt">conceptos marcados</span></span>
+            <span class="pg-lote-chip" id="pgLoteTotal"></span>
+            <span class="pg-lote-chip" id="pgLoteBookings"></span>
+            <span class="pg-lote-aviso" id="pgLoteAviso"></span>
+        </div>
+        <form method="post" asp-page-handler="RegistrarPagoMultiple" enctype="multipart/form-data" id="pgLoteForm">
+            <input type="hidden" name="Booking" value="@Model.Booking" />
+            <input type="hidden" name="ClienteId" value="@Model.ClienteId" />
+            <input type="hidden" name="NavieraId" value="@Model.NavieraId" />
+            <input type="hidden" name="Nave" value="@Model.Nave" />
+            <input type="hidden" name="Servicio" value="@Model.Servicio" />
+            <input type="hidden" name="Proveedor" value="@Model.Proveedor" />
+            <input type="hidden" name="Estado" value="@Model.Estado" />
+            <input type="hidden" name="Concepto" value="@Model.Concepto" />
+            <input type="hidden" name="Pagina" value="@Model.Pagina" />
+            <input type="hidden" name="Movimiento" id="pgLoteMov" value="EGRESO" />
+            <div id="pgLoteIds"></div>
+            <input type="file" name="archivoPago" class="form-control form-control-sm" accept=".pdf,.png,.jpg,.jpeg,.webp" required title="Comprobante de la transferencia: PDF, JPG, PNG o WEBP" />
+            <button type="submit" class="btn btn-success btn-sm" id="pgLoteBtn"><i class="bi bi-check2-all me-1"></i><span id="pgLoteBtnTxt">Registrar pago de los marcados</span></button>
+            <button type="button" class="btn btn-outline-light btn-sm" id="pgLoteLimpiar">Limpiar</button>
+        </form>
+    </div>
+
+    @if (Model.TotalPaginas > 1)
+    {
+        <div class="d-flex justify-content-between align-items-center mt-3 flex-wrap gap-2">
+            <span class="text-muted" style="font-size:10.5px;font-weight:700;">@Model.TotalBookings bookings · página @Model.Pagina de @Model.TotalPaginas</span>
+            <nav aria-label="Paginación Pagos">
+                <ul class="pagination pagination-sm mb-0">
+                    <li class="page-item @(Model.Pagina <= 1 ? "disabled" : "")">
+                        <a class="page-link" asp-page="./Pagos"
+                           asp-route-Pagina="@(Model.Pagina - 1)"
+                           asp-route-Booking="@Model.Booking"
+                           asp-route-ClienteId="@Model.ClienteId"
+                           asp-route-NavieraId="@Model.NavieraId"
+                           asp-route-Nave="@Model.Nave"
+                           asp-route-Servicio="@Model.Servicio"
+                           asp-route-Concepto="@Model.Concepto"
+                           asp-route-Proveedor="@Model.Proveedor"
+                           asp-route-Estado="@Model.Estado"
+                           asp-route-Movimiento="@Model.Movimiento"><i class="bi bi-chevron-left"></i></a>
+                    </li>
+                    <li class="page-item disabled"><span class="page-link">@Model.Pagina / @Model.TotalPaginas</span></li>
+                    <li class="page-item @(Model.Pagina >= Model.TotalPaginas ? "disabled" : "")">
+                        <a class="page-link" asp-page="./Pagos"
+                           asp-route-Pagina="@(Model.Pagina + 1)"
+                           asp-route-Booking="@Model.Booking"
+                           asp-route-ClienteId="@Model.ClienteId"
+                           asp-route-NavieraId="@Model.NavieraId"
+                           asp-route-Nave="@Model.Nave"
+                           asp-route-Servicio="@Model.Servicio"
+                           asp-route-Concepto="@Model.Concepto"
+                           asp-route-Proveedor="@Model.Proveedor"
+                           asp-route-Estado="@Model.Estado"
+                           asp-route-Movimiento="@Model.Movimiento"><i class="bi bi-chevron-right"></i></a>
+                    </li>
+                </ul>
+            </nav>
+        </div>
+    }
+</div>
+
+@section Scripts {
+<script>
+    // 13-nov: pago agrupado — marcar conceptos y registrar un solo comprobante para todos.
+    (function () {
+        const barra = document.getElementById('pgLote');
+        if (!barra) return;
+        const fmt = (moneda, v) => moneda + ' ' + v.toLocaleString('es-CL', { minimumFractionDigits: moneda === 'CLP' ? 0 : 2, maximumFractionDigits: moneda === 'CLP' ? 0 : 2 });
+        function marcados() { return Array.from(document.querySelectorAll('.pg-chk:checked')); }
+        function actualizar() {
+            const sel = marcados();
+            document.querySelectorAll('.pg-chk').forEach(c => c.closest('tr').classList.toggle('pg-marcado', c.checked));
+            barra.hidden = sel.length === 0;
+            if (!sel.length) return;
+            const mov = sel[0].dataset.mov;
+            const monedas = [...new Set(sel.map(c => c.dataset.moneda))];
+            const bookings = new Set(sel.map(c => c.dataset.booking));
+            const provs = new Set(sel.map(c => c.dataset.prov));
+            document.getElementById('pgLoteN').textContent = sel.length;
+            document.getElementById('pgLoteTxt').textContent = sel.length === 1 ? 'concepto marcado' : 'conceptos marcados';
+            document.getElementById('pgLoteBookings').textContent = bookings.size + (bookings.size === 1 ? ' booking' : ' bookings') + ' · ' + provs.size + (provs.size === 1 ? ' contraparte' : ' contrapartes');
+            const aviso = document.getElementById('pgLoteAviso');
+            const btn = document.getElementById('pgLoteBtn');
+            if (monedas.length > 1) {
+                document.getElementById('pgLoteTotal').textContent = 'Monedas mezcladas';
+                aviso.textContent = 'CLP y USD van en comprobantes separados.';
+                btn.disabled = true;
+            } else {
+                const total = sel.reduce((a, c) => a + parseFloat(c.dataset.monto || '0'), 0);
+                document.getElementById('pgLoteTotal').textContent = 'Total neto ' + fmt(monedas[0], total);
+                aviso.textContent = '';
+                btn.disabled = false;
+            }
+            document.getElementById('pgLoteMov').value = mov;
+            document.getElementById('pgLoteBtnTxt').textContent = mov === 'INGRESO' ? 'Registrar cobro de los marcados' : 'Registrar pago de los marcados';
+            const cont = document.getElementById('pgLoteIds');
+            cont.innerHTML = '';
+            sel.forEach(c => { const i = document.createElement('input'); i.type = 'hidden'; i.name = 'ids'; i.value = c.value; cont.appendChild(i); });
+        }
+        document.addEventListener('change', ev => {
+            const t = ev.target;
+            if (t.classList.contains('pg-chk-grupo')) {
+                let n = t.closest('tr').nextElementSibling;
+                while (n && n.classList.contains('pg-sub-cont')) { n.querySelectorAll('.pg-chk:not(:disabled)').forEach(c => { c.checked = t.checked; }); n = n.nextElementSibling; }
+                if (t.checked) document.querySelectorAll('.pg-chk:checked').forEach(c => { if (c.dataset.mov !== (t.closest('#pg-ingresos') ? 'INGRESO' : 'EGRESO')) c.checked = false; });
+                actualizar();
+            } else if (t.classList.contains('pg-chk-todos')) {
+                t.closest('.pg-service').querySelectorAll('.pg-chk:not(:disabled)').forEach(c => { c.checked = t.checked; });
+                actualizar();
+            } else if (t.classList.contains('pg-chk')) {
+                // Un comprobante es de egresos o de ingresos: al marcar en la otra pestaña se limpia la anterior.
+                if (t.checked) document.querySelectorAll('.pg-chk:checked').forEach(c => { if (c.dataset.mov !== t.dataset.mov) c.checked = false; });
+                actualizar();
+            }
+        });
+        document.getElementById('pgLoteLimpiar').addEventListener('click', () => {
+            document.querySelectorAll('.pg-chk:checked, .pg-chk-todos:checked, .pg-chk-grupo:checked').forEach(c => { c.checked = false; });
+            actualizar();
+        });
+        document.getElementById('pgLoteForm').addEventListener('submit', ev => {
+            const sel = marcados();
+            if (!sel.length) { ev.preventDefault(); return; }
+            const mov = sel[0].dataset.mov === 'INGRESO' ? 'cobro' : 'pago';
+            if (!confirm('¿Registrar el ' + mov + ' de ' + sel.length + ' concepto(s) con este comprobante? Quedarán marcados como pagados.')) ev.preventDefault();
+        });
+        actualizar();
+    })();
+
+    // 13-nov: fila ×N → un renglón por contenedor.
+    function pgGrpToggle(tr) {
+        const abrir = tr.getAttribute('aria-expanded') !== 'true';
+        tr.setAttribute('aria-expanded', abrir ? 'true' : 'false');
+        let n = tr.nextElementSibling;
+        while (n && n.classList.contains('pg-sub-cont')) { n.classList.toggle('d-none', !abrir); n = n.nextElementSibling; }
+        const h = tr.querySelector('.pg-grp-hint');
+        if (h) h.textContent = abrir ? 'Ocultar' : 'Ver contenedores';
+    }
+
+    (function () {
+        var hidden = document.getElementById('pgMovimientoFiltro');
+        document.querySelectorAll('.pg-tabs [data-bs-toggle="tab"]').forEach(function (btn) {
+            btn.addEventListener('shown.bs.tab', function () {
+                if (hidden) hidden.value = btn.getAttribute('data-movimiento') || 'EGRESO';
+            });
+        });
+    })();
+</script>
+}

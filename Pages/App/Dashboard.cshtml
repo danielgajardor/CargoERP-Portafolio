@@ -61,10 +61,13 @@
             <nav class="cm-acciones" aria-label="Accesos rápidos">
                 <a href="/Operaciones/Create" class="cm-btn cm-btn-claro"><i class="bi bi-plus-lg"></i> Nueva operación</a>
                 <a href="/Operaciones/Index" class="cm-btn"><i class="bi bi-kanban"></i> Main Board</a>
-                @if (esJefatura)
+                @if (AtilsonCargoSpa.Helpers.PermisosEquipo.PuedeFinanzas(User))
                 {
                     <a href="/Finanzas/ControlFinanciero" class="cm-btn"><i class="bi bi-wallet2"></i> Control Financiero</a>
-                    <a href="/Comercial/Index" class="cm-btn"><i class="bi bi-tags"></i> Tarifas</a>
+                }
+                @if (AtilsonCargoSpa.Helpers.PermisosEquipo.PuedeTarifas(User))
+                {
+                    <a href="/Comercial/Index" class="cm-btn"><i class="bi bi-tags"></i> @(AtilsonCargoSpa.Helpers.PermisosEquipo.SoloTarifasTransporte(User) ? "Tarifas de transporte" : "Tarifas")</a>
                 }
             </nav>
         </div>
@@ -344,7 +347,7 @@
                         {
                             <footer>
                                 @if (nave.Operaciones.Count > 4) { <span>+ @(nave.Operaciones.Count - 4) más</span> }
-                                @if (nave.SolicitudesPortal > 0) { <a href="/Operaciones/Cotizaciones?filtro=pendientes"><i class="bi bi-bell-fill"></i> @nave.SolicitudesPortal del portal por crear</a> }
+                                @if (nave.SolicitudesPortal > 0 && AtilsonCargoSpa.Helpers.PermisosEquipo.PuedeCotizaciones(User)) { <a href="/Operaciones/Cotizaciones?filtro=pendientes"><i class="bi bi-bell-fill"></i> @nave.SolicitudesPortal del portal por crear</a> }
                             </footer>
                         }
                     </article>

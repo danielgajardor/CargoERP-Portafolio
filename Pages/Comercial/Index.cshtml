@@ -92,10 +92,10 @@
     <div class="d-flex justify-content-between align-items-end mb-4 pb-4 flex-wrap gap-3" style="border-bottom: 1px solid var(--border-color);">
         <div>
             <h1 style="font-size: 23px; font-weight: 900; color: var(--dark-bg); margin: 0; letter-spacing: -0.6px;">MÓDULO COMERCIAL</h1>
-            <p class="text-muted small m-0 mt-2 fw-bold" style="letter-spacing: 0.3px;"><i class="bi bi-cash-coin me-1" style="color: var(--atilson-dark);"></i> Tarifario de Cierres de Negocio</p>
+            <p class="text-muted small m-0 mt-2 fw-bold" style="letter-spacing: 0.3px;"><i class="bi bi-cash-coin me-1" style="color: var(--atilson-dark);"></i> @(Model.SoloTransporte ? "Tarifas de transporte · costos de transportistas" : "Tarifario de Cierres de Negocio")</p>
         </div>
         <div class="d-flex gap-2 align-items-center">
-            <a href="/Comercial/AcuerdosOperativos" class="btn btn-dark btn-sm fw-bold px-4 shadow-sm" style="background-color: var(--atilson-dark); border: none; letter-spacing: 0.5px;">
+            <a href="/Comercial/AcuerdosOperativos" hidden="@Model.SoloTransporte" class="btn btn-dark btn-sm fw-bold px-4 shadow-sm" style="background-color: var(--atilson-dark); border: none; letter-spacing: 0.5px;">
                 <i class="bi bi-briefcase-fill me-2" style="color: #38bdf8;"></i> VER BOOKINGS
             </a>
             <div class="dropdown">
@@ -103,9 +103,12 @@
                     <i class="bi bi-gear-fill me-1"></i> MAESTROS LOGÍSTICOS
                 </button>
                 <ul class="dropdown-menu shadow-sm border-0 mt-2" style="font-size: 12px;">
-                    <li><a class="dropdown-item py-2 fw-bold text-primary" asp-page="/App/Clientes/Index"><i class="bi bi-buildings-fill me-2"></i> Maestro de Clientes</a></li>
-                    <li><hr class="dropdown-divider"></li>
-                    <li><a class="dropdown-item py-2 fw-bold" href="#" data-bs-toggle="modal" data-bs-target="#modalAgencia"><i class="bi bi-building-add me-2"></i>Agencia Aduanas</a></li>
+                    @if (!Model.SoloTransporte)
+                    {
+                        <li><a class="dropdown-item py-2 fw-bold text-primary" asp-page="/App/Clientes/Index"><i class="bi bi-buildings-fill me-2"></i> Maestro de Clientes</a></li>
+                        <li><hr class="dropdown-divider"></li>
+                        <li><a class="dropdown-item py-2 fw-bold" href="#" data-bs-toggle="modal" data-bs-target="#modalAgencia"><i class="bi bi-building-add me-2"></i>Agencia Aduanas</a></li>
+                    }
                     <li><a class="dropdown-item py-2 fw-bold" href="#" data-bs-toggle="modal" data-bs-target="#modalProveedor"><i class="bi bi-truck me-2"></i>Proveedores (Transportes)</a></li>
                     <li><a class="dropdown-item py-2 fw-bold" href="#" data-bs-toggle="modal" data-bs-target="#modalConductor"><i class="bi bi-person-vcard me-2"></i>Conductores</a></li>
                 </ul>
@@ -115,27 +118,55 @@
     <!-- PESTAÑAS PRINCIPALES (NIVEL 1) -->
     <ul class="nav nav-tabs-main" id="mainTabs" role="tablist">
         <li class="nav-item" role="presentation"><button class="nav-link active" id="tab-proveedores" data-bs-toggle="tab" data-bs-target="#panel-proveedores" type="button" role="tab"><i class="bi bi-truck me-2"></i> Proveedores</button></li>
-        <li class="nav-item" role="presentation"><button class="nav-link" id="tab-clientes" data-bs-toggle="tab" data-bs-target="#panel-clientes" type="button" role="tab"><i class="bi bi-briefcase-fill me-2"></i> Clientes</button></li>
+        @if (!Model.SoloTransporte) { <li class="nav-item" role="presentation"><button class="nav-link" id="tab-clientes" data-bs-toggle="tab" data-bs-target="#panel-clientes" type="button" role="tab"><i class="bi bi-briefcase-fill me-2"></i> Clientes</button></li> }
+        <li class="nav-item tarifas-carga" role="presentation">
+            <button type="button" class="btn-carga-masiva" data-carga="costos" data-bs-toggle="modal" data-bs-target="#modalCargaMasivaCostos">
+                <i class="bi bi-file-earmark-spreadsheet"></i> Carga masiva de costos
+            </button>
+            <button type="button" class="btn-carga-masiva" data-carga="ventas" data-bs-toggle="modal" data-bs-target="#modalCargaMasivaVentas" hidden="@Model.SoloTransporte">
+                <i class="bi bi-file-earmark-spreadsheet"></i> Carga masiva de ventas
+            </button>
+        </li>
     </ul>
     <div class="tab-content" id="mainTabsContent">
         <!-- ============================================== -->
         <!-- PANEL 1: PROVEEDORES (COSTOS)                  -->
         <!-- ============================================== -->
         <div class="tab-pane fade show active" id="panel-proveedores" role="tabpanel">
+            @if (!string.IsNullOrEmpty(Model.MensajeCargaMasivaCostos))
+            {
+                var partesCc = Model.MensajeCargaMasivaCostos.Split('|');
+                bool okCc = partesCc[0] == "OK";
+                <div class="alert @(okCc ? "alert-success" : "alert-danger") py-2 px-3 mb-2 small" role="alert" data-carga-costos-msg="1">
+                    <i class="bi @(okCc ? "bi-check-circle" : "bi-exclamation-triangle") me-1"></i>
+                    <strong>Carga masiva de costos:</strong> @(partesCc.Length > 1 ? partesCc[1] : "")
+                    @if (partesCc.Length > 2)
+                    {
+                        <ul class="mb-0 mt-1 ps-3">
+                            @foreach (var lineaCc in partesCc.Skip(2))
+                            {
+                                <li>@lineaCc</li>
+                            }
+                        </ul>
+                    }
+                </div>
+            }
             <ul class="nav nav-tabs-custom" id="servicios-prov" role="tablist">
-                <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#prov-maritimo" type="button"><i class="bi bi-water"></i> Marítimo</button></li>
-                <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#prov-terrestre" type="button"><i class="bi bi-truck"></i> Terrestre</button></li>
-                <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#prov-documental" type="button"><i class="bi bi-file-earmark-text"></i> Documental</button></li>
-                <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#prov-gate" type="button"><i class="bi bi-box-arrow-in-right"></i> Gate Out/In</button></li>
-                                <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#prov-bl" type="button"><i class="bi bi-receipt"></i> Emisión BL</button></li>
-                <li class="nav-item" role="presentation"><button class="nav-link" id="tab-almacenamiento" data-bs-toggle="tab" data-bs-target="#panel-almacenamiento" type="button" role="tab"><i class="bi bi-archive"></i> Almacenamiento</button></li>
-                <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#prov-courier" type="button"><i class="bi bi-box-seam"></i> Courier</button></li>
-                <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#prov-otros" type="button"><i class="bi bi-three-dots"></i> Otros</button></li>
+                @if (!Model.SoloTransporte) { <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#prov-maritimo" type="button"><i class="bi bi-water"></i> Marítimo</button></li> }
+                <li class="nav-item"><button class="nav-link @(Model.SoloTransporte ? "active" : "")" data-bs-toggle="tab" data-bs-target="#prov-terrestre" type="button"><i class="bi bi-truck"></i> Terrestre</button></li>
+                @if (!Model.SoloTransporte) { <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#prov-documental" type="button"><i class="bi bi-file-earmark-text"></i> Documental</button></li> }
+                @if (!Model.SoloTransporte) { <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#prov-gate" type="button"><i class="bi bi-box-arrow-in-right"></i> Gate Out/In</button></li> }
+                                @if (!Model.SoloTransporte) { <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#prov-bl" type="button"><i class="bi bi-receipt"></i> Emisión BL</button></li> }
+                @if (!Model.SoloTransporte) { <li class="nav-item" role="presentation"><button class="nav-link" id="tab-almacenamiento" data-bs-toggle="tab" data-bs-target="#panel-almacenamiento" type="button" role="tab"><i class="bi bi-archive"></i> Almacenamiento</button></li> }
+                @if (!Model.SoloTransporte) { <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#prov-courier" type="button"><i class="bi bi-box-seam"></i> Courier</button></li> }
+                @if (!Model.SoloTransporte) { <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#prov-otros" type="button"><i class="bi bi-three-dots"></i> Otros</button></li> }
             </ul>
             <div class="tab-content">
                 <!-- PROVEEDORES -> MARÍTIMO -->
+                @if (!Model.SoloTransporte)
+                {
                 <div class="tab-pane fade show active" id="prov-maritimo">
-                    <div class="d-flex justify-content-between align-items-center mb-3 bg-white p-2 rounded border shadow-sm filtro-toolbar">
+                    <div class="filtro-toolbar tarifas-barra">
                         <div class="subtabs-row">
                         <ul class="nav nav-pills sub-tabs" id="pills-prov-mar" role="tablist">
     <li class="nav-item"><button class="nav-link active" data-bs-toggle="pill" data-bs-target="#prov-mar-dry" type="button"><i class="bi bi-box-seam me-1"></i>Dry Prepaid</button></li>
@@ -147,10 +178,10 @@
                         </div>
                         <div class="d-flex gap-2">
                             <form method="get" class="d-flex gap-2 mb-0">
-                                <select asp-for="FiltroIdNaviera" asp-items="Model.ListaNavieras" class="form-select form-select-sm bg-light border-0 fw-bold filtro-select" style="width: 150px; font-size: 11px;"><option value="">Naviera...</option></select>
-                                                                                                <select asp-for="FiltroPol" id="filtroPolProvMar" asp-items="Model.ListaPols" class="form-select form-select-sm bg-light border-0 fw-bold filtro-select" style="width: 100px; font-size: 11px;"><option value="">POL...</option></select>
-                                <select asp-for="FiltroPod" id="filtroPodProvMar" asp-items="Model.ListaPods" class="form-select form-select-sm bg-light border-0 fw-bold filtro-select" style="width: 100px; font-size: 11px;"><option value="">POD...</option></select>
-                                <button type="submit" class="btn btn-dark btn-sm fw-bold px-3">FILTRAR</button>
+                                <select asp-for="FiltroIdNaviera" asp-items="Model.ListaNavieras" class="form-select form-select-sm bg-light border-0 fw-bold filtro-select" style="width: 150px; font-size: 11px;"><option value="">Naviera</option></select>
+                                                                                                <select asp-for="FiltroPol" id="filtroPolProvMar" asp-items="Model.ListaPols" class="form-select form-select-sm bg-light border-0 fw-bold filtro-select" style="width: 100px; font-size: 11px;"><option value="">POL</option></select>
+                                <select asp-for="FiltroPod" id="filtroPodProvMar" asp-items="Model.ListaPods" class="form-select form-select-sm bg-light border-0 fw-bold filtro-select" style="width: 100px; font-size: 11px;"><option value="">POD</option></select>
+                                <button type="submit" class="btn btn-dark btn-sm fw-bold px-3" title="Filtrar" aria-label="Filtrar"><i class="bi bi-funnel-fill"></i></button>
                                 @if (Model.FiltroIdNaviera.HasValue || !string.IsNullOrEmpty(Model.FiltroPol) || !string.IsNullOrEmpty(Model.FiltroPod))
                                 {
                                     <a asp-page="./Index" class="btn btn-light btn-sm border text-danger"><i class="bi bi-x-lg"></i></a>
@@ -161,7 +192,7 @@
                     <div class="tab-content">
                         <!-- PROVEEDORES -> MARÍTIMO -> DRY -->
                         <div class="tab-pane fade show active" id="prov-mar-dry">
-                            <div class="d-flex justify-content-end mb-3 gap-2 align-items-center">
+                            <div class="tarifas-acciones">
                                 <button type="button" id="btnToggleRankingMaritimo" class="btn btn-sm fw-bold px-3 shadow-sm d-flex align-items-center" style="height: 31px; border-radius: 4px; background-color: #f8fafc; border: 1px solid #cbd5e1; color: #475569; font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; transition: all 0.2s ease;"
                                         onclick="
                                     var viewGrouped = document.getElementById('view-grouped-mar-dry');
@@ -217,14 +248,15 @@
                                                                         <option value="40' DRY HC">40' DRY HC</option>
                                                                     </select>
                                                                 </div>
-                                                                <div class="faf-g"><label>Puerto Origen (POL)</label><select asp-for="NuevoCostoMaritimo.Pol" asp-items="Model.ListaPuertosMaestro" class="form-select-xs" required><option value="">POL</option></select></div>
-                                                                <div class="faf-g"><label>Puerto Destino (POD)</label><select asp-for="NuevoCostoMaritimo.Pod" asp-items="Model.ListaPuertosMaestro" class="form-select-xs" required><option value="">POD</option></select></div>
+                                                                <div class="faf-g"><label>Puerto Origen (POL)</label><select asp-for="NuevoCostoMaritimo.Pol" data-ruta="pol" asp-items="Model.ListaPuertosMaestro" class="form-select-xs" required><option value="">POL</option></select></div>
+                                                                <div class="faf-g"><label>Puerto Destino (POD)</label><select asp-for="NuevoCostoMaritimo.Pod" data-ruta="pod" asp-items="Model.ListaPuertosMaestro" class="form-select-xs" required><option value="">POD</option></select></div>
                                                                 <div class="faf-g"><label>Flete Neto USD</label><div class="faf-money"><span class="input-group-text bg-light p-1 px-2 border" style="font-size:11px;">$</span><input asp-for="NuevoCostoMaritimo.TarifaUsd" type="number" step="0.01" class="form-control-xs" required value="" placeholder="0"></div></div>
                                                                 <div class="faf-g"><label>Días Libres Origen</label><input asp-for="NuevoCostoMaritimo.DiasLibresOrigen" type="text" class="form-control-xs" placeholder="Ej: 7"></div>
                                                                 <div class="faf-g"><label>Días Libres Destino</label><input asp-for="NuevoCostoMaritimo.DiasLibresDestino" type="text" class="form-control-xs" placeholder="Ej: 5"></div>
                                                                 <div class="faf-g"><label>Late Arrival (USD)</label><input asp-for="NuevoCostoMaritimo.CostoLateArrival" type="number" step="0.01" class="form-control-xs"></div>
                                                                 <div class="faf-g"><label>Corrector B/L</label><input asp-for="NuevoCostoMaritimo.CostoCorrectorBL" type="number" step="0.01" class="form-control-xs"></div>
-                                                                <div class="faf-g"><label>Expiración</label><input asp-for="NuevoCostoMaritimo.FechaInicioVigencia" type="date" class="form-control-xs" required></div>
+                                                                <div class="faf-g"><label>Vigente desde</label><input asp-for="NuevoCostoMaritimo.FechaInicioVigencia" type="date" class="form-control-xs" required></div>
+                                                                <div class="faf-g"><label>Vigente hasta</label><input asp-for="NuevoCostoMaritimo.FechaFinVigencia" type="date" class="form-control-xs" title="Vacío = vigencia indefinida"></div>
                                                                 <div class="faf-actions">
                                                                     <button type="submit" class="btn btn-sm btn-primary fw-bold"><i class="bi bi-check2 me-1"></i> AGREGAR FLETE</button>
                                                                 </div>
@@ -271,11 +303,14 @@
                                                                                 <td class="text-end font-monospace text-muted" style="font-size: 11px;">@(tm.CostoCorrectorBL != null ? $"${tm.CostoCorrectorBL}" : "-")</td>
                                                                                 <td class="text-center font-monospace text-primary" style="font-size: 11px;">@(tm.DiasLibresOrigen?.ToString() ?? "0")</td>
                                                                                 <td class="text-center font-monospace text-primary" style="font-size: 11px;">@(tm.DiasLibresDestino?.ToString() ?? "0")</td>
-                                                                                <td class="text-center text-muted font-monospace" style="font-size: 11px;">@tm.FechaInicioVigencia.ToString("dd/MM/yyyy")</td>
+                                                                                <td class="text-center text-muted font-monospace" style="font-size: 10px; line-height:1.25;">
+                                                                                    <span class="d-block">@tm.FechaInicioVigencia.ToString("dd/MM/yyyy")</span>
+                                                                                    <span class="d-block">→ @(tm.FechaFinVigencia?.ToString("dd/MM/yyyy") ?? "Indef.")</span>
+                                                                                </td>
                                                                                 <td class="text-end pe-2">
                                                                                     <div class="d-flex justify-content-end gap-1">
                                                                                         <i class="bi bi-info-circle info-mod-icon @(TieneModificacion(tm.FechaModificacion) ? "" : "d-none")" tabindex="0" data-bs-toggle="tooltip" data-bs-trigger="hover focus" title="@InfoModTitulo(tm.UsuarioModificador, tm.FechaModificacion)" style="cursor:pointer;" onclick="abrirModalHistorial('Maritimo', @tm.Id)"></i>
-                                                                                        <button type="button" class="btn btn-sm text-primary border-0" style="background: transparent; padding: 4px 8px; font-size: 13px;" onclick="abrirModalEditarMaritimo(@tm.Id, '@tm.TarifaUsd', '@tm.FechaInicioVigencia.ToString("yyyy-MM-dd")', '@tm.RebateUsd')" title="Actualizar Tarifa">
+                                                                                        <button type="button" class="btn btn-sm text-primary border-0" style="background: transparent; padding: 4px 8px; font-size: 13px;" onclick="abrirModalEditarMaritimo(@tm.Id, '@tm.TarifaUsd', '@tm.FechaInicioVigencia.ToString("yyyy-MM-dd")', '@tm.RebateUsd', '@(tm.FechaFinVigencia?.ToString("yyyy-MM-dd") ?? "")')" title="Actualizar Tarifa">
                                                                                             <i class="bi bi-pencil"></i>
                                                                                         </button>
                                                                                         <form method="post" asp-page-handler="EliminarCostoMaritimo" onsubmit="return confirm('¿Archivar esta tarifa de forma permanente?');">
@@ -332,7 +367,10 @@
                                                     <td class="text-end font-monospace text-muted" style="font-size: 11px;">@(tm.CostoLateArrival != null ? $"${tm.CostoLateArrival}" : "-")</td>
                                                     <td class="text-end font-monospace text-muted" style="font-size: 11px;">@(tm.CostoCorrectorBL != null ? $"${tm.CostoCorrectorBL}" : "-")</td>
                                                     <td class="text-center font-monospace text-primary" style="font-size: 11px;">@(tm.DiasLibresOrigen?.ToString() ?? "0") / @(tm.DiasLibresDestino?.ToString() ?? "0")</td>
-                                                    <td class="text-center text-muted font-monospace" style="font-size: 11px;">@tm.FechaInicioVigencia.ToString("dd/MM/yyyy")</td>
+                                                    <td class="text-center text-muted font-monospace" style="font-size: 10px; line-height:1.25;">
+                                                                                    <span class="d-block">@tm.FechaInicioVigencia.ToString("dd/MM/yyyy")</span>
+                                                                                    <span class="d-block">→ @(tm.FechaFinVigencia?.ToString("dd/MM/yyyy") ?? "Indef.")</span>
+                                                                                </td>
                                                 </tr>
                                                 rankMar++;
                                             }
@@ -347,7 +385,7 @@
                         </div>
                         <!-- PROVEEDORES -> MARÍTIMO -> REEFER CONGELADO / FRESCO -->
                         <div class="tab-pane fade" id="prov-mar-rfcong">
-                            <div class="d-flex justify-content-end mb-2">
+                            <div class="tarifas-acciones">
                                 <button type="button" class="btn btn-sm btn-dark fw-bold px-3 shadow-sm" onclick="toggleNuevaTarifaForm('form-prov-mar-rf')">
                                     <i class="bi bi-plus-lg me-1"></i> NUEVO COSTO (REEFER)
                                 </button>
@@ -375,15 +413,16 @@
                                                                     <option value="40' REEFER">40' REEFER</option>
                                                                 </select>
                                                             </div>
-                                                            <div class="faf-g"><label>Puerto Origen (POL)</label><select asp-for="NuevoCostoMaritimo.Pol" asp-items="Model.ListaPuertosMaestro" class="form-select-xs"><option value="">POL</option></select></div>
-                                                            <div class="faf-g"><label>Puerto Destino (POD)</label><select asp-for="NuevoCostoMaritimo.Pod" asp-items="Model.ListaPuertosMaestro" class="form-select-xs"><option value="">POD</option></select></div>
+                                                            <div class="faf-g"><label>Puerto Origen (POL)</label><select asp-for="NuevoCostoMaritimo.Pol" data-ruta="pol" asp-items="Model.ListaPuertosMaestro" class="form-select-xs"><option value="">POL</option></select></div>
+                                                            <div class="faf-g"><label>Puerto Destino (POD)</label><select asp-for="NuevoCostoMaritimo.Pod" data-ruta="pod" asp-items="Model.ListaPuertosMaestro" class="form-select-xs"><option value="">POD</option></select></div>
                                                             <div class="faf-g"><label>Flete Neto USD</label><input asp-for="NuevoCostoMaritimo.TarifaUsd" type="number" step="0.01" class="form-control-xs" required value="" placeholder="0"></div>
                                                             <div class="faf-g"><label class="text-primary">Plug (Reefer USD)</label><input name="PlacPlug_Costo" type="number" step="0.01" class="form-control-xs border-primary" placeholder="USD"></div>
                                                             <div class="faf-g"><label>Días Libres Origen</label><input asp-for="NuevoCostoMaritimo.DiasLibresOrigen" type="text" class="form-control-xs" placeholder="Ej: 7"></div>
                                                             <div class="faf-g"><label>Días Libres Destino</label><input asp-for="NuevoCostoMaritimo.DiasLibresDestino" type="text" class="form-control-xs" placeholder="Ej: 5"></div>
                                                             <div class="faf-g"><label>Late Arrival (USD)</label><input asp-for="NuevoCostoMaritimo.CostoLateArrival" type="number" step="0.01" class="form-control-xs"></div>
                                                             <div class="faf-g"><label>Corrector B/L</label><input asp-for="NuevoCostoMaritimo.CostoCorrectorBL" type="number" step="0.01" class="form-control-xs"></div>
-                                                            <div class="faf-g"><label>Expiración</label><input asp-for="NuevoCostoMaritimo.FechaInicioVigencia" type="date" class="form-control-xs" required></div>
+                                                            <div class="faf-g"><label>Vigente desde</label><input asp-for="NuevoCostoMaritimo.FechaInicioVigencia" type="date" class="form-control-xs" required></div>
+                                                                <div class="faf-g"><label>Vigente hasta</label><input asp-for="NuevoCostoMaritimo.FechaFinVigencia" type="date" class="form-control-xs" title="Vacío = vigencia indefinida"></div>
                                                             <div class="faf-actions">
                                                                 <button type="submit" class="btn btn-sm btn-primary fw-bold"><i class="bi bi-check2 me-1"></i> AGREGAR FLETE</button>
                                                             </div>
@@ -433,11 +472,14 @@
                                                                             <td class="text-end font-monospace text-muted" style="font-size: 11px;">@(tm.CostoCorrectorBL != null ? $"${tm.CostoCorrectorBL}" : "-")</td>
                                                                             <td class="text-center font-monospace text-primary" style="font-size: 11px;">@(tm.DiasLibresOrigen?.ToString() ?? "0")</td>
                                                                             <td class="text-center font-monospace text-primary" style="font-size: 11px;">@(tm.DiasLibresDestino?.ToString() ?? "0")</td>
-                                                                            <td class="text-center text-muted font-monospace" style="font-size: 11px;">@tm.FechaInicioVigencia.ToString("dd/MM/yyyy")</td>
+                                                                            <td class="text-center text-muted font-monospace" style="font-size: 10px; line-height:1.25;">
+                                                                                    <span class="d-block">@tm.FechaInicioVigencia.ToString("dd/MM/yyyy")</span>
+                                                                                    <span class="d-block">→ @(tm.FechaFinVigencia?.ToString("dd/MM/yyyy") ?? "Indef.")</span>
+                                                                                </td>
                                                                             <td class="text-end pe-2">
                                                                                 <div class="d-flex justify-content-end align-items-center gap-1">
                                                                                     <i class="bi bi-info-circle info-mod-icon @(TieneModificacion(tm.FechaModificacion) ? "" : "d-none")" tabindex="0" data-bs-toggle="tooltip" data-bs-trigger="hover focus" title="@InfoModTitulo(tm.UsuarioModificador, tm.FechaModificacion)" style="cursor:pointer;" onclick="abrirModalHistorial('Maritimo', @tm.Id)"></i>
-                                                                                    <button type="button" class="btn btn-sm text-primary border-0" style="background: transparent; padding: 4px 8px; font-size: 13px;" onclick="abrirModalEditarMaritimo(@tm.Id, '@tm.TarifaUsd', '@tm.FechaInicioVigencia.ToString("yyyy-MM-dd")', '@tm.RebateUsd')" title="Actualizar Tarifa">
+                                                                                    <button type="button" class="btn btn-sm text-primary border-0" style="background: transparent; padding: 4px 8px; font-size: 13px;" onclick="abrirModalEditarMaritimo(@tm.Id, '@tm.TarifaUsd', '@tm.FechaInicioVigencia.ToString("yyyy-MM-dd")', '@tm.RebateUsd', '@(tm.FechaFinVigencia?.ToString("yyyy-MM-dd") ?? "")')" title="Actualizar Tarifa">
                                                                                         <i class="bi bi-pencil"></i>
                                                                                     </button>
                                                                                     <form method="post" asp-page-handler="EliminarCostoMaritimo" onsubmit="return confirm('¿Archivar esta tarifa de forma permanente?');">
@@ -460,7 +502,7 @@
                             </div>
                         </div>
                         <div class="tab-pane fade" id="prov-mar-rffres">
-                            <div class="d-flex justify-content-end mb-2">
+                            <div class="tarifas-acciones">
                                 <button type="button" class="btn btn-sm btn-dark fw-bold px-3 shadow-sm" onclick="toggleNuevaTarifaForm('form-prov-mar-rffres')">
                                     <i class="bi bi-plus-lg me-1"></i> NUEVO COSTO (REEFER)
                                 </button>
@@ -489,15 +531,16 @@
                                                                     <option value="40' REEFER">40' REEFER</option>
                                                                 </select>
                                                             </div>
-                                                            <div class="faf-g"><label>Puerto Origen (POL)</label><select asp-for="NuevoCostoMaritimo.Pol" asp-items="Model.ListaPuertosMaestro" class="form-select-xs"><option value="">POL</option></select></div>
-                                                            <div class="faf-g"><label>Puerto Destino (POD)</label><select asp-for="NuevoCostoMaritimo.Pod" asp-items="Model.ListaPuertosMaestro" class="form-select-xs"><option value="">POD</option></select></div>
+                                                            <div class="faf-g"><label>Puerto Origen (POL)</label><select asp-for="NuevoCostoMaritimo.Pol" data-ruta="pol" asp-items="Model.ListaPuertosMaestro" class="form-select-xs"><option value="">POL</option></select></div>
+                                                            <div class="faf-g"><label>Puerto Destino (POD)</label><select asp-for="NuevoCostoMaritimo.Pod" data-ruta="pod" asp-items="Model.ListaPuertosMaestro" class="form-select-xs"><option value="">POD</option></select></div>
                                                             <div class="faf-g"><label>Flete Neto USD</label><input asp-for="NuevoCostoMaritimo.TarifaUsd" type="number" step="0.01" class="form-control-xs" required value="" placeholder="0"></div>
                                                             <div class="faf-g"><label class="text-primary">Plug (Reefer USD)</label><input name="PlacPlug_Costo" type="number" step="0.01" class="form-control-xs border-primary" placeholder="USD"></div>
                                                             <div class="faf-g"><label>Días Libres Origen</label><input asp-for="NuevoCostoMaritimo.DiasLibresOrigen" type="text" class="form-control-xs" placeholder="Ej: 7"></div>
                                                             <div class="faf-g"><label>Días Libres Destino</label><input asp-for="NuevoCostoMaritimo.DiasLibresDestino" type="text" class="form-control-xs" placeholder="Ej: 5"></div>
                                                             <div class="faf-g"><label>Late Arrival (USD)</label><input asp-for="NuevoCostoMaritimo.CostoLateArrival" type="number" step="0.01" class="form-control-xs"></div>
                                                             <div class="faf-g"><label>Corrector B/L</label><input asp-for="NuevoCostoMaritimo.CostoCorrectorBL" type="number" step="0.01" class="form-control-xs"></div>
-                                                            <div class="faf-g"><label>Expiración</label><input asp-for="NuevoCostoMaritimo.FechaInicioVigencia" type="date" class="form-control-xs" required></div>
+                                                            <div class="faf-g"><label>Vigente desde</label><input asp-for="NuevoCostoMaritimo.FechaInicioVigencia" type="date" class="form-control-xs" required></div>
+                                                                <div class="faf-g"><label>Vigente hasta</label><input asp-for="NuevoCostoMaritimo.FechaFinVigencia" type="date" class="form-control-xs" title="Vacío = vigencia indefinida"></div>
                                                             <div class="faf-actions">
                                                                 <button type="submit" class="btn btn-sm btn-primary fw-bold"><i class="bi bi-check2 me-1"></i> AGREGAR FLETE</button>
                                                             </div>
@@ -547,11 +590,14 @@
                                                                             <td class="text-end font-monospace text-muted" style="font-size: 11px;">@(tm.CostoCorrectorBL != null ? $"${tm.CostoCorrectorBL}" : "-")</td>
                                                                             <td class="text-center font-monospace text-primary" style="font-size: 11px;">@(tm.DiasLibresOrigen?.ToString() ?? "0")</td>
                                                                             <td class="text-center font-monospace text-primary" style="font-size: 11px;">@(tm.DiasLibresDestino?.ToString() ?? "0")</td>
-                                                                            <td class="text-center text-muted font-monospace" style="font-size: 11px;">@tm.FechaInicioVigencia.ToString("dd/MM/yyyy")</td>
+                                                                            <td class="text-center text-muted font-monospace" style="font-size: 10px; line-height:1.25;">
+                                                                                    <span class="d-block">@tm.FechaInicioVigencia.ToString("dd/MM/yyyy")</span>
+                                                                                    <span class="d-block">→ @(tm.FechaFinVigencia?.ToString("dd/MM/yyyy") ?? "Indef.")</span>
+                                                                                </td>
                                                                             <td class="text-end pe-2">
                                                                                 <div class="d-flex justify-content-end align-items-center gap-1">
                                                                                     <i class="bi bi-info-circle info-mod-icon @(TieneModificacion(tm.FechaModificacion) ? "" : "d-none")" tabindex="0" data-bs-toggle="tooltip" data-bs-trigger="hover focus" title="@InfoModTitulo(tm.UsuarioModificador, tm.FechaModificacion)" style="cursor:pointer;" onclick="abrirModalHistorial('Maritimo', @tm.Id)"></i>
-                                                                                    <button type="button" class="btn btn-sm text-primary border-0" style="background: transparent; padding: 4px 8px; font-size: 13px;" onclick="abrirModalEditarMaritimo(@tm.Id, '@tm.TarifaUsd', '@tm.FechaInicioVigencia.ToString("yyyy-MM-dd")', '@tm.RebateUsd')" title="Actualizar Tarifa">
+                                                                                    <button type="button" class="btn btn-sm text-primary border-0" style="background: transparent; padding: 4px 8px; font-size: 13px;" onclick="abrirModalEditarMaritimo(@tm.Id, '@tm.TarifaUsd', '@tm.FechaInicioVigencia.ToString("yyyy-MM-dd")', '@tm.RebateUsd', '@(tm.FechaFinVigencia?.ToString("yyyy-MM-dd") ?? "")')" title="Actualizar Tarifa">
                                                                                         <i class="bi bi-pencil"></i>
                                                                                     </button>
                                                                                     <form method="post" asp-page-handler="EliminarCostoMaritimo" onsubmit="return confirm('¿Archivar esta tarifa de forma permanente?');">
@@ -582,7 +628,7 @@
                            del servicio marítimo). Se quitó la pestaña "Rebate (Collect)"; el valor
                            guardado en las tarifas existentes se conserva para Finanzas. *@
                         <div class="tab-pane fade" id="prov-mar-otros">
-                            <div class="d-flex justify-content-end mb-3 gap-2">
+                            <div class="tarifas-acciones">
                                 <button type="button" class="btn btn-sm btn-outline-primary fw-bold px-3 shadow-sm" data-bs-toggle="collapse" data-bs-target="#panelComparativoRecargos">
                                     <i class="bi bi-columns-gap me-1"></i> VER COMPARATIVO ENTRE NAVIERAS
                                 </button>
@@ -643,7 +689,8 @@
                                                 <div class="faf-card">
                                                     <form method="post" asp-page-handler="CrearTarifaMaritimoExtra">
                                                         <div class="faf-grid">
-                                                            <div class="faf-g"><label>Naviera</label><select asp-for="NuevaTarifaMaritimoExtra.IdNaviera" asp-items="Model.ListaNavieras" class="form-select-xs" required><option value="">- Naviera -</option></select></div>
+                                                            <div class="faf-g"><label>Naviera</label><select asp-for="NuevaTarifaMaritimoExtra.IdNaviera" asp-items="Model.ListaNavieras" class="form-select-xs" title="Sin naviera = tarifa general, aplica a todas"><option value="">- Todas las navieras -</option></select></div>
+                                                            <div class="faf-g"><label>Tipo de recargo</label><select asp-for="NuevaTarifaMaritimoExtra.GrupoConcepto" class="form-select-xs" title="Para que Operaciones y Finanzas lo usen solos"><option value="">- Otro -</option><option value="LATE_ARRIVAL_DRY">Late Arrival Dry</option><option value="LATE_ARRIVAL_REEFER">Late Arrival Reefer</option><option value="LATE_ARRIVAL_GENERICO">Late Arrival (todo equipo)</option><option value="EXTRA_LATE_ARRIVAL">Extra Late Arrival</option><option value="ROLEO">Roleo</option><option value="CANCELACION">Cancelación</option><option value="NO_SHOW">No-Show</option><option value="CORRECCION_BL">Corrección de BL</option></select></div>
                                                             <div class="faf-g" style="grid-column: span 2;"><label>Concepto</label><input asp-for="NuevaTarifaMaritimoExtra.Concepto" class="form-control-xs text-uppercase" placeholder="Ej: CORRECCION BL ANTES 48HRS" required></div>
                                                             <div class="faf-g"><label>Código Naviera</label><input asp-for="NuevaTarifaMaritimoExtra.Codigo" class="form-control-xs text-uppercase" placeholder="Ej: MAF"></div>
                                                             <div class="faf-g"><label>Tipo Contenedor</label><select asp-for="NuevaTarifaMaritimoExtra.TipoContenedor" class="form-select-xs"><option value="">- Todos -</option><option value="All">All</option><option value="Dry">Dry</option><option value="Reefer">Reefer</option></select></div>
@@ -677,7 +724,7 @@
                                         @foreach (var grupoMarExtra in Model.TarifasMaestrasMaritimo.GroupBy(t => t.IdNaviera))
                                         {
                                             var navieraMarExtra = grupoMarExtra.First().IdNavieraNavigation;
-                                            string nombreGrupoMarExtra = navieraMarExtra?.NombreNaviera ?? "SIN NAVIERA ASIGNADA";
+                                            string nombreGrupoMarExtra = navieraMarExtra?.NombreNaviera ?? "TODAS LAS NAVIERAS (tarifa general)";
                                             <tr class="main-row" data-bs-toggle="collapse" data-bs-target="#marextra-@(grupoMarExtra.Key?.ToString() ?? "null")" style="cursor: pointer;">
                                                 <td colspan="2" class="ps-4 fw-bold text-uppercase" style="color: var(--atilson-dark); font-size:13px;"><i class="bi bi-receipt me-2 text-primary"></i> @nombreGrupoMarExtra</td>
                                                 <td class="text-end pe-4"><i class="bi bi-chevron-down text-muted"></i></td>
@@ -708,6 +755,14 @@
                                                                         <td style="font-size: 10px;">
                                                                             @(string.IsNullOrWhiteSpace(itemMarExtra.Codigo) ? "—" : itemMarExtra.Codigo)
                                                                             @if (!string.IsNullOrWhiteSpace(itemMarExtra.TipoContenedor)) { <span class="text-muted"> · @itemMarExtra.TipoContenedor</span> }
+                                                                            @{
+                                                                                string? nombreGrupoRecargo = itemMarExtra.GrupoConcepto switch
+                                                                                {
+                                                                                    "LATE_ARRIVAL_DRY" => "Late Arrival Dry", "LATE_ARRIVAL_REEFER" => "Late Arrival Reefer", "LATE_ARRIVAL_GENERICO" => "Late Arrival",
+                                                                                    "EXTRA_LATE_ARRIVAL" => "Extra Late Arrival", "ROLEO" => "Roleo", "CANCELACION" => "Cancelación", "NO_SHOW" => "No-Show", "CORRECCION_BL" => "Corrección de BL", _ => null
+                                                                                };
+                                                                            }
+                                                                            @if (nombreGrupoRecargo != null) { <div><span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25" style="font-size:8.5px;" title="Operaciones y Finanzas usan esta tarifa automáticamente">@nombreGrupoRecargo</span></div> }
                                                                         </td>
                                                                         <td style="font-size: 10px; max-width: 220px;">
                                                                             @if (!string.IsNullOrWhiteSpace(itemMarExtra.CondicionAplicacion))
@@ -725,16 +780,21 @@
                                                                                 </span></div>
                                                                             }
                                                                         </td>
-                                                                        <td style="font-size: 10px;" class="text-muted">
-                                                                            @(itemMarExtra.FechaVigenciaDesde?.ToString("dd/MM/yyyy") ?? "—")
+                                                                        <td style="font-size: 10px; line-height:1.3;" class="text-muted font-monospace">
+                                                                            <span class="d-block">@(itemMarExtra.FechaVigenciaDesde?.ToString("dd/MM/yyyy") ?? "Inicio libre")</span>
+                                                                            <span class="d-block">→ @(itemMarExtra.FechaVigenciaHasta?.ToString("dd/MM/yyyy") ?? "Indef.")</span>
                                                                         </td>
                                                                         <td class="text-end font-monospace fw-bold text-danger" style="font-size: 12px;">@itemMarExtra.Moneda @itemMarExtra.ValorNeto.ToString(itemMarExtra.Moneda == "CLP" ? "N0" : "N2")</td>
                                                                         <td class="text-center">
-                                                                            @(itemMarExtra.AplicaIva ? Html.Raw("<span class='badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25' style='font-size:9px;'>SÍ (+19%)</span>") : Html.Raw("<span class='badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25' style='font-size:9px;'>EXENTO</span>"))
+                                                                            <form method="post" asp-page-handler="CambiarIvaTarifaMaritima" class="d-inline" onsubmit="return confirm('¿Corregir el dato de la naviera a @(itemMarExtra.AplicaIva ? "EXENTO" : "+ IVA")? (Control Financiero sigue la regla del concepto, no este dato.)');">
+                                                                                <input type="hidden" name="tipo" value="MAESTRA" /><input type="hidden" name="idTarifa" value="@itemMarExtra.Id" /><input type="hidden" name="aplicaIva" value="@(itemMarExtra.AplicaIva ? "false" : "true")" />
+                                                                                <button type="submit" class="badge border @(itemMarExtra.AplicaIva ? "bg-danger bg-opacity-10 text-danger border-danger" : "bg-secondary bg-opacity-10 text-secondary border-secondary") border-opacity-25" style="font-size:9px; cursor:pointer;" title="IVA con que cobra la naviera (dato de la tarifa). Clic para corregirlo.">@(itemMarExtra.AplicaIva ? "SÍ (+19%)" : "EXENTO") <i class="bi bi-arrow-left-right ms-1"></i></button>
+                                                                            </form>
                                                                         </td>
                                                                         <td class="text-end pe-2">
                                                                             <div class="d-flex justify-content-end gap-1">
-                                                                                <button type="button" class="btn btn-sm text-primary border-0" style="background: transparent; padding: 4px 8px; font-size: 13px;" onclick="abrirModalUniversal(@itemMarExtra.Id, '@itemMarExtra.ValorNeto.ToString(System.Globalization.CultureInfo.InvariantCulture)', '', 'MaritimoExtra')" title="Editar Tarifa">
+                                                                                <button type="button" class="btn btn-sm border-0 text-secondary" style="background:transparent; padding:4px 6px; font-size:13px;" title="Historial de cambios" onclick="abrirModalHistorial('MaritimoExtra', @itemMarExtra.Id)"><i class="bi bi-clock-history"></i></button>
+                                                                                <button type="button" class="btn btn-sm text-primary border-0" style="background: transparent; padding: 4px 8px; font-size: 13px;" onclick="abrirModalUniversal(@itemMarExtra.Id, '@itemMarExtra.ValorNeto.ToString(System.Globalization.CultureInfo.InvariantCulture)', '@(itemMarExtra.FechaVigenciaHasta?.ToString("yyyy-MM-dd") ?? "")', 'MaritimoExtra')" title="Editar Tarifa">
                                                                                     <i class="bi bi-pencil"></i>
                                                                                 </button>
                                                                                 <form method="post" asp-page-handler="EliminarTarifaMaritimoExtra" onsubmit="return confirm('¿Archivar este concepto?');"><input type="hidden" name="idTarifa" value="@itemMarExtra.Id" /><button type="submit" class="btn btn-delete"><i class="bi bi-trash"></i></button></form>
@@ -758,9 +818,10 @@
                         </div>
                     </div>
                 </div>
+                }
                 <!-- PROVEEDORES -> TERRESTRE -->
-                <div class="tab-pane fade" id="prov-terrestre">
-                    <div class="d-flex justify-content-between align-items-center mb-3 bg-white p-2 rounded border shadow-sm filtro-toolbar">
+                <div class="tab-pane fade @(Model.SoloTransporte ? "show active" : "")" id="prov-terrestre">
+                    <div class="filtro-toolbar tarifas-barra">
                         <div class="subtabs-row">
                         <ul class="nav nav-pills sub-tabs" id="pills-prov-ter" role="tablist">
                             <li class="nav-item"><button class="nav-link active" data-bs-toggle="pill" data-bs-target="#prov-ter-dry" type="button"><i class="bi bi-box-seam me-1"></i>Dry</button></li>
@@ -769,11 +830,11 @@
                         </div>
                         <div class="d-flex gap-2">
                             <form method="get" class="d-flex gap-2 mb-0">
-                                <select asp-for="FiltroIdProveedor" asp-items="Model.ListaTransportistas" class="form-select form-select-sm bg-light border-0 fw-bold filtro-select" style="width: 120px; font-size: 11px;"><option value="">Transporte...</option></select>
-                                <select asp-for="FiltroIdCiudadOrigen" asp-items="optionsPuertosFiltro" class="form-select form-select-sm bg-light border-0 fw-bold filtro-select" style="width: 90px; font-size: 11px;"><option value="">Retiro...</option></select>
-                                <select asp-for="FiltroIdCiudadPlanta" asp-items="Model.ListaCiudades" class="form-select form-select-sm bg-light border-0 fw-bold filtro-select" style="width: 90px; font-size: 11px;"><option value="">Planta...</option></select>
-                                <select asp-for="FiltroIdCiudadDestino" asp-items="optionsPuertosFiltro" class="form-select form-select-sm bg-light border-0 fw-bold filtro-select" style="width: 90px; font-size: 11px;"><option value="">Puerto...</option></select>
-                                <button type="submit" class="btn btn-dark btn-sm fw-bold px-3" onclick="localStorage.setItem('activeMainTab', '#tab-proveedores'); localStorage.setItem('activeSubTab', '#prov-terrestre');">FILTRAR</button>
+                                <select asp-for="FiltroIdProveedor" asp-items="Model.ListaTransportistas" class="form-select form-select-sm bg-light border-0 fw-bold filtro-select" style="width: 120px; font-size: 11px;"><option value="">Transportista</option></select>
+                                <select asp-for="FiltroIdCiudadOrigen" asp-items="optionsPuertosFiltro" class="form-select form-select-sm bg-light border-0 fw-bold filtro-select" style="width: 90px; font-size: 11px;"><option value="">Retiro</option></select>
+                                <select asp-for="FiltroIdCiudadPlanta" asp-items="Model.ListaCiudades" class="form-select form-select-sm bg-light border-0 fw-bold filtro-select" style="width: 90px; font-size: 11px;"><option value="">Planta</option></select>
+                                <select asp-for="FiltroIdCiudadDestino" asp-items="optionsPuertosFiltro" class="form-select form-select-sm bg-light border-0 fw-bold filtro-select" style="width: 90px; font-size: 11px;"><option value="">Puerto</option></select>
+                                <button type="submit" class="btn btn-dark btn-sm fw-bold px-3" onclick="localStorage.setItem('activeMainTab', '#tab-proveedores'); localStorage.setItem('activeSubTab', '#prov-terrestre');" title="Filtrar" aria-label="Filtrar"><i class="bi bi-funnel-fill"></i></button>
                                 @if (Model.FiltroIdProveedor.HasValue || Model.FiltroIdCiudadOrigen.HasValue || Model.FiltroIdCiudadPlanta.HasValue || Model.FiltroIdCiudadDestino.HasValue)
                                 {
                                     <a asp-page="./Index" class="btn btn-light btn-sm border text-danger" onclick="localStorage.setItem('activeMainTab', '#tab-proveedores'); localStorage.setItem('activeSubTab', '#prov-terrestre');"><i class="bi bi-x-lg"></i></a>
@@ -784,7 +845,7 @@
                     <div class="tab-content">
                         <!-- PESTAÑA DRY TERRESTRE -->
                         <div class="tab-pane fade show active" id="prov-ter-dry">
-                            <div class="d-flex justify-content-end mb-3 gap-2 align-items-center">
+                            <div class="tarifas-acciones">
                                 <button type="button" id="btnToggleRanking" class="btn btn-sm fw-bold px-3 shadow-sm d-flex align-items-center" style="height: 31px; border-radius: 4px; background-color: #f8fafc; border: 1px solid #cbd5e1; color: #475569; font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; transition: all 0.2s ease;"
                                         onclick="
                                     var viewGrouped = document.getElementById('view-grouped-dry');
@@ -853,17 +914,21 @@
                                                     </div>
                                                 </td>
                                             </tr>
-                                                                                    @foreach (var grupo in Model.TarifasTerrestres.GroupBy(t => t.IdProveedor).OrderBy(g => g.First().IdProveedorNavigation?.NombreProveedor))
+                                                                                    @foreach (var grupo in Model.TarifasTerrestres.GroupBy(t => Model.ClaveTransportista(t)).OrderBy(g => g.Key))
                                         {
-                                            var prov = grupo.First().IdProveedorNavigation;
+                                            var prov = Model.ProveedorDelGrupo(grupo);
+                                            int claveGrupo = grupo.Min(t => t.IdProveedor ?? 0);
                                             var tramosDry = grupo.Where(t => t.IdTipoCarga == 1).ToList();
                                             if (tramosDry.Any())
                                             {
-                                                <tr class="main-row" data-bs-toggle="collapse" data-bs-target="#prov-dry-@grupo.Key" style="cursor: pointer;">
-                                                    <td colspan="2" class="ps-4 fw-bold text-uppercase" style="color: var(--atilson-dark); font-size:13px;"><i class="bi bi-truck me-2 text-success"></i> @(prov?.NombreProveedor ?? "SIN PROVEEDOR ASIGNADO")</td>
-                                                    <td class="text-end pe-4"><i class="bi bi-chevron-down text-muted"></i></td>
+                                                <tr class="main-row" data-bs-toggle="collapse" data-bs-target="#prov-dry-@claveGrupo" style="cursor: pointer;">
+                                                    <td colspan="2" class="ps-4 fw-bold text-uppercase" style="color: var(--atilson-dark); font-size:13px;"><i class="bi bi-truck me-2 text-success"></i> @(prov?.NombreProveedor ?? "SIN PROVEEDOR ASIGNADO")@if (grupo.Select(t => t.IdProveedor).Distinct().Count() > 1) { <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle ms-2 fw-semibold text-normal" style="font-size:9.5px; text-transform:none;" title="En Maestros › Transportistas hay más de un registro con este nombre o RUT. Para Finanzas es la misma empresa: se agrupan aquí.">Incluye un registro duplicado del maestro</span> }</td>
+                                                    <td class="text-end pe-4 align-middle" style="white-space:nowrap; width:145px;">
+                                                        <span class="badge bg-light text-muted border fw-normal d-inline-block text-center" style="font-size:10px; min-width:86px;">@tramosDry.Count @(tramosDry.Count == 1 ? "tramo" : "tramos")</span>
+                                                        <i class="bi bi-chevron-down text-muted ms-2"></i>
+                                                    </td>
                                                 </tr>
-                                                <tr id="prov-dry-@grupo.Key" class="collapse detail-row">
+                                                <tr id="prov-dry-@claveGrupo" class="collapse detail-row">
                                                         <td colspan="3" class="p-0">
                                                             <div class="p-3 bg-light border-bottom" style="overflow-x: auto;">
                                                                 <table class="table table-sm table-borderless m-0" style="min-width: 1200px;">
@@ -984,7 +1049,7 @@
                             var tarifasRfTer = Model.TarifasTerrestres.Where(t => t.IdTipoCarga == 2).ToList();
                         }
                         <div class="tab-pane fade" id="prov-ter-rf">
-                            <div class="d-flex justify-content-between mb-3 gap-2 align-items-center">
+                            <div class="tarifas-acciones con-info">
                                 <div class="small text-muted"><i class="bi bi-snow text-primary me-1"></i>@tarifasRfTer.Count tramo(s) reefer de @tarifasRfTer.Select(t => t.IdProveedor).Distinct().Count() transportista(s)</div>
                                 <div class="d-flex gap-2">
                                     <button type="button" class="btn btn-sm fw-bold px-3 shadow-sm d-flex align-items-center" style="height: 31px; border-radius: 4px; background-color: #f8fafc; border: 1px solid #cbd5e1; color: #475569; font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; transition: all 0.2s ease;"
@@ -1057,15 +1122,19 @@
                                                     </div>
                                                 </td>
                                             </tr>
-                                            @foreach (var grupo in tarifasRfTer.GroupBy(t => t.IdProveedor).OrderBy(g => g.First().IdProveedorNavigation?.NombreProveedor))
+                                            @foreach (var grupo in tarifasRfTer.GroupBy(t => Model.ClaveTransportista(t)).OrderBy(g => g.Key))
                                             {
-                                                var prov = grupo.First().IdProveedorNavigation;
+                                                var prov = Model.ProveedorDelGrupo(grupo);
+                                                int claveGrupo = grupo.Min(t => t.IdProveedor ?? 0);
                                                 var tramosRf = grupo.OrderBy(t => t.IdCiudadOrigenNavigation?.Nombre).ThenBy(t => t.IdCiudadPlantaNavigation?.Nombre).ThenBy(t => t.IdCiudadDestinoNavigation?.Nombre).ToList();
-                                                <tr class="main-row" data-bs-toggle="collapse" data-bs-target="#prov-rf-@grupo.Key" style="cursor: pointer;">
-                                                    <td colspan="2" class="ps-4 fw-bold text-uppercase" style="color: var(--atilson-dark); font-size:13px;"><i class="bi bi-truck me-2 text-primary"></i> @(prov?.NombreProveedor ?? "SIN PROVEEDOR ASIGNADO") <span class="badge bg-light text-muted border ms-2 fw-normal" style="font-size:10px;">@tramosRf.Count @(tramosRf.Count == 1 ? "tramo" : "tramos")</span></td>
-                                                    <td class="text-end pe-4"><i class="bi bi-chevron-down text-muted"></i></td>
+                                                <tr class="main-row" data-bs-toggle="collapse" data-bs-target="#prov-rf-@claveGrupo" style="cursor: pointer;">
+                                                    <td colspan="2" class="ps-4 fw-bold text-uppercase" style="color: var(--atilson-dark); font-size:13px;"><i class="bi bi-truck me-2 text-primary"></i> @(prov?.NombreProveedor ?? "SIN PROVEEDOR ASIGNADO")@if (grupo.Select(t => t.IdProveedor).Distinct().Count() > 1) { <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle ms-2 fw-semibold text-normal" style="font-size:9.5px; text-transform:none;" title="En Maestros › Transportistas hay más de un registro con este nombre o RUT. Para Finanzas es la misma empresa: se agrupan aquí.">Incluye un registro duplicado del maestro</span> }</td>
+                                                    <td class="text-end pe-4 align-middle" style="white-space:nowrap; width:145px;">
+                                                        <span class="badge bg-light text-muted border fw-normal d-inline-block text-center" style="font-size:10px; min-width:86px;">@tramosRf.Count @(tramosRf.Count == 1 ? "tramo" : "tramos")</span>
+                                                        <i class="bi bi-chevron-down text-muted ms-2"></i>
+                                                    </td>
                                                 </tr>
-                                                <tr id="prov-rf-@grupo.Key" class="collapse detail-row">
+                                                <tr id="prov-rf-@claveGrupo" class="collapse detail-row">
                                                     <td colspan="3" class="p-0">
                                                         <div class="p-3 bg-light border-bottom" style="overflow-x: auto;">
                                                             <table class="table table-sm table-borderless m-0" style="min-width: 1200px;">
@@ -1194,8 +1263,10 @@
                     </div>
                 </div>
                 <!-- PROVEEDORES -> DOCUMENTAL -->
+                @if (!Model.SoloTransporte)
+                {
                 <div class="tab-pane fade" id="prov-documental">
-                    <div class="d-flex justify-content-between align-items-center mb-3 bg-white p-2 rounded border shadow-sm filtro-toolbar">
+                    <div class="filtro-toolbar tarifas-barra">
                         <div class="subtabs-row">
                         <ul class="nav nav-pills sub-tabs" id="pills-prov-doc" role="tablist">
                             <li class="nav-item"><button class="nav-link active" data-bs-toggle="pill" data-bs-target="#prov-doc-sag" type="button"><i class="bi bi-flower1 me-1"></i>SAG</button></li>
@@ -1203,6 +1274,8 @@
                             <li class="nav-item"><button class="nav-link" data-bs-toggle="pill" data-bs-target="#prov-doc-comunes" type="button"><i class="bi bi-files me-1"></i>COMUNES</button></li>
                         </ul>
                         </div>
+                    </div>
+                    <div class="tarifas-acciones">
                         <button type="button" class="btn btn-sm btn-dark fw-bold px-3 shadow-sm" onclick="toggleNuevaTarifaForm('form-prov-doc')">
                             <i class="bi bi-plus-lg me-1"></i> NUEVO COSTO DE AGENCIA
                         </button>
@@ -1380,7 +1453,10 @@
                         </div>
                     </div>
                 </div>
+                }
                                 <!-- PROVEEDORES -> GATE OUT/IN -->
+                @if (!Model.SoloTransporte)
+                {
                 <div class="tab-pane fade" id="prov-gate">
                     @{
                         // Una línea por tarifa. Las tarifas desglosadas (CMA CGM: Gate Out +
@@ -1427,7 +1503,8 @@
                             .Select(x => new { Id = x.G!.IdNaviera!.Value, x.Nav }).GroupBy(x => x.Id).Select(g => g.First())
                             .OrderBy(x => x.Nav, StringComparer.OrdinalIgnoreCase).ToList();
                     }
-                    <div class="d-flex justify-content-between align-items-center mb-3 bg-white p-2 rounded border shadow-sm filtro-toolbar flex-wrap gap-2">
+                    <div class="filtro-toolbar tarifas-barra">
+                        <h6 class="tarifas-titulo"><i class="bi bi-box-arrow-in-right text-primary me-2"></i> Gate Out / In por depósito y naviera</h6>
                         <div class="gate-filtros" data-gate-filtros="prov">
                             <select class="form-select-xs no-select2" data-gate-filtro="dep" title="Depósito">
                                 <option value="">Todos los depósitos</option>
@@ -1456,6 +1533,8 @@
                                 <option value="IN">Gate In</option>
                             </select>
                         </div>
+                    </div>
+                    <div class="tarifas-acciones">
                         <button type="button" class="btn btn-sm btn-dark fw-bold px-3 shadow-sm" onclick="toggleNuevaTarifaForm('form-prov-gate')">
                             <i class="bi bi-plus-lg me-1"></i> NUEVO COSTO GATE
                         </button>
@@ -1571,10 +1650,15 @@
                         </table>
                     </div>
                 </div>
+                }
                                 <!-- PROVEEDORES -> EMISIÓN BL -->
+                @if (!Model.SoloTransporte)
+                {
                 <div class="tab-pane fade" id="prov-bl">
-                    <div class="d-flex justify-content-between align-items-center mb-3 bg-white p-2 rounded border shadow-sm filtro-toolbar">
-                        <h6 class="m-0 fw-bold px-2 text-dark" style="font-size: 13px;"><i class="bi bi-file-earmark-medical text-primary me-2"></i> Tarifas de Emisión B/L por Naviera</h6>
+                    <div class="filtro-toolbar tarifas-barra">
+                        <h6 class="tarifas-titulo"><i class="bi bi-file-earmark-medical text-primary me-2"></i> Tarifas de Emisión B/L por Naviera</h6>
+                    </div>
+                    <div class="tarifas-acciones">
                         <button type="button" class="btn btn-sm btn-dark fw-bold px-3 shadow-sm" onclick="toggleNuevaTarifaForm('form-prov-bl')">
                             <i class="bi bi-plus-lg me-1"></i> NUEVA TARIFA BL
                         </button>
@@ -1638,16 +1722,20 @@
                                         <td class="text-uppercase fw-bold text-dark">@etiquetaTbl</td>
                                         <td class="text-end font-monospace fw-bold text-danger">@tbl.Moneda $@tbl.ValorNeto.ToString("N0")</td>
                                         <td class="text-center">
-                                            @if (tbl.AplicaIva)
-                                            {
-                                                <span class="badge bg-danger bg-opacity-10 text-danger border border-danger" style="font-size:9px;">SÍ (+19%)</span>
-                                            }
-                                            else
-                                            {
-                                                <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary" style="font-size:9px;">EXENTO</span>
-                                            }
+                                            <form method="post" asp-page-handler="CambiarIvaTarifaMaritima" class="d-inline" onsubmit="return confirm('¿Corregir el dato de la naviera a @(tbl.AplicaIva ? "EXENTO" : "+ IVA")? (Control Financiero sigue la regla del concepto, no este dato.)');">
+                                                <input type="hidden" name="tipo" value="BL" /><input type="hidden" name="idTarifa" value="@tbl.Id" /><input type="hidden" name="aplicaIva" value="@(tbl.AplicaIva ? "false" : "true")" />
+                                                <button type="submit" class="badge border @(tbl.AplicaIva ? "bg-danger bg-opacity-10 text-danger border-danger" : "bg-secondary bg-opacity-10 text-secondary border-secondary")" style="font-size:9px; cursor:pointer;" title="IVA con que cobra la naviera (dato de la tarifa). Clic para corregirlo.">@(tbl.AplicaIva ? "SÍ (+19%)" : "EXENTO") <i class="bi bi-arrow-left-right ms-1"></i></button>
+                                            </form>
                                         </td>
                                         <td class="text-end pe-4">
+                                            <button type="button" class="btn btn-sm text-secondary border-0"
+                                                    title="Historial de cambios" onclick="abrirModalHistorial('TarifaBl', @tbl.Id)">
+                                                <i class="bi bi-info-circle"></i>
+                                            </button>
+                                            <button type="button" class="btn btn-sm text-primary border-0"
+                                                    title="Editar emisión BL en la fila" onclick="abrirEditorTarifaFila('TarifaBl', @tbl.Id)">
+                                                <i class="bi bi-pencil-square"></i>
+                                            </button>
                                             <form method="post" asp-page-handler="EliminarTarifaBl" onsubmit="return confirm('¿Archivar esta tarifa BL?');"><input type="hidden" name="idTarifa" value="@tbl.Id" /><button type="submit" class="btn btn-delete"><i class="bi bi-trash"></i></button></form>
                                         </td>
                                     </tr>
@@ -1660,15 +1748,18 @@
                         </table>
                     </div>
                 </div>
+                }
                 <!-- PROVEEDORES -> ALMACENAMIENTO -->
+                @if (!Model.SoloTransporte)
+                {
                 <div class="tab-pane fade" id="panel-almacenamiento" role="tabpanel">
-                    <div class="d-flex justify-content-between align-items-center mb-3 bg-white p-2 rounded border shadow-sm filtro-toolbar">
-                        <h6 class="m-0 fw-bold px-2 text-dark" style="font-size: 13px;"><i class="bi bi-boxes text-warning me-2"></i> Acuerdos Comerciales de Cadenas y Depósitos</h6>
-                        <div class="d-flex align-items-center gap-2">
-                            <button type="button" class="btn btn-sm btn-dark fw-bold px-3 shadow-sm" onclick="toggleNuevaTarifaForm('form-almacenamiento')">
+                    <div class="filtro-toolbar tarifas-barra">
+                        <h6 class="tarifas-titulo"><i class="bi bi-boxes text-warning me-2"></i> Acuerdos Comerciales de Cadenas y Depósitos</h6>
+                    </div>
+                    <div class="tarifas-acciones">
+                        <button type="button" class="btn btn-sm btn-dark fw-bold px-3 shadow-sm" onclick="toggleNuevaTarifaForm('form-almacenamiento')">
                                 <i class="bi bi-plus-lg me-1"></i> NUEVO ACUERDO
                             </button>
-                        </div>
                     </div>
                     <div class="table-container">
                         <table class="table table-erp searchable-table">
@@ -1838,15 +1929,20 @@
                         </table>
                     </div>
                 </div>
+                }
                 <!-- PROVEEDORES -> COURIER -->
+                @if (!Model.SoloTransporte)
+                {
                 <div class="tab-pane fade" id="prov-courier">
-                    <div class="d-flex justify-content-between align-items-center mb-3 bg-white p-2 rounded border shadow-sm filtro-toolbar">
+                    <div class="filtro-toolbar tarifas-barra">
                         <div class="subtabs-row">
                         <ul class="nav nav-pills sub-tabs" id="pills-prov-courier" role="tablist">
                             <li class="nav-item"><button class="nav-link active" data-bs-toggle="pill" data-bs-target="#prov-courier-nac" type="button"><i class="bi bi-signpost-split me-1"></i>Nacional</button></li>
                             <li class="nav-item"><button class="nav-link" data-bs-toggle="pill" data-bs-target="#prov-courier-int" type="button"><i class="bi bi-globe-americas me-1"></i>Internacional</button></li>
                         </ul>
                         </div>
+                    </div>
+                    <div class="tarifas-acciones">
                         <button type="button" class="btn btn-sm btn-dark fw-bold px-3 shadow-sm" onclick="toggleNuevaTarifaForm('form-prov-courier')">
                             <i class="bi bi-plus-lg me-1"></i> NUEVO COSTO COURIER
                         </button>
@@ -1956,10 +2052,15 @@
                         </div>
                     </div>
                 </div>
+                }
                 <!-- PROVEEDORES -> OTROS -->
+                @if (!Model.SoloTransporte)
+                {
                 <div class="tab-pane fade" id="prov-otros">
-                    <div class="d-flex justify-content-between align-items-center mb-3">
-                        <h5 class="m-0 fw-bold" style="color: var(--atilson-dark); font-size: 14px;"><i class="bi bi-file-earmark-check me-2"></i> Maestro de Extracostos y Recintos</h5>
+                    <div class="filtro-toolbar tarifas-barra">
+                        <h6 class="tarifas-titulo"><i class="bi bi-file-earmark-check text-primary me-2"></i> Maestro de Extracostos y Recintos</h6>
+                    </div>
+                    <div class="tarifas-acciones">
                         <button type="button" class="btn btn-sm btn-dark fw-bold px-3 shadow-sm" onclick="toggleNuevaTarifaForm('form-doc-maestro')">
                             <i class="bi bi-plus-lg me-1"></i> NUEVO EXTRACOSTO / RECINTO
                         </button>
@@ -2024,11 +2125,14 @@
                         </table>
                     </div>
                 </div>
+                }
             </div>
         </div>
         <!-- ============================================== -->
         <!-- PANEL 2: CLIENTES (VENTAS)                     -->
         <!-- ============================================== -->
+        @if (!Model.SoloTransporte)
+        {
         <div class="tab-pane fade" id="panel-clientes" role="tabpanel">
             @if (!string.IsNullOrEmpty(Model.MensajeCargaMasiva))
             {
@@ -2048,11 +2152,6 @@
                     }
                 </div>
             }
-            <div class="d-flex justify-content-end mb-2">
-                <button type="button" class="btn btn-sm btn-outline-dark fw-bold" data-bs-toggle="modal" data-bs-target="#modalCargaMasivaVentas">
-                    <i class="bi bi-file-earmark-spreadsheet me-1"></i> CARGA MASIVA DE VENTAS
-                </button>
-            </div>
             <ul class="nav nav-tabs-custom" id="servicios-cli" role="tablist">
                 <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#cli-maritimo" type="button"><i class="bi bi-water"></i> Marítimo</button></li>
                 <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#cli-terrestre" type="button"><i class="bi bi-truck"></i> Terrestre</button></li>
@@ -2065,7 +2164,7 @@
             <div class="tab-content">
                 <!-- CLIENTES -> MARÍTIMO -->
                 <div class="tab-pane fade show active" id="cli-maritimo">
-                    <div class="d-flex justify-content-between align-items-center mb-3 bg-white p-2 rounded border shadow-sm filtro-toolbar">
+                    <div class="filtro-toolbar tarifas-barra">
                         <div class="subtabs-row">
                         <ul class="nav nav-pills sub-tabs" id="pills-cli-mar" role="tablist">
                             <li class="nav-item"><button class="nav-link active" data-bs-toggle="pill" data-bs-target="#cli-mar-dry" type="button"><i class="bi bi-box-seam me-1"></i>Dry Prepaid</button></li>
@@ -2076,16 +2175,16 @@
                         </div>
                         <div class="d-flex gap-2">
                             <form method="get" class="d-flex gap-2 mb-0">
-                                <select asp-for="FiltroIdCliente" asp-items="Model.ListaClientes" class="form-select form-select-sm bg-light border-0 fw-bold filtro-select" style="width: 140px; font-size: 11px;"><option value="">Cliente</option></select>
-                                <select asp-for="FiltroVigencia" class="form-select form-select-sm bg-light border-0 fw-bold filtro-select" style="width: 130px; font-size: 11px;">
-                                    <option value="">Todas Vigencias</option>
+                                <select asp-for="FiltroIdCliente" id="FiltroIdCliente1" asp-items="Model.ListaClientes" class="form-select form-select-sm bg-light border-0 fw-bold filtro-select" style="width: 140px; font-size: 11px;"><option value="">Cliente</option></select>
+                                <select asp-for="FiltroVigencia" id="FiltroVigencia1" class="form-select form-select-sm bg-light border-0 fw-bold filtro-select" style="width: 130px; font-size: 11px;">
+                                    <option value="">Vigencia</option>
                                     <option value="VENCIDOS">Expirados</option>
                                     <option value="30DIAS">Vencen &lt; 30 días</option>
                                     <option value="90DIAS">Vencen &lt; 90 días</option>
                                 </select>
-                                                                <select asp-for="FiltroPol" id="filtroPolCliMar" asp-items="Model.ListaPols" class="form-select form-select-sm bg-light border-0 fw-bold filtro-select" style="width: 100px; font-size: 11px;"><option value="">POL...</option></select>
-                                <select asp-for="FiltroPod" id="filtroPodCliMar" asp-items="Model.ListaPods" class="form-select form-select-sm bg-light border-0 fw-bold filtro-select" style="width: 100px; font-size: 11px;"><option value="">POD...</option></select>
-                                <button type="submit" class="btn btn-dark btn-sm fw-bold px-3">FILTRAR</button>
+                                                                <select asp-for="FiltroPol" id="filtroPolCliMar" asp-items="Model.ListaPols" class="form-select form-select-sm bg-light border-0 fw-bold filtro-select" style="width: 100px; font-size: 11px;"><option value="">POL</option></select>
+                                <select asp-for="FiltroPod" id="filtroPodCliMar" asp-items="Model.ListaPods" class="form-select form-select-sm bg-light border-0 fw-bold filtro-select" style="width: 100px; font-size: 11px;"><option value="">POD</option></select>
+                                <button type="submit" class="btn btn-dark btn-sm fw-bold px-3" title="Filtrar" aria-label="Filtrar"><i class="bi bi-funnel-fill"></i></button>
                                 @if (Model.FiltroIdCliente.HasValue || !string.IsNullOrEmpty(Model.FiltroVigencia) || !string.IsNullOrEmpty(Model.FiltroPol) || !string.IsNullOrEmpty(Model.FiltroPod))
                                 {
                                     <a asp-page="./Index" class="btn btn-light btn-sm border text-danger"><i class="bi bi-x-lg"></i></a>
@@ -2096,7 +2195,7 @@
                     <div class="tab-content">
                         <!-- CLIENTES -> MARÍTIMO -> DRY -->
                         <div class="tab-pane fade show active" id="cli-mar-dry">
-                            <div class="d-flex justify-content-end mb-2">
+                            <div class="tarifas-acciones">
                                 <button type="button" class="btn btn-sm btn-dark fw-bold px-3 shadow-sm" onclick="toggleNuevaTarifaForm('form-cli-mar-dry')">
                                     <i class="bi bi-plus-lg me-1"></i> NUEVA VENTA (DRY)
                                 </button>
@@ -2121,8 +2220,8 @@
                                                     <form method="post" asp-page-handler="CrearVentaMaritima">
                                                         <div class="faf-grid">
                                                             <div class="faf-g"><label>Cliente</label><select asp-for="NuevaVentaMaritima.IdCliente" asp-items="Model.ListaClientes" class="form-select-xs" required><option value="">- CLIENTE -</option></select></div>
-                                                            <div class="faf-g"><label>Puerto Origen (POL)</label><select asp-for="NuevaVentaMaritima.Pol" asp-items="Model.ListaPuertosMaestro" class="form-select-xs" required><option value="">- POL -</option></select></div>
-                                                            <div class="faf-g"><label>Puerto Destino (POD)</label><select asp-for="NuevaVentaMaritima.Pod" asp-items="Model.ListaPuertosMaestro" class="form-select-xs" required><option value="">- POD -</option></select></div>
+                                                            <div class="faf-g"><label>Puerto Origen (POL)</label><select asp-for="NuevaVentaMaritima.Pol" data-ruta="pol" asp-items="Model.ListaPuertosMaestro" class="form-select-xs" required><option value="">- POL -</option></select></div>
+                                                            <div class="faf-g"><label>Puerto Destino (POD)</label><select asp-for="NuevaVentaMaritima.Pod" data-ruta="pod" asp-items="Model.ListaPuertosMaestro" class="form-select-xs" required><option value="">- POD -</option></select></div>
                                                             <div class="faf-g"><label>Naviera Asociada</label><select asp-for="NuevaVentaMaritima.IdNaviera" asp-items="Model.ListaNavieras" class="form-select-xs"><option value="">- N/A -</option></select></div>
                                                             <div class="faf-g">
                                                                 <label>Equipo Aplica</label>
@@ -2134,7 +2233,7 @@
                                                                 </select>
                                                             </div>
                                                                                                                         <div class="faf-g"><label>Tarifa Venta</label><div class="faf-money"><select asp-for="NuevaVentaMaritima.Moneda" class="form-select-xs"><option>USD</option><option>CLP</option></select><input asp-for="NuevaVentaMaritima.PrecioPactado" type="number" step="0.01" class="form-control-xs" required value="" placeholder="0"></div></div>
-                                                            <div class="faf-g"><label>IVA</label><input type="hidden" name="NuevaVentaMaritima.AplicaIva" value="true" /><select class="form-select-xs fw-bold text-center" data-iva-select="1" disabled title="Los conceptos marítimos siempre van + IVA"><option value="true" selected>SÍ (+19%)</option></select></div>
+                                                            <div class="faf-g"><label>IVA</label><input type="hidden" name="NuevaVentaMaritima.AplicaIva" value="false" /><select class="form-select-xs fw-bold text-center" disabled title="El flete marítimo va siempre exento de IVA (todas las navieras)"><option selected>EXENTO</option></select></div>
                                                             <div class="faf-g"><label>Tarifa + IVA</label><input type="number" step="0.01" min="0" class="form-control-xs fw-bold faf-total-iva" data-total-iva-input="1" placeholder="0" title="Escribe el valor con IVA incluido y se calcula la tarifa neta (o al revés)"></div>
                                                             <div class="faf-g"><label>Expiración</label><input asp-for="NuevaVentaMaritima.FechaFinVigencia" type="date" class="form-control-xs" required></div>
                                                             <div class="faf-g"><label>Días Libres Origen</label><input asp-for="NuevaVentaMaritima.DiasLibresOrigen" type="text" class="form-control-xs" placeholder="Ej: 7"></div>
@@ -2155,9 +2254,9 @@
                                             <tr class="main-row" data-bs-toggle="collapse" data-bs-target="#m-ven-@tc.Id" style="cursor: pointer;">
                                                 <td class="ps-4 fw-bold" style="color: #0284c7;">@(tc.IdClienteNavigation?.RazonSocial ?? "N/A")</td>
                                                 <td><span class="text-uppercase">@tc.Pol <i class="bi bi-arrow-right text-muted mx-1"></i> @tc.Pod</span></td>
-                                                <td class="text-end fw-bold">@tc.Moneda $@tc.PrecioPactado.ToString(tc.Moneda == "CLP" ? "N0" : "N2")<span class="d-block fw-normal" style="font-size:9.5px; color:#64748b;">c/IVA @tc.Moneda $@Math.Round(tc.PrecioPactado * 1.19m, tc.Moneda == "CLP" ? 0 : 2).ToString(tc.Moneda == "CLP" ? "N0" : "N2")</span></td>
+                                                <td class="text-end fw-bold">@tc.Moneda $@tc.PrecioPactado.ToString(tc.Moneda == "CLP" ? "N0" : "N2")@if (tc.AplicaIva) {<span class="d-block fw-normal" style="font-size:9.5px; color:#64748b;">c/IVA @tc.Moneda $@Math.Round(tc.PrecioPactado * 1.19m, tc.Moneda == "CLP" ? 0 : 2).ToString(tc.Moneda == "CLP" ? "N0" : "N2")</span>}</td>
                                                 <td class="text-center">@tc.FechaFinVigencia.ToString("dd/MM/yyyy")</td>
-                                                <td class="text-center"><span class='badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25' style='font-size:9px;'>+IVA</span></td>
+                                                <td class="text-center">@if (tc.AplicaIva) {<span class='badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25' style='font-size:9px;'>+IVA</span>} else {<span class='badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25' style='font-size:9px;'>EXENTO</span>}</td>
                                                 <td><span class="text-muted small">@(tc.Comentarios ?? "-")</span></td>
                                                 <td class="text-end pe-4"><i class="bi bi-chevron-down text-muted"></i></td>
                                             </tr>
@@ -2187,7 +2286,7 @@
                         </div>
                         <!-- CLIENTES -> MARÍTIMO -> RF CONGELADO PREPAID -->
                         <div class="tab-pane fade" id="cli-mar-rfcong">
-                            <div class="d-flex justify-content-end mb-2">
+                            <div class="tarifas-acciones">
                                 <button type="button" class="btn btn-sm btn-dark fw-bold px-3 shadow-sm" onclick="toggleNuevaTarifaForm('form-cli-mar-rf')">
                                     <i class="bi bi-plus-lg me-1"></i> NUEVA VENTA (RF CONGELADO)
                                 </button>
@@ -2213,8 +2312,8 @@
                                                         <input type="hidden" name="NuevaVentaMaritima.Clasificacion" value="CONGELADO" />
                                                         <div class="faf-grid">
                                                             <div class="faf-g"><label>Cliente</label><select asp-for="NuevaVentaMaritima.IdCliente" asp-items="Model.ListaClientes" class="form-select-xs" required><option value="">- CLIENTE -</option></select></div>
-                                                            <div class="faf-g"><label>Puerto Origen (POL)</label><select asp-for="NuevaVentaMaritima.Pol" asp-items="Model.ListaPuertosMaestro" class="form-select-xs" required><option value="">- POL -</option></select></div>
-                                                            <div class="faf-g"><label>Puerto Destino (POD)</label><select asp-for="NuevaVentaMaritima.Pod" asp-items="Model.ListaPuertosMaestro" class="form-select-xs" required><option value="">- POD -</option></select></div>
+                                                            <div class="faf-g"><label>Puerto Origen (POL)</label><select asp-for="NuevaVentaMaritima.Pol" data-ruta="pol" asp-items="Model.ListaPuertosMaestro" class="form-select-xs" required><option value="">- POL -</option></select></div>
+                                                            <div class="faf-g"><label>Puerto Destino (POD)</label><select asp-for="NuevaVentaMaritima.Pod" data-ruta="pod" asp-items="Model.ListaPuertosMaestro" class="form-select-xs" required><option value="">- POD -</option></select></div>
                                                             <div class="faf-g"><label>Naviera Asociada</label><select asp-for="NuevaVentaMaritima.IdNaviera" asp-items="Model.ListaNavieras" class="form-select-xs"><option value="">- N/A -</option></select></div>
                                                             <div class="faf-g">
                                                                 <label>Equipo Aplica</label>
@@ -2225,7 +2324,7 @@
                                                                 </select>
                                                             </div>
                                                                                                                         <div class="faf-g"><label>Tarifa Venta</label><div class="faf-money"><select asp-for="NuevaVentaMaritima.Moneda" class="form-select-xs"><option>USD</option><option>CLP</option></select><input asp-for="NuevaVentaMaritima.PrecioPactado" type="number" step="0.01" class="form-control-xs" required value="" placeholder="0"></div></div>
-                                                            <div class="faf-g"><label>IVA</label><input type="hidden" name="NuevaVentaMaritima.AplicaIva" value="true" /><select class="form-select-xs fw-bold text-center" data-iva-select="1" disabled title="Los conceptos marítimos siempre van + IVA"><option value="true" selected>SÍ (+19%)</option></select></div>
+                                                            <div class="faf-g"><label>IVA</label><input type="hidden" name="NuevaVentaMaritima.AplicaIva" value="false" /><select class="form-select-xs fw-bold text-center" disabled title="El flete marítimo va siempre exento de IVA (todas las navieras)"><option selected>EXENTO</option></select></div>
                                                             <div class="faf-g"><label>Tarifa + IVA</label><input type="number" step="0.01" min="0" class="form-control-xs fw-bold faf-total-iva" data-total-iva-input="1" placeholder="0" title="Escribe el valor con IVA incluido y se calcula la tarifa neta (o al revés)"></div>
                                                             <div class="faf-g"><label>Expiración</label><input asp-for="NuevaVentaMaritima.FechaFinVigencia" type="date" class="form-control-xs" required></div>
                                                             <div class="faf-g"><label>Días Libres Origen</label><input asp-for="NuevaVentaMaritima.DiasLibresOrigen" type="text" class="form-control-xs" placeholder="Ej: 7"></div>
@@ -2246,9 +2345,9 @@
                                             <tr class="main-row" data-bs-toggle="collapse" data-bs-target="#m-ven-@tc.Id" style="cursor: pointer;">
                                                 <td class="ps-4 fw-bold" style="color: #0284c7;">@(tc.IdClienteNavigation?.RazonSocial ?? "N/A")</td>
                                                 <td><span class="text-uppercase">@tc.Pol <i class="bi bi-arrow-right text-muted mx-1"></i> @tc.Pod</span>@if (string.IsNullOrWhiteSpace(tc.Clasificacion)) {<span class="badge-rf-ambos" title="Venta reefer sin clasificar: aplica a fresco y congelado">Fresco y congelado</span>}</td>
-                                                <td class="text-end fw-bold">@tc.Moneda $@tc.PrecioPactado.ToString(tc.Moneda == "CLP" ? "N0" : "N2")<span class="d-block fw-normal" style="font-size:9.5px; color:#64748b;">c/IVA @tc.Moneda $@Math.Round(tc.PrecioPactado * 1.19m, tc.Moneda == "CLP" ? 0 : 2).ToString(tc.Moneda == "CLP" ? "N0" : "N2")</span></td>
+                                                <td class="text-end fw-bold">@tc.Moneda $@tc.PrecioPactado.ToString(tc.Moneda == "CLP" ? "N0" : "N2")@if (tc.AplicaIva) {<span class="d-block fw-normal" style="font-size:9.5px; color:#64748b;">c/IVA @tc.Moneda $@Math.Round(tc.PrecioPactado * 1.19m, tc.Moneda == "CLP" ? 0 : 2).ToString(tc.Moneda == "CLP" ? "N0" : "N2")</span>}</td>
                                                 <td class="text-center">@tc.FechaFinVigencia.ToString("dd/MM/yyyy")</td>
-                                                <td class="text-center"><span class='badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25' style='font-size:9px;'>+IVA</span></td>
+                                                <td class="text-center">@if (tc.AplicaIva) {<span class='badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25' style='font-size:9px;'>+IVA</span>} else {<span class='badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25' style='font-size:9px;'>EXENTO</span>}</td>
                                                 <td><span class="text-muted small">@(tc.Comentarios ?? "-")</span></td>
                                                 <td class="text-end pe-4"><i class="bi bi-chevron-down text-muted"></i></td>
                                             </tr>
@@ -2278,7 +2377,7 @@
                         </div>
                         <!-- CLIENTES -> MARÍTIMO -> RF FRESCO PREPAID -->
                         <div class="tab-pane fade" id="cli-mar-rffres">
-                            <div class="d-flex justify-content-end mb-2">
+                            <div class="tarifas-acciones">
                                 <button type="button" class="btn btn-sm btn-dark fw-bold px-3 shadow-sm" onclick="toggleNuevaTarifaForm('form-cli-mar-rffres')">
                                     <i class="bi bi-plus-lg me-1"></i> NUEVA VENTA (RF FRESCO)
                                 </button>
@@ -2304,8 +2403,8 @@
                                                         <input type="hidden" name="NuevaVentaMaritima.Clasificacion" value="FRESCO" />
                                                         <div class="faf-grid">
                                                             <div class="faf-g"><label>Cliente   </label><select asp-for="NuevaVentaMaritima.IdCliente" asp-items="Model.ListaClientes" class="form-select-xs" required><option value="">- CLIENTE -</option></select></div>
-                                                            <div class="faf-g"><label>Puerto Origen (POL)</label><select asp-for="NuevaVentaMaritima.Pol" asp-items="Model.ListaPuertosMaestro" class="form-select-xs" required><option value="">- POL -</option></select></div>
-                                                            <div class="faf-g"><label>Puerto Destino (POD)</label><select asp-for="NuevaVentaMaritima.Pod" asp-items="Model.ListaPuertosMaestro" class="form-select-xs" required><option value="">- POD -</option></select></div>
+                                                            <div class="faf-g"><label>Puerto Origen (POL)</label><select asp-for="NuevaVentaMaritima.Pol" data-ruta="pol" asp-items="Model.ListaPuertosMaestro" class="form-select-xs" required><option value="">- POL -</option></select></div>
+                                                            <div class="faf-g"><label>Puerto Destino (POD)</label><select asp-for="NuevaVentaMaritima.Pod" data-ruta="pod" asp-items="Model.ListaPuertosMaestro" class="form-select-xs" required><option value="">- POD -</option></select></div>
                                                             <div class="faf-g"><label>Naviera Asociada</label><select asp-for="NuevaVentaMaritima.IdNaviera" asp-items="Model.ListaNavieras" class="form-select-xs"><option value="">- N/A -</option></select></div>
                                                             <div class="faf-g">
                                                                 <label>Equipo Aplica</label>
@@ -2316,7 +2415,7 @@
                                                                 </select>
                                                             </div>
                                                                                                                         <div class="faf-g"><label>Tarifa Venta</label><div class="faf-money"><select asp-for="NuevaVentaMaritima.Moneda" class="form-select-xs"><option>USD</option><option>CLP</option></select><input asp-for="NuevaVentaMaritima.PrecioPactado" type="number" step="0.01" class="form-control-xs" required value="" placeholder="0"></div></div>
-                                                            <div class="faf-g"><label>IVA</label><input type="hidden" name="NuevaVentaMaritima.AplicaIva" value="true" /><select class="form-select-xs fw-bold text-center" data-iva-select="1" disabled title="Los conceptos marítimos siempre van + IVA"><option value="true" selected>SÍ (+19%)</option></select></div>
+                                                            <div class="faf-g"><label>IVA</label><input type="hidden" name="NuevaVentaMaritima.AplicaIva" value="false" /><select class="form-select-xs fw-bold text-center" disabled title="El flete marítimo va siempre exento de IVA (todas las navieras)"><option selected>EXENTO</option></select></div>
                                                             <div class="faf-g"><label>Tarifa + IVA</label><input type="number" step="0.01" min="0" class="form-control-xs fw-bold faf-total-iva" data-total-iva-input="1" placeholder="0" title="Escribe el valor con IVA incluido y se calcula la tarifa neta (o al revés)"></div>
                                                             <div class="faf-g"><label>Expiración</label><input asp-for="NuevaVentaMaritima.FechaFinVigencia" type="date" class="form-control-xs" required></div>
                                                             <div class="faf-g"><label>Días Libres Origen</label><input asp-for="NuevaVentaMaritima.DiasLibresOrigen" type="text" class="form-control-xs" placeholder="Ej: 7"></div>
@@ -2337,9 +2436,9 @@
                                             <tr class="main-row" data-bs-toggle="collapse" data-bs-target="#m-venf-@tc.Id" style="cursor: pointer;">
                                                 <td class="ps-4 fw-bold" style="color: #0284c7;">@(tc.IdClienteNavigation?.RazonSocial ?? "N/A")</td>
                                                 <td><span class="text-uppercase">@tc.Pol <i class="bi bi-arrow-right text-muted mx-1"></i> @tc.Pod</span>@if (string.IsNullOrWhiteSpace(tc.Clasificacion)) {<span class="badge-rf-ambos" title="Venta reefer sin clasificar: aplica a fresco y congelado">Fresco y congelado</span>}</td>
-                                                <td class="text-end fw-bold">@tc.Moneda $@tc.PrecioPactado.ToString(tc.Moneda == "CLP" ? "N0" : "N2")<span class="d-block fw-normal" style="font-size:9.5px; color:#64748b;">c/IVA @tc.Moneda $@Math.Round(tc.PrecioPactado * 1.19m, tc.Moneda == "CLP" ? 0 : 2).ToString(tc.Moneda == "CLP" ? "N0" : "N2")</span></td>
+                                                <td class="text-end fw-bold">@tc.Moneda $@tc.PrecioPactado.ToString(tc.Moneda == "CLP" ? "N0" : "N2")@if (tc.AplicaIva) {<span class="d-block fw-normal" style="font-size:9.5px; color:#64748b;">c/IVA @tc.Moneda $@Math.Round(tc.PrecioPactado * 1.19m, tc.Moneda == "CLP" ? 0 : 2).ToString(tc.Moneda == "CLP" ? "N0" : "N2")</span>}</td>
                                                 <td class="text-center">@tc.FechaFinVigencia.ToString("dd/MM/yyyy")</td>
-                                                <td class="text-center"><span class='badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25' style='font-size:9px;'>+IVA</span></td>
+                                                <td class="text-center">@if (tc.AplicaIva) {<span class='badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25' style='font-size:9px;'>+IVA</span>} else {<span class='badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25' style='font-size:9px;'>EXENTO</span>}</td>
                                                 <td><span class="text-muted small">@(tc.Comentarios ?? "-")</span></td>
                                                 <td class="text-end pe-4"><i class="bi bi-chevron-down text-muted"></i></td>
                                             </tr>
@@ -2377,7 +2476,7 @@
                 </div>
                 <!-- CLIENTES -> TERRESTRE -->
                 <div class="tab-pane fade" id="cli-terrestre">
-                    <div class="d-flex justify-content-between align-items-center mb-3 bg-white p-2 rounded border shadow-sm filtro-toolbar">
+                    <div class="filtro-toolbar tarifas-barra">
                         <div class="subtabs-row">
                         <ul class="nav nav-pills sub-tabs" id="pills-cli-ter" role="tablist">
                             <li class="nav-item"><button class="nav-link active" data-bs-toggle="pill" data-bs-target="#cli-ter-dry" type="button"><i class="bi bi-box-seam me-1"></i>Dry</button></li>
@@ -2386,16 +2485,16 @@
                         </div>
                         <div class="d-flex gap-2">
                             <form method="get" class="d-flex gap-2 mb-0">
-                                <select asp-for="FiltroIdCliente" asp-items="Model.ListaClientes" class="form-select form-select-sm bg-light border-0 fw-bold filtro-select" style="width: 120px; font-size: 11px;"><option value="">CLIENTE...</option></select>
-                                <select asp-for="FiltroVigencia" class="form-select form-select-sm bg-light border-0 fw-bold filtro-select" style="width: 90px; font-size: 11px;">
-                                    <option value="">Vigencias...</option>
+                                <select asp-for="FiltroIdCliente" id="FiltroIdCliente2" asp-items="Model.ListaClientes" class="form-select form-select-sm bg-light border-0 fw-bold filtro-select" style="width: 120px; font-size: 11px;"><option value="">Cliente</option></select>
+                                <select asp-for="FiltroVigencia" id="FiltroVigencia2" class="form-select form-select-sm bg-light border-0 fw-bold filtro-select" style="width: 90px; font-size: 11px;">
+                                    <option value="">Vigencia</option>
                                     <option value="VENCIDOS">Expirados</option>
                                     <option value="30DIAS">Vencen &lt; 30d</option>
                                 </select>
-                                                                <select asp-for="FiltroPol" id="filtroPolCliTer" asp-items="optionsPuertosNombreFiltro" class="form-select form-select-sm bg-light border-0 fw-bold filtro-select" style="width: 90px; font-size: 11px;"><option value="">Retiro...</option></select>
-                                <select asp-for="FiltroPlanta" id="filtroPlantaCliTer" asp-items="selectListaNombres" class="form-select form-select-sm bg-light border-0 fw-bold filtro-select" style="width: 90px; font-size: 11px;"><option value="">Planta...</option></select>
-                                <select asp-for="FiltroPod" id="filtroPodCliTer" asp-items="optionsPuertosNombreFiltro" class="form-select form-select-sm bg-light border-0 fw-bold filtro-select" style="width: 90px; font-size: 11px;"><option value="">Puerto...</option></select>
-                                <button type="submit" class="btn btn-dark btn-sm fw-bold px-3" onclick="localStorage.setItem('activeMainTab', '#tab-clientes'); localStorage.setItem('activeSubTab', '#cli-terrestre');">FILTRAR</button>
+                                                                <select asp-for="FiltroPol" id="filtroPolCliTer" asp-items="optionsPuertosNombreFiltro" class="form-select form-select-sm bg-light border-0 fw-bold filtro-select" style="width: 90px; font-size: 11px;"><option value="">Retiro</option></select>
+                                <select asp-for="FiltroPlanta" id="filtroPlantaCliTer" asp-items="selectListaNombres" class="form-select form-select-sm bg-light border-0 fw-bold filtro-select" style="width: 90px; font-size: 11px;"><option value="">Planta</option></select>
+                                <select asp-for="FiltroPod" id="filtroPodCliTer" asp-items="optionsPuertosNombreFiltro" class="form-select form-select-sm bg-light border-0 fw-bold filtro-select" style="width: 90px; font-size: 11px;"><option value="">Puerto</option></select>
+                                <button type="submit" class="btn btn-dark btn-sm fw-bold px-3" onclick="localStorage.setItem('activeMainTab', '#tab-clientes'); localStorage.setItem('activeSubTab', '#cli-terrestre');" title="Filtrar" aria-label="Filtrar"><i class="bi bi-funnel-fill"></i></button>
                                 @if (Model.FiltroIdCliente.HasValue || !string.IsNullOrEmpty(Model.FiltroVigencia) || !string.IsNullOrEmpty(Model.FiltroPol) || !string.IsNullOrEmpty(Model.FiltroPlanta) || !string.IsNullOrEmpty(Model.FiltroPod))
                                 {
                                     <a asp-page="./Index" class="btn btn-light btn-sm border text-danger" onclick="localStorage.setItem('activeMainTab', '#tab-clientes'); localStorage.setItem('activeSubTab', '#cli-terrestre');"><i class="bi bi-x-lg"></i></a>
@@ -2406,7 +2505,7 @@
                     <div class="tab-content">
                         <!-- CLIENTES -> TERRESTRE -> DRY -->
                         <div class="tab-pane fade show active" id="cli-ter-dry">
-                            <div class="d-flex justify-content-end mb-2">
+                            <div class="tarifas-acciones">
                                 <button type="button" class="btn btn-sm btn-dark fw-bold px-3 shadow-sm" onclick="toggleNuevaTarifaForm('form-cli-ter-dry')">
                                     <i class="bi bi-plus-lg me-1"></i> NUEVA VENTA (DRY)
                                 </button>
@@ -2481,7 +2580,7 @@
                         </div>
                         <!-- CLIENTES -> TERRESTRE -> REEFER -->
                         <div class="tab-pane fade" id="cli-ter-rf">
-                            <div class="d-flex justify-content-end mb-2">
+                            <div class="tarifas-acciones">
                                 <button type="button" class="btn btn-sm btn-dark fw-bold px-3 shadow-sm" onclick="toggleNuevaTarifaForm('form-cli-ter-rf')">
                                     <i class="bi bi-plus-lg me-1"></i> NUEVA VENTA (REEFER)
                                 </button>
@@ -2558,7 +2657,7 @@
                 </div>
                 <!-- CLIENTES -> DOCUMENTAL -->
                 <div class="tab-pane fade" id="cli-documental">
-                    <div class="d-flex justify-content-between align-items-center mb-3 bg-white p-2 rounded border shadow-sm filtro-toolbar">
+                    <div class="filtro-toolbar tarifas-barra">
                         <div class="subtabs-row">
                         <ul class="nav nav-pills sub-tabs" id="pills-cli-doc" role="tablist">
                             <li class="nav-item"><button class="nav-link active" data-bs-toggle="pill" data-bs-target="#cli-doc-sag" type="button"><i class="bi bi-flower1 me-1"></i>SAG</button></li>
@@ -2568,23 +2667,25 @@
                         </div>
                         <div class="d-flex gap-2">
                             <form method="get" class="d-flex gap-2 mb-0">
-                                <select asp-for="FiltroIdCliente" asp-items="Model.ListaClientes" class="form-select form-select-sm bg-light border-0 fw-bold filtro-select" style="width: 140px; font-size: 11px;"><option value="">Filtro CLIENTE...</option></select>
-                                <select asp-for="FiltroVigencia" class="form-select form-select-sm bg-light border-0 fw-bold filtro-select" style="width: 120px; font-size: 11px;">
-                                    <option value="">Vigencias...</option>
+                                <select asp-for="FiltroIdCliente" id="FiltroIdCliente3" asp-items="Model.ListaClientes" class="form-select form-select-sm bg-light border-0 fw-bold filtro-select" style="width: 140px; font-size: 11px;"><option value="">Cliente</option></select>
+                                <select asp-for="FiltroVigencia" id="FiltroVigencia3" class="form-select form-select-sm bg-light border-0 fw-bold filtro-select" style="width: 120px; font-size: 11px;">
+                                    <option value="">Vigencia</option>
                                     <option value="VENCIDOS">Expirados</option>
                                     <option value="30DIAS">Vencen &lt; 30 días</option>
                                     <option value="90DIAS">Vencen &lt; 90 días</option>
                                 </select>
-                                <button type="submit" class="btn btn-dark btn-sm fw-bold px-3">FILTRAR</button>
+                                <button type="submit" class="btn btn-dark btn-sm fw-bold px-3" title="Filtrar" aria-label="Filtrar"><i class="bi bi-funnel-fill"></i></button>
                                 @if (Model.FiltroIdCliente.HasValue || !string.IsNullOrEmpty(Model.FiltroVigencia))
                                 {
                                     <a asp-page="./Index" class="btn btn-light btn-sm border text-danger"><i class="bi bi-x-lg"></i></a>
                                 }
                             </form>
-                            <button type="button" class="btn btn-sm btn-dark fw-bold px-3 shadow-sm" onclick="toggleNuevaTarifaForm('form-cli-doc')">
+                        </div>
+                    </div>
+                    <div class="tarifas-acciones">
+                        <button type="button" class="btn btn-sm btn-dark fw-bold px-3 shadow-sm" onclick="toggleNuevaTarifaForm('form-cli-doc')">
                                 <i class="bi bi-plus-lg me-1"></i> NUEVA VENTA DOCUMENTAL
                             </button>
-                        </div>
                     </div>
                     <div class="d-flex align-items-center gap-2 mb-2 px-2 py-1 rounded" style="background:#f8f5ff; border:1px solid #e9d8fd;">
                         <i class="bi bi-info-circle-fill fs-6" style="color:var(--brand);"></i>
@@ -2964,7 +3065,8 @@
                             .ThenBy(x => x.C.Orden)
                             .ToList();
                     }
-                    <div class="d-flex justify-content-between align-items-center mb-3 bg-white p-2 rounded border shadow-sm filtro-toolbar flex-wrap gap-2">
+                    <div class="filtro-toolbar tarifas-barra">
+                        <h6 class="tarifas-titulo"><i class="bi bi-box-arrow-in-right text-primary me-2"></i> Ventas de Gate Out / In por cliente</h6>
                         <div class="gate-filtros" data-gate-filtros="cli">
                             <select class="form-select-xs no-select2" data-gate-filtro="dep" title="Depósito">
                                 <option value="">Todos los depósitos</option>
@@ -2985,6 +3087,8 @@
                                 <option value="IN">Gate In</option>
                             </select>
                         </div>
+                    </div>
+                    <div class="tarifas-acciones">
                         <button type="button" class="btn btn-sm btn-dark fw-bold px-3 shadow-sm" onclick="toggleNuevaTarifaForm('form-cli-gate')">
                             <i class="bi bi-plus-lg me-1"></i> NUEVA VENTA GATE
                         </button>
@@ -3091,8 +3195,10 @@
                 </div>
                 <!-- CLIENTES -> ALMACENAMIENTO -->
                 <div class="tab-pane fade" id="cli-almacenamiento">
-                    <div class="d-flex justify-content-between align-items-center mb-3 bg-white p-2 rounded border shadow-sm filtro-toolbar">
-                        <h6 class="m-0 fw-bold px-2 text-dark" style="font-size: 13px;"><i class="bi bi-boxes text-warning me-2"></i> Ventas de Almacenamiento (Bodega y Depósitos)</h6>
+                    <div class="filtro-toolbar tarifas-barra">
+                        <h6 class="tarifas-titulo"><i class="bi bi-boxes text-warning me-2"></i> Ventas de Almacenamiento (Bodega y Depósitos)</h6>
+                    </div>
+                    <div class="tarifas-acciones">
                         <button type="button" class="btn btn-sm btn-dark fw-bold px-3 shadow-sm" onclick="toggleNuevaTarifaForm('form-cli-almacenamiento')">
                             <i class="bi bi-plus-lg me-1"></i> NUEVA VENTA ALMACENAMIENTO
                         </button>
@@ -3155,13 +3261,15 @@
                 </div>
                 <!-- CLIENTES -> COURIER -->
                 <div class="tab-pane fade" id="cli-courier">
-                    <div class="d-flex justify-content-between align-items-center mb-3 bg-white p-2 rounded border shadow-sm filtro-toolbar">
+                    <div class="filtro-toolbar tarifas-barra">
                         <div class="subtabs-row">
                         <ul class="nav nav-pills sub-tabs" id="pills-cli-courier" role="tablist">
                             <li class="nav-item"><button class="nav-link active" data-bs-toggle="pill" data-bs-target="#cli-courier-nac" type="button"><i class="bi bi-signpost-split me-1"></i>Nacional</button></li>
                             <li class="nav-item"><button class="nav-link" data-bs-toggle="pill" data-bs-target="#cli-courier-int" type="button"><i class="bi bi-globe-americas me-1"></i>Internacional</button></li>
                         </ul>
                         </div>
+                    </div>
+                    <div class="tarifas-acciones">
                         <button type="button" class="btn btn-sm btn-dark fw-bold px-3 shadow-sm" onclick="toggleNuevaTarifaForm('form-cli-courier')">
                             <i class="bi bi-plus-lg me-1"></i> NUEVA VENTA COURIER
                         </button>
@@ -3280,10 +3388,18 @@
                     </div>
                 </div>
                 <div class="tab-pane fade" id="cli-otros">
-                    <div class="p-4 text-center text-muted">Otros recargos y ventas...</div>
+                    <div class="filtro-toolbar tarifas-barra">
+                        <h6 class="tarifas-titulo"><i class="bi bi-buildings text-primary me-2"></i> Otros cobros y recintos</h6>
+                    </div>
+                    <div class="tarifas-vacio">
+                        <i class="bi bi-receipt-cutoff"></i>
+                        <strong>Sin tarifas de venta propias</strong>
+                        <span>Los extracostos y recintos (por ejemplo, Seguridad de la Carga ISPS) se cobran al cliente con el valor del maestro en Proveedores › Otros.</span>
+                    </div>
                 </div>
             </div>
         </div>
+        }
     </div>
 </div>
 
@@ -3376,6 +3492,43 @@
         </div>
     </div>
 </div>
+<div class="modal fade" id="modalCargaMasivaCostos" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="post" asp-page-handler="CargaMasivaCostos" enctype="multipart/form-data">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="bi bi-file-earmark-spreadsheet me-2"></i>Carga masiva de tarifas de costo</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body small">
+                    @* 13-nov: carga por servicio y concepto / subconcepto (o la plantilla general). *@
+                    <div class="cm-servicio row g-2 mb-3" data-tipo-carga="costos" data-defs='@(System.Text.Json.JsonSerializer.Serialize((Model.TipoCargaCostos?.Servicios ?? new List<AtilsonCargoSpa.Helpers.CargaMasivaPorServicioHelper.Definicion>()).Where(d => !Model.SoloTransporte || d.Servicio == "TERRESTRE").Select(d => new { d.Servicio, d.Nombre, d.NombreConcepto, d.Conceptos })))'>
+                        <div class="col-6">
+                            <label class="form-label fw-bold small mb-1">Servicio</label>
+                            <select class="form-select form-select-sm cm-sel-servicio">
+                                @if (!Model.SoloTransporte) { <option value="">Todos (plantilla general)</option> }
+                            </select>
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label fw-bold small mb-1 cm-lbl-concepto">Concepto</label>
+                            <select class="form-select form-select-sm cm-sel-concepto" disabled><option value="">Todos</option></select>
+                        </div>
+                    </div>
+                    <p class="mb-2">1. Elige el servicio (y, si quieres, el concepto), descarga su plantilla, completa una fila por tarifa de proveedor y guárdala como .xlsx. La plantilla trae solo las columnas del servicio y las listas de proveedores, puertos y ciudades.</p>
+                    <a class="btn btn-sm btn-outline-primary fw-bold mb-3 cm-descargar" data-base="?handler=PlantillaCostos" href="?handler=PlantillaCostos"><i class="bi bi-download me-1"></i> <span>Descargar plantilla</span></a>
+                    <input type="hidden" name="servicio" class="cm-h-servicio" />
+                    <input type="hidden" name="concepto" class="cm-h-concepto" />
+                    <p class="mb-2">2. Súbela aquí. Si alguna fila tiene un error no se guarda ninguna y se indica qué corregir.</p>
+                    <input type="file" name="archivoCostos" class="form-control form-control-sm" accept=".xlsx" required />
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-dark fw-bold"><i class="bi bi-upload me-1"></i> Cargar tarifas</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
 <div class="modal fade" id="modalCargaMasivaVentas" tabindex="-1">
     <div class="modal-dialog">
         <div class="modal-content">
@@ -3385,8 +3538,23 @@
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body small">
-                    <p class="mb-2">1. Descarga la plantilla, completa una fila por tarifa (Marítimo, Terrestre, Gate, Almacenamiento o Courier) y guárdala como .xlsx.</p>
-                    <a class="btn btn-sm btn-outline-primary fw-bold mb-3" href="?handler=PlantillaVentas"><i class="bi bi-download me-1"></i> Descargar plantilla</a>
+                    @* 13-nov: carga por servicio y concepto / subconcepto (o la plantilla general). *@
+                    <div class="cm-servicio row g-2 mb-3" data-tipo-carga="ventas" data-defs='@(System.Text.Json.JsonSerializer.Serialize((Model.TipoCargaVentas?.Servicios ?? new List<AtilsonCargoSpa.Helpers.CargaMasivaPorServicioHelper.Definicion>()).Select(d => new { d.Servicio, d.Nombre, d.NombreConcepto, d.Conceptos })))'>
+                        <div class="col-6">
+                            <label class="form-label fw-bold small mb-1">Servicio</label>
+                            <select class="form-select form-select-sm cm-sel-servicio">
+                                <option value="">Todos (plantilla general)</option>
+                            </select>
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label fw-bold small mb-1 cm-lbl-concepto">Concepto</label>
+                            <select class="form-select form-select-sm cm-sel-concepto" disabled><option value="">Todos</option></select>
+                        </div>
+                    </div>
+                    <p class="mb-2">1. Elige el servicio (y, si quieres, el concepto), descarga su plantilla, completa una fila por tarifa y guárdala como .xlsx.</p>
+                    <a class="btn btn-sm btn-outline-primary fw-bold mb-3 cm-descargar" data-base="?handler=PlantillaVentas" href="?handler=PlantillaVentas"><i class="bi bi-download me-1"></i> <span>Descargar plantilla</span></a>
+                    <input type="hidden" name="servicio" class="cm-h-servicio" />
+                    <input type="hidden" name="concepto" class="cm-h-concepto" />
                     <p class="mb-2">2. Súbela aquí. Si alguna fila tiene un error no se guarda ninguna y se indica qué corregir.</p>
                     <input type="file" name="archivoVentas" class="form-control form-control-sm" accept=".xlsx" required />
                 </div>
@@ -3398,6 +3566,37 @@
         </div>
     </div>
 </div>
+<script>
+    // 13-nov: cargas masivas por servicio y concepto. El servicio y el concepto elegidos arman la
+    // plantilla a descargar y viajan con el archivo (el servidor rechaza filas de otro servicio).
+    (function () {
+        document.querySelectorAll('.cm-servicio').forEach(function (caja) {
+            const modal = caja.closest('.modal-body');
+            let defs = [];
+            try { defs = JSON.parse(caja.dataset.defs || '[]'); } catch (e) { defs = []; }
+            const selS = caja.querySelector('.cm-sel-servicio'), selC = caja.querySelector('.cm-sel-concepto'), lbl = caja.querySelector('.cm-lbl-concepto');
+            const link = modal.querySelector('.cm-descargar'), hS = modal.querySelector('.cm-h-servicio'), hC = modal.querySelector('.cm-h-concepto');
+            defs.forEach(d => { const o = document.createElement('option'); o.value = d.Servicio; o.textContent = d.Nombre; selS.appendChild(o); });
+            function actualizar() {
+                const d = defs.find(x => x.Servicio === selS.value);
+                if (selS.dataset.ultimo !== selS.value) {
+                    selS.dataset.ultimo = selS.value;
+                    selC.innerHTML = '<option value="">Todos</option>';
+                    (d ? d.Conceptos : []).forEach(c => { const o = document.createElement('option'); o.value = c; o.textContent = c; selC.appendChild(o); });
+                    selC.disabled = !d;
+                    lbl.textContent = d ? d.NombreConcepto + ' (concepto)' : 'Concepto';
+                }
+                hS.value = selS.value; hC.value = selC.value;
+                const q = (selS.value ? '&servicio=' + encodeURIComponent(selS.value) : '') + (selC.value ? '&concepto=' + encodeURIComponent(selC.value) : '');
+                link.href = link.dataset.base + q;
+                link.querySelector('span').textContent = selS.value ? 'Descargar plantilla de ' + selS.options[selS.selectedIndex].textContent.split(' (')[0] + (selC.value ? ' · ' + selC.value : '') : 'Descargar plantilla';
+            }
+            selS.addEventListener('change', actualizar);
+            selC.addEventListener('change', actualizar);
+            actualizar();
+        });
+    })();
+</script>
 <div class="modal fade" id="modalEditarMaritimo" tabindex="-1">
     <div class="modal-dialog">
         <div class="modal-content">
@@ -3410,7 +3609,10 @@
                     <input type="hidden" asp-for="EditarCostoMaritimo.Id" id="editMarId">
                     <div class="mb-3"><label class="form-label">Nuevo Flete USD</label><input asp-for="EditarCostoMaritimo.TarifaUsd" id="editMarValor" type="number" step="0.01" class="form-control fw-bold" required></div>
                     <input type="hidden" asp-for="EditarCostoMaritimo.RebateUsd" id="editMarRebate">
-                    <div class="mb-3"><label class="form-label">Fecha Vigencia</label><input asp-for="EditarCostoMaritimo.FechaInicioVigencia" id="editMarFecha" type="date" class="form-control"></div>
+                    <div class="row g-2 mb-3">
+                        <div class="col-md-6"><label class="form-label">Vigente desde</label><input asp-for="EditarCostoMaritimo.FechaInicioVigencia" id="editMarFecha" type="date" class="form-control"></div>
+                        <div class="col-md-6"><label class="form-label">Vigente hasta</label><input asp-for="EditarCostoMaritimo.FechaFinVigencia" id="editMarFechaFin" type="date" class="form-control" title="Vacío = vigencia indefinida"></div>
+                    </div>
                     <div class="mb-0"><label class="form-label text-danger">Motivo del Cambio (Auditoría) *</label><textarea name="ComentarioAuditoria" id="editMarComentario" class="form-control" rows="2" placeholder="Explique el motivo de este ajuste..." required></textarea></div>
                 </div>
                 <div class="modal-footer">
@@ -3529,15 +3731,13 @@
 </div>
 
 @section Scripts {
+    <partial name="_PuertosPais" />
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
     <script src="~/js/comercial-index.js" asp-append-version="true"></script>
         <script>
         function abrirEditarDetalleAlm(btn) {
-            document.getElementById('detalleAlmEditId').value = btn.dataset.id;
-            document.getElementById('detalleAlmEditProv').textContent = btn.dataset.proveedor || '';
-            document.getElementById('detalleAlmEditTexto').value = btn.dataset.comentarios || '';
-            new bootstrap.Modal(document.getElementById('modalEditarDetalleAlm')).show();
+            return abrirEditorTarifaFila('Almacenamiento', Number(btn.dataset.id));
         }
     </script>
 }

@@ -53,7 +53,7 @@
         --doc-bg-faint: #fafbfc;      /* fondo casi blanco (inputs de solo lectura) */
     }
 
-    body { background: #f1f5f9; font-family: 'Inter', system-ui, sans-serif; }
+    body { background: #f1f5f9; font-family: var(--font-sans); }
 
     /* oct-2026: cabecera rediseñada — una sola fila (antes: fila de título + grid de 4
        columnas que repetía Cliente/Servicio ya mostrados en el subtítulo). Ver el resto
@@ -178,7 +178,7 @@
     }
 
     .font-mono {
-    font-family: 'SFMono-Regular', Consolas, monospace;
+    font-family: var(--font-mono);
     }
 
     .fw-black {
@@ -249,7 +249,7 @@
 
     body {
     background-color: #f1f5f9;
-    font-family: 'Inter', system-ui, sans-serif;
+    font-family: var(--font-sans);
     }
 
     /* NAVEGACIÓN Y FILTROS */
@@ -2876,3 +2876,10 @@ select.inline-field:not(:disabled), select.banner-input:not(:disabled), select.e
 .ter-ruta-paradas small { display: block; color: #047857; font-size: 11px; }
 .ter-ruta-paradas li.aprox small { color: #b45309; }
 .ter-ruta-paradas li.falta small { color: #b91c1c; }
+
+/* Nave / Viaje desde el maestro de itinerarios (nov-2026) */
+.naves-hint { font-size: 11px; color: #64748b; margin-top: 4px; line-height: 1.35; }
+.naves-hint--ok { color: #15803d; }
+.naves-hint--error { color: #b45309; }
+.naves-hint a { font-weight: 700; }
+.edit-mode .naves-hint.edit-only-inline { display: block !important; }

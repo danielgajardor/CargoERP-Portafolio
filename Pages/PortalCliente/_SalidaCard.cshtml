@@ -57,6 +57,11 @@
                 {
                     <span class="@(corteVencido ? "is-late" : "")"><i class="bi bi-file-earmark-check"></i> Corte doc. @s.CorteDocumental.Value.ToString("d MMM, HH:mm", cl)</span>
                 }
+                @* 15-nov: stacking de la nave (Dry / Reefer) cuando la naviera ya lo informó. *@
+                @foreach (var stk in AtilsonCargoSpa.Services.FechasNave.Resumen(s.StackingInicioDry, s.StackingFinDry, s.StackingInicioReefer, s.StackingFinReefer))
+                {
+                    <span title="Stacking @(stk.Tipo == "RF" ? "Reefer" : "Dry"): entrega del contenedor en puerto"><i class="bi bi-box-seam"></i> Stacking @(stk.Tipo == "RF" ? "Reefer" : "Dry") @stk.Rango</span>
+                }
                 <span><i class="bi bi-clock"></i> @(diasParaZarpe <= 0 ? "Zarpa hoy" : diasParaZarpe == 1 ? "Zarpa mañana" : $"Zarpa en {diasParaZarpe} días")</span>
             </span>
             @if (esSelector)

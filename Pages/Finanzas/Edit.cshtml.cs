@@ -68,8 +68,8 @@ namespace AtilsonCargoSpa.Pages.Finanzas
                 var tx = txs.FirstOrDefault(t => t.Id == txId);
                 if (tx != null)
                 {
-                    string montoStr = Request.Form[key].ToString().Replace(",", ".");
-                    if (decimal.TryParse(montoStr, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out decimal m))
+                    // nov-2026: "450.000" es 450 mil (antes quedaba en 450); ver MontoHelper.
+                    if (AtilsonCargoSpa.Helpers.MontoHelper.TryParse(Request.Form[key], out decimal m))
                     {
                         tx.MontoNeto = m;
                     }

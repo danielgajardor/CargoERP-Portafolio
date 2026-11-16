@@ -23,8 +23,7 @@
    son nombres de clase que se repiten en otras vistas (ej. Clientes/Edit
    usa .table-erp y .empty-state es un componente global reutilizable).
    ========================================================================= */
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@500;600&display=swap');
-
+/* Fuentes: se cargan una sola vez en _Layout (nov-2026). */
 /* ---------- 0. Tokens ---------- */
 .dash-premium {
     --dash-brand: #6d2d9e;
@@ -37,7 +36,7 @@
     --dash-shadow: 0 1px 2px rgba(20,12,38,.04), 0 18px 40px -26px rgba(44,27,77,.28);
     --dash-shadow-lg: 0 28px 60px -22px rgba(44,27,77,.4);
 
-    font-family: 'Plus Jakarta Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+    font-family: var(--font-sans);
 
     /* Esta vista ya traía su propio --atilson-dark (#0f172a, slate) y
        --atilson-dark-2 (#1e2338) — se realinean a la tinta violeta-oscura
@@ -52,7 +51,7 @@
     --bg-panel: #ffffff;
 }
 .dash-premium .tabular, .dash-premium .cmd-clock, .dash-premium .bkg-ref {
-    font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Consolas, monospace !important;
+    font-family: var(--font-mono) !important;
 }
 
 body:has(.dash-premium) {
@@ -277,7 +276,7 @@ body:has(.dash-premium) {
         .dash-premium .nv-ops a:hover { color: var(--atilson-purple); }
 
 .dash-premium .nv-ops__bkg {
-    font-family: 'SFMono-Regular', Consolas, monospace;
+    font-family: var(--font-mono);
     font-size: 11.5px;
     font-weight: 800;
     color: var(--atilson-purple);

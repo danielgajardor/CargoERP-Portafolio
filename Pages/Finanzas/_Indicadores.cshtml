@@ -1,24 +1,35 @@
-@* UF, dólar observado y euro vigentes (nov-2026), en una línea, como en el sitio web.
-   Son los valores que usa Finanzas para convertir montos a pesos. *@
+@* Indicadores reales: Banco Central (REST BDE) con fecha/fuente visibles;
+   no mostrar cotizaciones inventadas cuando no hay datos disponibles. *@
 @inject AtilsonCargoSpa.Services.IndicadoresEconomicosService Indicadores
 @{
     var es = System.Globalization.CultureInfo.GetCultureInfo("es-CL");
-    var uf = await Indicadores.ObtenerUfAsync();
-    var usd = await Indicadores.ObtenerDolarAsync();
-    var eur = await Indicadores.ObtenerEuroAsync();
-    bool alDia = !(uf.EsRespaldo || usd.EsRespaldo || eur.EsRespaldo);
-    // Fuente principal (nov-2026): si los tres vienen del Banco Central, se dice en la línea.
-    bool delBancoCentral = alDia && new[] { uf, usd, eur }.All(v => v.Fuente == AtilsonCargoSpa.Services.IndicadoresEconomicosService.FuenteBancoCentral);
+    var datos = await System.Threading.Tasks.Task.WhenAll(
+        Indicadores.ObtenerUfAsync(), Indicadores.ObtenerDolarAsync(), Indicadores.ObtenerEuroAsync());
+    var uf = datos[0]; var usd = datos[1]; var eur = datos[2];
+    bool hayDatos = datos.All(v => v.Valor > 0 && v.Fecha.HasValue);
+    bool actualizados = hayDatos && datos.All(v => !v.EsRespaldo &&
+        v.Fecha!.Value.Date >= DateTime.Today.AddDays(-7));
+    bool todosBc = actualizados && datos.All(v => v.Fuente == AtilsonCargoSpa.Services.IndicadoresEconomicosService.FuenteBancoCentral);
+    string Monto(AtilsonCargoSpa.Services.IndicadorValor v) =>
+        v.Valor > 0 && v.Fecha.HasValue ? "$" + v.Valor.ToString("N2", es) : "Sin dato";
     string Ayuda(string nombre, AtilsonCargoSpa.Services.IndicadorValor v) =>
-        nombre + (v.Fecha.HasValue ? " del " + v.Fecha.Value.ToString("dd-MM-yyyy") : "") + " · " + v.Fuente;
+        nombre + (v.Fecha.HasValue ? " del " + v.Fecha.Value.ToString("dd-MM-yyyy") : " sin fecha") + " · " + v.Fuente;
 }
-<div class="fin-ind @(alDia ? "" : "fin-ind--viejo")" aria-label="Indicadores del día">
-    <span class="fin-ind-punto" title="@(alDia ? "Valores del día" : "Último valor disponible")" aria-hidden="true"></span>
-    <span title="@Ayuda("UF", uf)"><b>UF</b> $@uf.Valor.ToString("N2", es)</span>
-    <span title="@Ayuda("Dólar observado", usd)"><b>USD</b> $@usd.Valor.ToString("N2", es)</span>
-    <span title="@Ayuda("Euro", eur)"><b>EUR</b> $@eur.Valor.ToString("N2", es)</span>
-    @if (delBancoCentral)
+<div class="fin-ind @(actualizados ? "" : "fin-ind--viejo")" aria-label="Indicadores monetarios con fuente y fecha">
+    <span class="fin-ind-punto" title="@(actualizados ? "Valores publicados" : "Revisa fecha y fuente antes de convertir")" aria-hidden="true"></span>
+    <span title="@Ayuda("UF", uf)"><b>UF</b> @Monto(uf)</span>
+    <span title="@Ayuda("Dólar observado", usd)"><b>USD</b> @Monto(usd)</span>
+    <span title="@Ayuda("Euro", eur)"><b>EUR</b> @Monto(eur)</span>
+    @if (todosBc)
     {
         <small class="fin-ind-fuente">Banco Central</small>
+    }
+    else if (!Indicadores.BancoCentralConfigurado)
+    {
+        <small class="fin-ind-fuente" title="Configurar BancoCentral__Token como variable de entorno segura">Banco Central sin configurar</small>
+    }
+    else
+    {
+        <small class="fin-ind-fuente" title="Pasa el cursor sobre cada indicador para consultar su origen y fecha">Fuente alternativa / último publicado</small>
     }
 </div>

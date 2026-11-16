@@ -363,3 +363,15 @@ MigrationBackup/
 FodyWeavers.xsd
 # Último dólar/UF obtenido (lo genera el ERP)
 App_Data/indicadores.json
+
+# Vista previa estática para Netlify (Herramientas/exportar_sitio_estatico.py)
+sitio-netlify/
+sitio-netlify.zip
+
+# Archivos subidos por los usuarios (nov-2026): no deben versionarse ni viajar con git pull.
+# Los que ya están en el repositorio siguen versionados hasta que se quiten con git rm --cached.
+wwwroot/uploads/
+App_Data/
+
+# Correos guardados en modo demostración (Smtp:Modo = Demo)
+correos-demo/

@@ -1,3 +1,5 @@
+@using Microsoft.Extensions.Caching.Memory
+@inject Microsoft.Extensions.Caching.Memory.IMemoryCache LayoutCache
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -36,7 +38,10 @@
     <link rel="stylesheet" href="~/css/design-system.css" asp-append-version="true" />
     <link rel="stylesheet" href="~/css/traspaso-finanzas.css" asp-append-version="true" />
     <link rel="stylesheet" href="~/css/erp-comun.css" asp-append-version="true" />
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="~/css/chat-aviso.css" asp-append-version="true" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
 
     <style>
@@ -52,7 +57,7 @@
             }
 
             body {
-                font-family: 'Inter', sans-serif;
+                font-family: var(--font-sans);
                 background-color: var(--bg-light);
                 color: var(--dark-text);
                 overflow-x: hidden;
@@ -373,43 +378,80 @@
         // Jefaturas (nombres en Helpers/PermisosEquipo.cs) o rol Administrador.
         bool esJefatura = AtilsonCargoSpa.Helpers.PermisosEquipo.EsJefatura(User);
         bool esAdminEquipo = AtilsonCargoSpa.Helpers.PermisosEquipo.EsAdmin(User);
-        // Traspaso Ops -> Finanzas (oct-2026): bookings NUEVOS o reabiertos que Finanzas aún no abre.
-        int traspasosPendientes = 0;
-        if (esJefatura)
-        {
-            var traspasoSvc = Context.RequestServices.GetService(typeof(AtilsonCargoSpa.Services.TraspasoFinanzasService)) as AtilsonCargoSpa.Services.TraspasoFinanzasService;
-            if (traspasoSvc != null) traspasosPendientes = await traspasoSvc.ContarPendientesAsync();
-        }
-        // Portal (oct-2026): empresas registradas desde el portal que esperan aprobación,
-        // y plantas/depósitos que registraron los clientes y Atilson aún no valida.
-        int registrosPendientes = 0;
-        int plantasPorValidar = 0, depositosPorValidar = 0;
-        if (User.Identity?.IsAuthenticated == true && !User.IsInRole("Cliente"))
-        {
-            var registroSvc = Context.RequestServices.GetService(typeof(AtilsonCargoSpa.Services.RegistroClientesService)) as AtilsonCargoSpa.Services.RegistroClientesService;
-            if (registroSvc != null)
+        // Permisos por módulo (13-nov-2026, Helpers/PermisosEquipo.cs).
+        bool puedeFinanzas = AtilsonCargoSpa.Helpers.PermisosEquipo.PuedeFinanzas(User);
+        bool puedeComercial = AtilsonCargoSpa.Helpers.PermisosEquipo.PuedeComercial(User);
+        bool soloTarifasTransporte = AtilsonCargoSpa.Helpers.PermisosEquipo.SoloTarifasTransporte(User);
+        // Vistas por usuario (13-nov-2026): cada enlace del menú según PermisosEquipo.PuedeVer.
+        Func<string, bool> ver = clave => AtilsonCargoSpa.Helpers.PermisosEquipo.PuedeVer(User, clave);
+        bool verOperaciones = ver("operaciones.mainboard") || ver("operaciones.cotizaciones") || ver("operaciones.itinerarios");
+        bool verTarifas = ver("comercial.tarifas"), verTransporte = ver("comercial.transporte"), verAcuerdos = ver("comercial.acuerdos");
+        bool verComercial = verTarifas || verTransporte || verAcuerdos;
+        string[] vistasMaestros = { "maestros.clientes", "maestros.solicitudes", "maestros.plantas", "maestros.depositos", "maestros.proveedores", "maestros.agencias", "maestros.navieras", "maestros.naves", "maestros.puertos", "maestros.ciudades" };
+        bool verMaestros = esAdminEquipo || vistasMaestros.Any(ver);
+        bool verEquipo = ver("equipo.soporte") || ver("equipo.chat") || ver("equipo.directorio");
+        // Antes esta plantilla ejecutaba 8-12 consultas SQL SECUENCIALES
+        // en CADA vista, incluso para simples cambios de pestaña. Un resumen
+        // por usuario con vencimiento absoluto corto conserva los contadores
+        // sin bloquear la navegación esperando consultas repetidas.
+        var rolClave = string.Join(",", User.FindAll(System.Security.Claims.ClaimTypes.Role)
+            .Select(c => c.Value).OrderBy(x => x, StringComparer.Ordinal));
+        string usuarioClave = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? nombreUsuario;
+        var resumenMenu = await LayoutCache.GetOrCreateAsync(
+            "atilson-menu-v1:" + usuarioClave + ":" + nombreUsuario + ":" + rolClave,
+            async entry =>
             {
-                registrosPendientes = await registroSvc.ContarPendientesAsync();
-                (plantasPorValidar, depositosPorValidar) = await registroSvc.ContarUbicacionesPorValidarAsync();
-            }
-        }
-        // Equipo Atilson (oct-2026): cuentas del equipo por validar (solo administradores).
-        int cuentasEquipoPendientes = 0;
-        if (esAdminEquipo)
-        {
-            var equipoSvc = Context.RequestServices.GetService(typeof(AtilsonCargoSpa.Services.RegistroEquipoService)) as AtilsonCargoSpa.Services.RegistroEquipoService;
-            if (equipoSvc != null) cuentasEquipoPendientes = await equipoSvc.ContarPendientesAsync();
-        }
-        // Mi perfil y Soporte clientes (oct-2026): foto del pie y consultas por responder.
-        AtilsonCargoSpa.Services.ResumenPerfil? miPerfil = null;
-        int consultasAbiertas = 0;
-        if (User.Identity?.IsAuthenticated == true)
-        {
-            if (Context.RequestServices.GetService(typeof(AtilsonCargoSpa.Services.PerfilUsuarioService)) is AtilsonCargoSpa.Services.PerfilUsuarioService perfilSvc)
-                miPerfil = await perfilSvc.ResumenAsync(User);
-            if (!User.IsInRole("Cliente") && Context.RequestServices.GetService(typeof(AtilsonCargoSpa.Services.SoporteClientesService)) is AtilsonCargoSpa.Services.SoporteClientesService soporteSvc)
-                consultasAbiertas = await soporteSvc.ContarAbiertosAsync();
-        }
+                entry.AbsoluteExpirationRelativeToNow = TimeSpan.FromSeconds(15);
+                int traspasos = 0, registros = 0, plantas = 0, depositos = 0;
+                int equipo = 0, soporte = 0, chat = 0;
+                AtilsonCargoSpa.Services.ResumenPerfil? perfil = null;
+
+                if (esJefatura &&
+                    Context.RequestServices.GetService(typeof(AtilsonCargoSpa.Services.TraspasoFinanzasService)) is
+                        AtilsonCargoSpa.Services.TraspasoFinanzasService traspasoSvc)
+                    traspasos = await traspasoSvc.ContarPendientesAsync();
+
+                if (User.Identity?.IsAuthenticated == true && !User.IsInRole("Cliente") &&
+                    Context.RequestServices.GetService(typeof(AtilsonCargoSpa.Services.RegistroClientesService)) is
+                        AtilsonCargoSpa.Services.RegistroClientesService registroSvc)
+                {
+                    registros = await registroSvc.ContarPendientesAsync();
+                    (plantas, depositos) = await registroSvc.ContarUbicacionesPorValidarAsync();
+                }
+
+                if (esAdminEquipo &&
+                    Context.RequestServices.GetService(typeof(AtilsonCargoSpa.Services.RegistroEquipoService)) is
+                        AtilsonCargoSpa.Services.RegistroEquipoService equipoSvc)
+                    equipo = await equipoSvc.ContarPendientesAsync();
+
+                if (User.Identity?.IsAuthenticated == true)
+                {
+                    if (Context.RequestServices.GetService(typeof(AtilsonCargoSpa.Services.PerfilUsuarioService)) is
+                            AtilsonCargoSpa.Services.PerfilUsuarioService perfilSvc)
+                        perfil = await perfilSvc.ResumenAsync(User);
+                    if (!User.IsInRole("Cliente") &&
+                        Context.RequestServices.GetService(typeof(AtilsonCargoSpa.Services.SoporteClientesService)) is
+                            AtilsonCargoSpa.Services.SoporteClientesService soporteSvc)
+                        soporte = (await soporteSvc.AvisosPendientesEquipoAsync()).Total;
+                    if (!User.IsInRole("Cliente") && perfil != null &&
+                        Context.RequestServices.GetService(typeof(AtilsonCargoSpa.Services.ChatInternoService)) is
+                            AtilsonCargoSpa.Services.ChatInternoService chatSvc)
+                        chat = (await chatSvc.NoLeidosAsync(perfil.IdUsuario, int.MaxValue)).Total;
+                }
+
+                return (Traspasos: traspasos, Registros: registros, Plantas: plantas,
+                    Depositos: depositos, Equipo: equipo, Soporte: soporte,
+                    Chat: chat, Perfil: perfil);
+            });
+
+        int traspasosPendientes = resumenMenu.Traspasos;
+        int registrosPendientes = resumenMenu.Registros;
+        int plantasPorValidar = resumenMenu.Plantas;
+        int depositosPorValidar = resumenMenu.Depositos;
+        int cuentasEquipoPendientes = resumenMenu.Equipo;
+        int consultasAbiertas = resumenMenu.Soporte;
+        int chatNoLeidos = resumenMenu.Chat;
+        AtilsonCargoSpa.Services.ResumenPerfil? miPerfil = resumenMenu.Perfil;
     }
 
     <!-- SIDEBAR -->
@@ -431,6 +473,8 @@
                 </a>
             </li>
 
+            @if (verOperaciones)
+            {
             <li class="nav-item sidebar-title">Operativa</li>
 
             <li class="nav-item">
@@ -441,17 +485,20 @@
                 </a>
                 <div class="collapse" id="menuOperaciones" data-bs-parent="#sidebarMenu">
                     <ul class="nav flex-column">
-                        <li><a class="nav-link sub-link" asp-page="/Operaciones/Index">Main Board</a></li>
-                        <li><a class="nav-link sub-link" asp-page="/Operaciones/Cotizaciones">Cotizaciones</a></li>
-                        <li><a class="nav-link sub-link" asp-page="/Operaciones/Itinerarios">Itinerarios de Naves</a></li>
+                        @if (ver("operaciones.mainboard")) { <li><a class="nav-link sub-link" asp-page="/Operaciones/Index">Main Board</a></li> }
+                        @if (ver("operaciones.cotizaciones")) { <li><a class="nav-link sub-link" asp-page="/Operaciones/Cotizaciones">Cotizaciones</a></li> }
+                        @if (ver("operaciones.itinerarios")) { <li><a class="nav-link sub-link" asp-page="/Operaciones/Itinerarios">Itinerarios de Naves</a></li> }
                     </ul>
                 </div>
             </li>
+            }
 
-            @if (esJefatura)
+            @if (puedeFinanzas || verComercial || ver("integraciones"))
             {
                 <li class="nav-item sidebar-title">Negocios</li>
-
+            }
+            @if (puedeFinanzas)
+            {
                 <li class="nav-item">
                     <a class="nav-link" data-bs-toggle="collapse" href="#menuFinanzas" role="button" aria-expanded="false" aria-controls="menuFinanzas">
                         <i class="bi bi-currency-dollar icon-main"></i>
@@ -460,16 +507,20 @@
                     </a>
                                         <div class="collapse" id="menuFinanzas" data-bs-parent="#sidebarMenu">
                         <ul class="nav flex-column">
-                            <li><a class="nav-link sub-link" asp-page="/Finanzas/Index">Main Board</a></li>
-                            <li><a class="nav-link sub-link" asp-page="/Finanzas/ControlFinanciero">Control Financiero @if (traspasosPendientes > 0) { <span class="nav-badge-traspaso" data-traspaso-contador title="Bookings nuevos o reabiertos por Operaciones">@traspasosPendientes</span> }</a></li>
-                            <li><a class="nav-link sub-link" asp-page="/Finanzas/Cobranza">Cobranza</a></li>
-                            <li><a class="nav-link sub-link" asp-page="/Finanzas/OrdenesCompra">Órdenes de Compra</a></li>
-                            <li><a class="nav-link sub-link" asp-page="/Finanzas/Facturacion">Facturación Clientes</a></li>
-                            <li><a class="nav-link sub-link" asp-page="/Finanzas/ConsolidadoCliente">Consolidado Cliente</a></li>
+                            @if (ver("finanzas.mainboard")) { <li><a class="nav-link sub-link" asp-page="/Finanzas/Index">Main Board</a></li> }
+                            @if (ver("finanzas.control")) { <li><a class="nav-link sub-link" asp-page="/Finanzas/ControlFinanciero">Control Financiero @if (traspasosPendientes > 0) { <span class="nav-badge-traspaso" data-traspaso-contador title="Bookings nuevos o reabiertos por Operaciones">@traspasosPendientes</span> }</a></li> }
+                            @if (ver("finanzas.pagos")) { <li><a class="nav-link sub-link" asp-page="/Finanzas/Pagos">Pagos</a></li> }
+                            @if (ver("finanzas.respaldos")) { <li><a class="nav-link sub-link" asp-page="/Finanzas/Respaldos">Respaldos</a></li> }
+                            @if (ver("finanzas.historicos")) { <li><a class="nav-link sub-link" asp-page="/Finanzas/DatosHistoricos">Datos Históricos</a></li> }
+                            @if (ver("finanzas.cobranza")) { <li><a class="nav-link sub-link" asp-page="/Finanzas/Cobranza">Cobranza</a></li> }
+                            @if (ver("finanzas.ordenes")) { <li><a class="nav-link sub-link" asp-page="/Finanzas/OrdenesCompra">Órdenes de Compra</a></li> }
+                            @if (ver("finanzas.consolidado")) { <li><a class="nav-link sub-link" asp-page="/Finanzas/ConsolidadoCliente">Consolidado Cliente</a></li> }
                         </ul>
                     </div>
                 </li>
-
+            }
+            @if (verComercial)
+            {
                 <li class="nav-item">
                     <a class="nav-link" data-bs-toggle="collapse" href="#menuComercial" role="button" aria-expanded="false" aria-controls="menuComercial">
                         <i class="bi bi-tags-fill icon-main"></i>
@@ -478,31 +529,48 @@
                     </a>
                     <div class="collapse" id="menuComercial" data-bs-parent="#sidebarMenu">
                         <ul class="nav flex-column">
-                            <li><a class="nav-link sub-link" asp-page="/Comercial/Index">Tarifas</a></li>
-                            <li><a class="nav-link sub-link" asp-page="/Comercial/AcuerdosOperativos">Acuerdos por Booking</a></li>
+                            @if (verTarifas) { <li><a class="nav-link sub-link" asp-page="/Comercial/Index">Tarifas</a></li> }
+                            else if (verTransporte) { <li><a class="nav-link sub-link" asp-page="/Comercial/Index">Tarifas de transporte</a></li> }
+                            @if (verAcuerdos) { <li><a class="nav-link sub-link" asp-page="/Comercial/AcuerdosOperativos">Acuerdos por Booking</a></li> }
                         </ul>
                     </div>
                 </li>
             }
 
-            <li class="nav-item sidebar-title">Clientes y equipo</li>
-
+            @if (ver("integraciones"))
+            {
             <li class="nav-item">
-                <a class="nav-link @(currentUrl == "/App/Soporte" ? "active" : "")" asp-page="/App/Soporte" title="Soporte clientes">
-                    <i class="bi bi-headset icon-main"></i>
-                    <span class="nav-text">Soporte clientes @if (consultasAbiertas > 0) { <span class="nav-badge-traspaso" title="Consultas por responder">@consultasAbiertas</span> }</span>
+                <a class="nav-link @(currentUrl.StartsWith("/Integraciones") ? "active" : "")" asp-page="/Integraciones/Index">
+                    <i class="bi bi-plug-fill icon-main"></i>
+                    <span class="nav-text">Integraciones</span>
                 </a>
             </li>
-            <li class="nav-item">
+            }
+
+            @if (verEquipo) { <li class="nav-item sidebar-title">Clientes y equipo</li> }
+
+            <li class="nav-item @(ver("equipo.soporte") ? "" : "d-none")">
+                <a class="nav-link @(currentUrl == "/App/Soporte" ? "active" : "")" asp-page="/App/Soporte" title="Soporte clientes">
+                    <i class="bi bi-headset icon-main"></i>
+                    <span class="nav-text">Soporte clientes <span class="nav-badge-traspaso" id="navSoporteBadge" data-usuario="@usuarioClave" title="Mensajes de clientes pendientes de respuesta" hidden="@(consultasAbiertas == 0)">@(consultasAbiertas > 99 ? "99+" : consultasAbiertas.ToString())</span></span>
+                </a>
+            </li>
+            <li class="nav-item @(ver("equipo.chat") ? "" : "d-none")">
+                <a class="nav-link @(currentUrl == "/App/Chat" ? "active" : "")" asp-page="/App/Chat" title="Chat del equipo">
+                    <i class="bi bi-chat-dots-fill icon-main"></i>
+                    <span class="nav-text">Chat del equipo <span class="nav-badge-traspaso" id="navChatBadge" title="Mensajes sin leer" @(chatNoLeidos == 0 ? "hidden" : "")>@(chatNoLeidos > 99 ? "99+" : chatNoLeidos.ToString())</span></span>
+                </a>
+            </li>
+            <li class="nav-item @(ver("equipo.directorio") ? "" : "d-none")">
                 <a class="nav-link @(currentUrl == "/App/Directorio" ? "active" : "")" asp-page="/App/Directorio" title="Directorio del equipo">
                     <i class="bi bi-people-fill icon-main"></i>
                     <span class="nav-text">Directorio del equipo</span>
                 </a>
             </li>
 
-            <li class="nav-item sidebar-title">Configuración Base</li>
+            @if (verMaestros) { <li class="nav-item sidebar-title">Configuración Base</li> }
 
-            <li class="nav-item">
+            <li class="nav-item @(verMaestros ? "" : "d-none")">
                 <a class="nav-link" data-bs-toggle="collapse" href="#menuMaestros" role="button" aria-expanded="false" aria-controls="menuMaestros">
                     <i class="bi bi-buildings-fill icon-main"></i>
                     <span class="nav-text">Maestros @if (registrosPendientes + plantasPorValidar + depositosPorValidar + cuentasEquipoPendientes > 0) { <span class="nav-badge-traspaso" title="Registros por revisar">@(registrosPendientes + plantasPorValidar + depositosPorValidar + cuentasEquipoPendientes)</span> }</span>
@@ -510,18 +578,24 @@
                 </a>
                 <div class="collapse" id="menuMaestros" data-bs-parent="#sidebarMenu">
                     <ul class="nav flex-column">
-                        <li><a class="nav-link sub-link" asp-page="/App/Clientes/Index">Mis Clientes</a></li>
-                        <li><a class="nav-link sub-link" asp-page="/App/Clientes/Solicitudes">Solicitudes de registro @if (registrosPendientes > 0) { <span class="nav-badge-traspaso" title="Empresas esperando aprobación">@registrosPendientes</span> }</a></li>
-                        <li><a class="nav-link sub-link" asp-page="/App/Plantas/Index">Plantas @if (plantasPorValidar > 0) { <span class="nav-badge-traspaso" title="Plantas registradas por clientes, por validar">@plantasPorValidar</span> }</a></li>
-                        <li><a class="nav-link sub-link" asp-page="/App/Depositos/Index">Depósitos @if (depositosPorValidar > 0) { <span class="nav-badge-traspaso" title="Depósitos registrados por clientes, por validar">@depositosPorValidar</span> }</a></li>
-                        <li><a class="nav-link sub-link" asp-page="/App/Proveedores/Index">Proveedores</a></li>
-                        <li><a class="nav-link sub-link" asp-page="/App/Agencias/Index">Agencias de aduana</a></li>
-                        <li><a class="nav-link sub-link" asp-page="/App/Navieras/Index">Navieras</a></li>
-                        <li><a class="nav-link sub-link" asp-page="/App/Puertos/Index">Puertos</a></li>
-                        <li><a class="nav-link sub-link" asp-page="/App/Ciudades/Index">Ciudades</a></li>
+                        @if (ver("maestros.clientes")) { <li><a class="nav-link sub-link" asp-page="/App/Clientes/Index">Mis Clientes</a></li> }
+                        <li class="@(ver("maestros.solicitudes") ? "" : "d-none")"><a class="nav-link sub-link" asp-page="/App/Clientes/Solicitudes">Solicitudes de registro @if (registrosPendientes > 0) { <span class="nav-badge-traspaso" title="Empresas esperando aprobación">@registrosPendientes</span> }</a></li>
+                        <li class="@(ver("maestros.plantas") ? "" : "d-none")"><a class="nav-link sub-link" asp-page="/App/Plantas/Index">Plantas @if (plantasPorValidar > 0) { <span class="nav-badge-traspaso" title="Plantas registradas por clientes, por validar">@plantasPorValidar</span> }</a></li>
+                        <li class="@(ver("maestros.depositos") ? "" : "d-none")"><a class="nav-link sub-link" asp-page="/App/Depositos/Index">Depósitos @if (depositosPorValidar > 0) { <span class="nav-badge-traspaso" title="Ubicaciones registradas por clientes, por validar">@depositosPorValidar</span> }</a></li>
+                        @if (ver("maestros.proveedores"))
+                        {
+                            <li><a class="nav-link sub-link" asp-page="/App/Proveedores/Index" asp-route-tipo="transporte">Transportistas</a></li>
+                            <li><a class="nav-link sub-link" asp-page="/App/Proveedores/Index" asp-route-tipo="deposito">Depósitos de almacenamiento</a></li>
+                        }
+                        @if (ver("maestros.agencias")) { <li><a class="nav-link sub-link" asp-page="/App/Agencias/Index">Agencias de aduana</a></li> }
+                        @if (ver("maestros.navieras")) { <li><a class="nav-link sub-link" asp-page="/App/Navieras/Index">Navieras</a></li> }
+                        @if (ver("maestros.naves")) { <li><a class="nav-link sub-link" asp-page="/App/Naves/Index">Naves</a></li> }
+                        @if (ver("maestros.puertos")) { <li><a class="nav-link sub-link" asp-page="/App/Puertos/Index">Puertos</a></li> }
+                        @if (ver("maestros.ciudades")) { <li><a class="nav-link sub-link" asp-page="/App/Ciudades/Index">Ciudades</a></li> }
                         @if (esAdminEquipo)
                         {
                             <li><a class="nav-link sub-link" asp-page="/App/Equipo/Index">Equipo Atilson @if (cuentasEquipoPendientes > 0) { <span class="nav-badge-traspaso" title="Cuentas del equipo por validar">@cuentasEquipoPendientes</span> }</a></li>
+                            <li><a class="nav-link sub-link" asp-page="/App/Equipo/Permisos">Permisos por usuario</a></li>
                         }
                     </ul>
                 </div>
@@ -638,9 +712,15 @@
     </script>
     <partial name="_AvisosFlash" />
     <partial name="_AvisoRegistros" />
+    @if (User.Identity?.IsAuthenticated == true && !User.IsInRole("Cliente"))
+    {
+        <script src="~/js/chat-aviso.js" asp-append-version="true" defer></script>
+        <script src="~/js/soporte-aviso.js" asp-append-version="true" defer></script>
+    }
     @await RenderSectionAsync("Scripts", required: false)
     <script src="~/js/menu-movil.js" asp-append-version="true"></script>
     <script src="~/js/escala-vista.js" asp-append-version="true"></script>
     <script src="~/js/buscador-selects.js" asp-append-version="true"></script>
+    <script src="~/js/ruta-paises.js" asp-append-version="true"></script>
 </body>
 </html>

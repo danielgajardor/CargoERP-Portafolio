@@ -26,22 +26,22 @@
         <form method="get" class="it-search" role="search" aria-label="Buscar salidas">
             <div>
                 <label class="af-label" for="busPol">Desde</label>
-                <select id="busPol" name="pol" class="af-select it-s2" data-placeholder="Puerto de origen">
+                <select id="busPol" name="pol" class="af-select it-s2" data-ruta="pol" data-placeholder="Puerto de origen">
                     <option value="">Cualquier puerto</option>
                     @foreach (var p in Model.OpcionesPol)
                     {
-                        <option value="@p.Id" selected="@(Model.Pol == p.Id)">@p.NombrePuerto@(PuertosHelper.EsChileno(p) ? "" : ", " + p.Pais)</option>
+                        <option value="@p.Id" data-pais="@p.Pais" selected="@(Model.Pol == p.Id)">@p.NombrePuerto@(PuertosHelper.EsChileno(p) ? "" : ", " + p.Pais)</option>
                     }
                 </select>
             </div>
             <button type="button" class="it-swap" id="btnSwap" title="Intercambiar origen y destino" aria-label="Intercambiar origen y destino"><i class="bi bi-arrow-left-right"></i></button>
             <div>
                 <label class="af-label" for="busPod">Hasta</label>
-                <select id="busPod" name="pod" class="af-select it-s2" data-placeholder="Puerto de destino">
+                <select id="busPod" name="pod" class="af-select it-s2" data-ruta="pod" data-placeholder="Puerto de destino">
                     <option value="">Cualquier puerto</option>
                     @foreach (var p in Model.OpcionesPod)
                     {
-                        <option value="@p.Id" selected="@(Model.Pod == p.Id)">@p.NombrePuerto@(string.IsNullOrWhiteSpace(p.Pais) ? "" : ", " + p.Pais)</option>
+                        <option value="@p.Id" data-pais="@p.Pais" selected="@(Model.Pod == p.Id)">@p.NombrePuerto@(string.IsNullOrWhiteSpace(p.Pais) ? "" : ", " + p.Pais)</option>
                     }
                 </select>
             </div>

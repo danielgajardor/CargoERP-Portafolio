@@ -25,19 +25,26 @@ namespace AtilsonCargoSpa.Pages.Operaciones
 
         [BindProperty(SupportsGet = true)]
         public string? SearchString { get; set; }
+        [BindProperty(SupportsGet = true)]
+        public int Pagina { get; set; } = 1;
+        public const int TamanoPagina = 20;
+        public int TotalOperaciones { get; set; }
+        public int TotalPaginas { get; set; }
 
         public async Task OnGetAsync()
         {
             int[] serviciosTerrestres = { 1, 2, 4, 6, 8, 9, 11, 13 };
 
             var query = _context.Operaciones
+                .AsNoTracking()
+                .AsSplitQuery()
                 .Include(o => o.IdClienteNavigation)
                 .Include(o => o.IdNavieraNavigation)
                 .Include(o => o.IdPuertoOrigenNavigation)
                 .Include(o => o.IdPuertoDestinoNavigation)
                 .Include(o => o.OperacionesTerrestres)
                 .Include(o => o.Unidadestecnicas)
-                .Where(o => !o.IsDeleted && o.IdTipoServicio.HasValue && serviciosTerrestres.Contains(o.IdTipoServicio.Value))
+                .Where(o => !o.IsDeleted && !o.EsHistorica && o.IdTipoServicio.HasValue && serviciosTerrestres.Contains(o.IdTipoServicio.Value))
                 .AsQueryable();
 
             if (!string.IsNullOrEmpty(SearchString))
@@ -50,7 +57,14 @@ namespace AtilsonCargoSpa.Pages.Operaciones
                 );
             }
 
-            Operaciones = await query.OrderByDescending(o => o.Id).ToListAsync();
+            TotalOperaciones = await query.CountAsync();
+            TotalPaginas = System.Math.Max(1, (int)System.Math.Ceiling(TotalOperaciones / (double)TamanoPagina));
+            Pagina = System.Math.Clamp(Pagina, 1, TotalPaginas);
+
+            Operaciones = await query.OrderByDescending(o => o.Id)
+                .Skip((Pagina - 1) * TamanoPagina)
+                .Take(TamanoPagina)
+                .ToListAsync();
         }
 
         public async Task<IActionResult> OnPostUpdateTransporteAsync(int id)
@@ -111,8 +125,13 @@ namespace AtilsonCargoSpa.Pages.Operaciones
             {
                 string htmlCuerpo = $"<div style='font-family: Arial, sans-serif; font-size: 14px; color: #1e293b;'><p>{cuerpo.Replace("\n", "<br>")}</p></div>";
 
-                // Descomentar para enviar el correo real cuando el SMTP esté configurado:
-                // await _emailService.EnviarCorreoAsync(destinatario, asunto, htmlCuerpo, cc);
+                if (string.IsNullOrWhiteSpace(destinatario))
+                {
+                    TempData["ErrorMsg"] = "No se puede enviar: falta el correo del destinatario.";
+                    return RedirectToPage("./Transporte");
+                }
+
+                await _emailService.EnviarCorreoAsync(destinatario, asunto, htmlCuerpo, cc);
 
                 var opDb = await _context.Operaciones
                     .Include(o => o.OperacionesTerrestres)
@@ -147,7 +166,7 @@ namespace AtilsonCargoSpa.Pages.Operaciones
             }
             catch (Exception ex)
             {
-                TempData["SuccessMsg"] = $"Hubo un problema de conexión al enviar el correo. Revise credenciales SMTP. ({ex.Message})";
+                TempData["ErrorMsg"] = $"No se pudo enviar el correo. Revisa la configuración SMTP y el destinatario. ({ex.Message})";
             }
             return RedirectToPage("./Transporte");
         }

@@ -33,8 +33,7 @@
    la clase .opidx-premium se aplica por separado a cada uno de esos 4
    elementos en el markup, no solo al contenedor raíz.
    ========================================================================= */
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@500;600&display=swap');
-
+/* Fuentes: se cargan una sola vez en _Layout (nov-2026). */
 /* ---------- 0. Tokens ---------- */
 .opidx-premium {
     --opidx-brand: #6d2d9e;
@@ -57,10 +56,10 @@
     --border-soft: #ece8f3;
     --bg-soft: #f8f7fc;
 
-    font-family: 'Plus Jakarta Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+    font-family: var(--font-sans);
 }
 .opidx-premium .cut-off-txt {
-    font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Consolas, monospace !important;
+    font-family: var(--font-mono) !important;
 }
 
 body:has(.opidx-premium) {
@@ -130,3 +129,28 @@ body:has(.opidx-premium) {
 .ops-historial-nota i { color: #94a3b8; }
 .ops-historial-nota a { margin-left: auto; font-weight: 800; color: #6d2d9e; text-decoration: none; }
 .ops-historial-nota a:hover { text-decoration: underline; }
+
+/* =====================================================================================
+   13-nov-2026 · Ciclo de la nave: "Real" bajo la ETD (Zarpe Real) y bajo la ETA (Arribo
+   Efectivo) en la columna Fechas del Mainboard. Ver wwwroot/js/ciclo-nave.js.
+   ===================================================================================== */
+.mb-fechas { display: grid; grid-template-columns: auto; row-gap: 1px; margin-top: 4px; }
+.mb-fecha { display: flex; align-items: baseline; gap: 4px; line-height: 1.35; }
+/* 13-nov (v2): ETD, Real, ETA y Real con la misma columna de etiqueta: las fechas quedan alineadas. */
+.mb-fecha .data-label { flex: 0 0 36px; width: 36px; min-width: 36px; margin: 0; padding: 0; }
+.mb-fecha-real { border: 0; background: none; padding: 0; margin: 0 0 3px; font: inherit; text-align: left; cursor: pointer; }
+.mb-fecha-real .data-label { font-size: 9px; color: #94a3b8; }
+.mb-fecha-real .data-val { font-size: 10.5px; }
+.mb-fecha-real .mb-fecha-hora { font-size: 9.5px; font-weight: 700; color: #64748b; }
+.mb-fecha-real .mb-fecha-ico { font-size: 9px; }
+.mb-fecha-real.pend .data-val, .mb-fecha-real.pend .mb-fecha-ico { color: #94a3b8; font-weight: 600; }
+.mb-fecha-real.ok .data-val, .mb-fecha-real.ok .mb-fecha-ico { color: #15803d; font-weight: 700; }
+button.mb-fecha-real:hover .data-val { text-decoration: underline; }
+button.mb-fecha-real.pend:hover .data-val, button.mb-fecha-real.pend:hover .mb-fecha-ico { color: #6d2d9e; }
+.cn-modal .form-text { font-size: 11px; }
+.cn-previa { width: 100%; height: 360px; border: 1px solid #e2e8f0; border-radius: 8px; background: #f5f4f9; }
+
+/* 13-nov: clientes que reciben la confirmación de zarpe / arribo (modal del ciclo de la nave). */
+.cn-dest { margin: 6px 0 0; padding: 0; list-style: none; max-height: 170px; overflow: auto; border: 1px solid #e2e8f0; border-radius: 8px; }
+.cn-dest li { display: flex; justify-content: space-between; gap: 10px; padding: 4px 8px; border-top: 1px solid #f1f5f9; font-size: 11.5px; }
+.cn-dest li:first-child { border-top: 0; }

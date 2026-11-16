@@ -1,0 +1,110 @@
+@page "{id:int?}"
+@model AtilsonCargoSpa.Pages.App.Naves.EditModel
+@{
+    ViewData["Title"] = Model.EsNuevo ? "Nueva nave" : $"Nave: {Model.NombreOriginal}";
+}
+<link rel="stylesheet" href="~/css/maestros.css" asp-append-version="true" />
+
+<div class="container-fluid py-4 mx mx-ficha-wrap">
+    <header class="mx-cabecera">
+        <div>
+            <div class="mx-miga"><a asp-page="./Index">Maestros › Naves</a></div>
+            <h1 class="mx-titulo">@(Model.EsNuevo ? "Nueva nave" : Model.NombreOriginal)</h1>
+            <p class="mx-subtitulo">@(Model.EsNuevo ? "Registra una nave para elegirla al agregar salidas en Itinerarios." : "Edita la nave del catálogo. Cada cambio queda registrado con tu usuario, fecha y hora.")</p>
+        </div>
+        <div class="mx-acciones">
+            <a asp-page="./Index" class="mx-btn mx-btn-secundario"><i class="bi bi-arrow-left"></i> Volver a la lista</a>
+        </div>
+    </header>
+
+    <form method="post" data-mx-ficha novalidate>
+        <input type="hidden" asp-for="Form.Id" />
+        <input type="hidden" asp-for="Form.Version" />
+
+        <div asp-validation-summary="All" class="mx-errores" role="alert"><strong>Revisa lo siguiente antes de guardar:</strong></div>
+
+        <div class="mx-ficha">
+            <div>
+                <section class="mx-tarjeta">
+                    <div class="mx-tarjeta-cab"><i class="bi bi-life-preserver"></i><h2>Datos de la nave</h2></div>
+                    <div class="mx-tarjeta-cuerpo">
+                        <div class="mx-campos">
+                            <div class="mx-campo c8">
+                                <label asp-for="Form.Nombre">Nombre<span class="req">*</span></label>
+                                <input asp-for="Form.Nombre" class="mx-input text-uppercase" maxlength="100" required autocomplete="off" placeholder="Ej: MSC ANNA"
+                                       data-mx-nombre-original="@Model.NombreOriginal" data-mx-aviso="avisoNombre" />
+                                <span asp-validation-for="Form.Nombre" class="mx-error-campo"></span>
+                                @if (!Model.EsNuevo && Model.SalidasUsan > 0)
+                                {
+                                    <div id="avisoNombre" class="mx-aviso-cambio">
+                                        <i class="bi bi-info-circle"></i> Al guardar, las @Model.SalidasUsan salida@(Model.SalidasUsan == 1 ? "" : "s") de Itinerarios con esta nave y los bookings que las tienen elegidas pasan al nombre nuevo.
+                                    </div>
+                                }
+                            </div>
+                            <div class="mx-campo c4">
+                                <label>Estado</label>
+                                <div class="mx-estado-toggle" role="radiogroup" aria-label="Estado">
+                                    <input type="radio" id="estActivo" name="Form.Activo" value="true" checked="@Model.Form.Activo" />
+                                    <label for="estActivo" class="mx-est-activo">Activa</label>
+                                    <input type="radio" id="estInactivo" name="Form.Activo" value="false" checked="@(!Model.Form.Activo)" />
+                                    <label for="estInactivo" class="mx-est-inactivo">Inactiva</label>
+                                </div>
+                            </div>
+                            <div class="mx-campo c8">
+                                <label asp-for="Form.IdNaviera">Naviera<span class="req">*</span></label>
+                                <select asp-for="Form.IdNaviera" class="mx-input" required>
+                                    <option value="">Seleccionar…</option>
+                                    @foreach (var nv in Model.Navieras)
+                                    {
+                                        <option value="@nv.Id">@nv.NombreNaviera</option>
+                                    }
+                                </select>
+                                <span asp-validation-for="Form.IdNaviera" class="mx-error-campo"></span>
+                            </div>
+                            <div class="mx-campo c12">
+                                <small class="text-muted">El N° de viaje no va aquí: se escribe en cada salida de Itinerarios.</small>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                @if (!Model.EsNuevo)
+                {
+                    <section class="mx-tarjeta">
+                        <div class="mx-tarjeta-cab"><i class="bi bi-calendar-week"></i><h2>Uso en Itinerarios</h2></div>
+                        <div class="mx-tarjeta-cuerpo">
+                            @if (Model.SalidasUsan == 0)
+                            {
+                                <p class="mb-0 text-muted">Ninguna salida usa esta nave todavía.</p>
+                            }
+                            else
+                            {
+                                <p class="mb-1"><strong>@Model.SalidasUsan salida@(Model.SalidasUsan == 1 ? "" : "s")</strong> de esta naviera usan la nave y <strong>@Model.BookingsUsan booking@(Model.BookingsUsan == 1 ? "" : "s")</strong> las tienen elegidas.</p>
+                                <p class="mb-0 text-muted" style="font-size:12.5px;">Si corriges el nombre, esas salidas y el «Nave / Viaje» de esos bookings pasan al nombre nuevo. Cambiar la naviera solo cambia el catálogo: cada salida conserva su naviera.</p>
+                            }
+                            @if (Model.Parecidas.Any())
+                            {
+                                <p class="mt-2 mb-0" style="font-size:12.5px;"><i class="bi bi-exclamation-triangle text-warning me-1"></i>Hay naves con un nombre parecido: <strong>@string.Join(", ", Model.Parecidas)</strong>. Si alguna está repetida, desactívala desde la lista.</p>
+                            }
+                        </div>
+                    </section>
+                }
+
+                <div class="mx-pie">
+                    <span class="mx-pie-nota"><i class="bi bi-shield-check"></i> Se guardará a nombre de <strong>@AtilsonCargoSpa.Services.MaestrosAuditoria.Usuario(User)</strong>.</span>
+                    <a asp-page="./Index" class="mx-btn mx-btn-secundario">Cancelar</a>
+                    <button type="submit" class="mx-btn mx-btn-primario" data-mx-guardar><i class="bi bi-check2"></i> <span>@(Model.EsNuevo ? "Crear nave" : "Guardar cambios")</span></button>
+                </div>
+            </div>
+
+            @if (!Model.EsNuevo)
+            {
+                <partial name="_MaestroRegistro" model="Model.Registro" />
+            }
+        </div>
+    </form>
+</div>
+
+@section Scripts {
+    <script src="~/js/maestros.js" asp-append-version="true"></script>
+}

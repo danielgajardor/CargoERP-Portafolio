@@ -108,3 +108,29 @@
 }
 .so-volver-movil { display: none; }
 @media (max-width: 900px) { .so-volver-movil { display: inline-flex; } }
+
+/* Portal: bandeja contenida con filtros por estado y paginación.
+   Sin scroll de conversaciones sobre todo el documento. */
+.so-lista { overflow: hidden; }
+.so-lista-top { flex: none; gap: 7px; padding: 12px; }
+.so-lista-resumen { color: var(--so-gris); font-size: 11px; padding: 0 5px; }
+.so-tabs { border-radius: 11px; }
+.so-tabs a { font-size: 11.5px; padding: 7px 5px; overflow: hidden; text-overflow: ellipsis; }
+.so-tabs a.activo { border-radius: 8px; }
+.so-items { min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+.so-item { min-height: 92px; }
+.so-paginacion {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 10px; border-top: 1px solid var(--so-linea); padding: 10px 12px;
+    color: var(--so-gris); font-size: 12px; flex: none; background: #fff;
+}
+.so-pag-boton {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 32px; height: 32px; border: 1px solid var(--so-linea);
+    border-radius: 9px; color: var(--so-indigo); text-decoration: none;
+}
+.so-pag-boton:hover { background: var(--so-niebla); }
+@media (max-width: 900px) {
+    .so-lista { max-height: min(62vh, 520px); }
+    .so-app:not(.con-hilo) .so-lista { max-height: min(62vh, 520px); }
+}

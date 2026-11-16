@@ -58,14 +58,22 @@ namespace AtilsonCargoSpa.Filters
             var tempData = http.RequestServices.GetService<ITempDataDictionaryFactory>()?.GetTempData(http);
             if (tempData == null) return;
 
-            if (ejecutado.Exception is DbUpdateException dbEx && !ejecutado.ExceptionHandled)
+            if (ejecutado.Exception != null && !ejecutado.ExceptionHandled)
             {
+                // nov-2026: además del rechazo de la base de datos, cualquier error al guardar
+                // vuelve a la pantalla con un mensaje entendible en vez de la página de error.
                 var log = http.RequestServices.GetService<ILogger<AvisoGuardadoPageFilter>>();
-                log?.LogError(dbEx, "Guardado rechazado por la base de datos en {Pagina}", pagina);
-                string detalle = (dbEx.InnerException ?? dbEx).Message;
-                if (detalle.Length > 220) detalle = detalle.Substring(0, 220) + "…";
-                tempData["ToastError"] = "La base de datos rechazó el guardado. Detalle: " + detalle;
+                log?.LogError(ejecutado.Exception, "Error al guardar en {Pagina}", pagina);
+                string mensaje = ejecutado.Exception is DbUpdateException dbEx
+                    ? "No se pudo guardar: " + TraducirErrorBd(dbEx)
+                    : "No se pudo guardar por un error inesperado. Revisa los datos e inténtalo de nuevo; si se repite, avisa a Informática.";
                 ejecutado.ExceptionHandled = true;
+                if (EsPeticionFetch(http))
+                {
+                    ejecutado.Result = new JsonResult(new { success = false, message = mensaje }) { StatusCode = 200 };
+                    return;
+                }
+                tempData["ToastError"] = mensaje;
                 ejecutado.Result = new RedirectResult(UrlDeVuelta(http));
                 return;
             }
@@ -92,6 +100,41 @@ namespace AtilsonCargoSpa.Filters
 
             if (guardados > 0) tempData["ToastOk"] = "Cambios guardados correctamente.";
             else tempData["ToastInfo"] = "No hubo cambios que guardar.";
+        }
+
+        // Las llamadas fetch() de las vistas envían el token en el header y esperan JSON.
+        private static bool EsPeticionFetch(HttpContext http) =>
+            http.Request.Headers.ContainsKey("RequestVerificationToken")
+            || http.Request.Headers.XRequestedWith.ToString() == "XMLHttpRequest"
+            || http.Request.Headers.Accept.ToString().Contains("application/json", StringComparison.OrdinalIgnoreCase);
+
+        // Mensajes de SQL Server más comunes, traducidos a lo que el usuario puede corregir.
+        private static string TraducirErrorBd(DbUpdateException ex)
+        {
+            string sql = (ex.InnerException ?? ex).Message;
+            string Columna(string patron)
+            {
+                var m = System.Text.RegularExpressions.Regex.Match(sql, patron);
+                return m.Success ? m.Groups[1].Value : "";
+            }
+            if (sql.Contains("FOREIGN KEY", StringComparison.OrdinalIgnoreCase))
+                return "falta seleccionar un dato obligatorio de las listas (naviera, cliente, proveedor, agencia o ciudad).";
+            if (sql.Contains("Cannot insert the value NULL", StringComparison.OrdinalIgnoreCase))
+            {
+                string col = Columna(@"column '([^']+)'");
+                return col == "" ? "falta completar un campo obligatorio." : $"falta completar el campo «{col}».";
+            }
+            if (sql.Contains("would be truncated", StringComparison.OrdinalIgnoreCase))
+            {
+                string col = Columna(@"column '([^']+)'");
+                return col == "" ? "un texto es demasiado largo." : $"el texto del campo «{col}» es demasiado largo.";
+            }
+            if (sql.Contains("UNIQUE", StringComparison.OrdinalIgnoreCase) || sql.Contains("duplicate key", StringComparison.OrdinalIgnoreCase))
+                return "ya existe un registro con esos mismos datos.";
+            if (sql.Contains("out-of-range", StringComparison.OrdinalIgnoreCase) || sql.Contains("Arithmetic overflow", StringComparison.OrdinalIgnoreCase))
+                return "una fecha o un monto está fuera de rango. Revisa las fechas de vigencia y los valores.";
+            if (sql.Length > 220) sql = sql.Substring(0, 220) + "…";
+            return "la base de datos rechazó el guardado. Detalle: " + sql;
         }
 
         private static string UrlDeVuelta(HttpContext http)

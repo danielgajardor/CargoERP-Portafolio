@@ -12,8 +12,7 @@
    y Facturación, que todavía no pasaron por este rediseño — acotando todo a
    .oc-premium esas vistas no cambian en absoluto.
    ========================================================================= */
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600&display=swap');
-
+/* Fuentes: se cargan una sola vez en _Layout (nov-2026). */
 /* ---------- 0. Tokens ---------- */
 .oc-premium {
     --oc-brand: #6d2d9e;
@@ -36,11 +35,11 @@
     --atilson-bg-soft: #f8f7fc;
     --atilson-border: #ece8f3;
 
-    font-family: 'Plus Jakarta Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+    font-family: var(--font-sans);
     padding-bottom: 48px;
 }
 .oc-premium .font-monospace {
-    font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Consolas, monospace !important;
+    font-family: var(--font-mono) !important;
 }
 
 body:has(.oc-premium) {

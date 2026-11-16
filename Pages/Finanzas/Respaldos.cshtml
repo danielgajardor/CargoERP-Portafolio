@@ -1,0 +1,254 @@
+@page
+@model AtilsonCargoSpa.Pages.Finanzas.RespaldosModel
+@{
+    ViewData["Title"] = "Respaldos";
+}
+<style>
+    .rb-card{background:#fff;border:1px solid #e2e8f0;border-radius:10px;box-shadow:0 2px 10px rgba(15,23,42,.045);overflow:hidden}
+    .rb-filter{display:grid;grid-template-columns:minmax(240px,1.5fr) minmax(150px,.9fr) minmax(150px,.85fr) minmax(165px,.95fr) minmax(145px,.85fr) auto;gap:9px;padding:13px 14px;align-items:end}
+    .rb-field label{display:block;margin:0 0 4px 2px;font-size:8.5px;font-weight:800;letter-spacing:.45px;text-transform:uppercase;color:#64748b}
+    .rb-field .form-control,.rb-field .form-select{height:34px;min-height:34px;font-size:10.5px;font-weight:650;border-color:#dbe3ec;background:#f8fafc}
+    .rb-filter-btn{height:34px;min-width:82px;font-size:10px;font-weight:800}
+    .rb-reset{width:36px;height:34px;display:inline-flex;align-items:center;justify-content:center}
+    .rb-bookings{min-width:900px}
+    .rb-bookings th{font-size:9px;text-transform:uppercase;letter-spacing:.04em;background:#fff;color:#64748b;padding:10px 12px;white-space:nowrap;vertical-align:middle}
+    .rb-bookings td{font-size:11px;vertical-align:middle;padding:10px 12px;border-color:#eef2f7}
+    .rb-booking-row{cursor:pointer}
+    .rb-booking-row:hover>td{background:#f8fafc}
+    .rb-booking-row.rb-historico>td{background:#f1f5f9!important;color:#64748b!important;border-color:#d9e0e8!important}
+    .rb-booking-row.rb-historico:hover>td{background:#e9eef4!important}
+    .rb-hist-chip{display:inline-flex;align-items:center;gap:3px;margin-left:6px;padding:2px 6px;border-radius:999px;background:#e5e7eb;color:#4b5563;border:1px solid #d1d5db;font-size:8px;font-weight:850;text-transform:uppercase}
+    .rb-booking{font-size:12px;font-weight:900;color:#0f172a}
+    .rb-sub{display:block;color:#64748b;font-size:9.5px;margin-top:2px;line-height:1.25}
+    .rb-summary{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+    .rb-stat{display:inline-flex;align-items:center;gap:4px;border:1px solid #e2e8f0;background:#f8fafc;border-radius:999px;padding:4px 7px;font-size:8.8px;font-weight:800;color:#475569}
+    .rb-chevron{transition:transform .2s;color:#94a3b8;font-size:10px}
+    .rb-booking-row[aria-expanded="true"] .rb-chevron{transform:rotate(90deg)}
+    .rb-detail-cell{padding:0!important;background:#f8fafc}
+    .rb-detail-wrap{padding:12px 16px 16px}
+    .rb-service{border:1px solid #e2e8f0;border-radius:9px;background:#fff;overflow:hidden;margin-bottom:10px}
+    .rb-service:last-child{margin-bottom:0}
+    .rb-service-title{display:flex;justify-content:space-between;align-items:center;padding:8px 11px;background:#f8fafc;border-bottom:1px solid #e2e8f0;font-size:10px;font-weight:900;color:#334155;text-transform:uppercase;letter-spacing:.04em}
+    .rb-detail-table{min-width:960px;margin:0}
+    .rb-detail-table th{font-size:8.5px;background:#fff;padding:8px 10px}
+    .rb-detail-table td{font-size:10.5px;padding:9px 10px}
+    .rb-concepto{font-weight:700;color:#334155;line-height:1.3}
+    .rb-kind{display:inline-flex;align-items:center;border-radius:999px;padding:4px 8px;border:1px solid #e2e8f0;background:#f8fafc;font-size:8.8px;font-weight:800;color:#334155;white-space:nowrap}
+    .rb-docnum{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-variant-numeric:tabular-nums;color:#334155;font-weight:700}
+    .rb-files{display:flex;align-items:center;gap:5px;flex-wrap:wrap}
+    .rb-files .btn{height:30px;display:inline-flex;align-items:center;gap:5px;font-size:9px;font-weight:800}
+    @@media(max-width:1150px){.rb-filter{grid-template-columns:repeat(2,minmax(0,1fr))}.rb-actions{grid-column:span 2;justify-content:flex-end}}
+    @@media(max-width:700px){.rb-filter{grid-template-columns:1fr}.rb-actions{grid-column:auto}.rb-actions .btn{flex:1}}
+</style>
+
+<link rel="stylesheet" href="~/css/finanzas-modulo.css" asp-append-version="true" />
+<div class="container-fluid px-4 py-4 fin-modulo">
+    <div class="page-header">
+        <div class="page-header__title-row">
+            <div class="page-header__icon"><i class="bi bi-archive"></i></div>
+            <div>
+                <h1>Respaldos</h1>
+                <p class="page-header__subtitle">Bodega documental organizada por booking, servicio y contraparte.</p>
+            </div>
+        </div>
+    </div>
+
+    <partial name="/Pages/Finanzas/_FinanzasNav.cshtml" model='"Respaldos"' />
+
+    <div class="rb-card mb-3">
+        <form method="get" class="rb-filter">
+            <div class="rb-field">
+                <label asp-for="Buscar">Buscar</label>
+                <input asp-for="Buscar" class="form-control" placeholder="Booking, cliente, proveedor, naviera, N° documento o concepto" autocomplete="off" />
+            </div>
+            <div class="rb-field">
+                <label asp-for="Nave">Nave</label>
+                <select asp-for="Nave" class="form-select" data-buscador="si">
+                    <option value="">Todas las naves</option>
+                    @foreach(var x in Model.NavesLista){<option value="@x">@x</option>}
+                </select>
+            </div>
+            <div class="rb-field">
+                <label asp-for="Contraparte">Contraparte</label>
+                <select asp-for="Contraparte" class="form-select">
+                    <option value="">Clientes y proveedores</option>
+                    <option value="CLIENTE">Clientes</option>
+                    <option value="PROVEEDOR">Proveedores</option>
+                </select>
+            </div>
+            <div class="rb-field">
+                <label asp-for="TipoDocumento">Tipo de documento</label>
+                <select asp-for="TipoDocumento" class="form-select">
+                    <option value="">Todos los documentos</option>
+                    <option>Factura afecta</option>
+                    <option>Factura exenta</option>
+                    <option>Nota de cobro USD</option>
+                    <option>Nota de cobro CLP</option>
+                </select>
+            </div>
+            <div class="rb-field">
+                <label asp-for="Servicio">Servicio</label>
+                <select asp-for="Servicio" class="form-select">
+                    <option value="">Todos los servicios</option>
+                    @foreach(var x in Model.Servicios){<option value="@x">@x</option>}
+                </select>
+            </div>
+            <div class="rb-actions d-flex gap-2 align-items-end">
+                <button class="btn btn-dark rb-filter-btn"><i class="bi bi-search me-1"></i> Buscar</button>
+                <a asp-page="./Respaldos" class="btn btn-outline-secondary rb-reset" title="Limpiar filtros"><i class="bi bi-x-lg"></i></a>
+            </div>
+        </form>
+    </div>
+
+    @{
+        var bookings = Model.Documentos.GroupBy(x => x.IdOperacion).OrderByDescending(g => g.Key).ToList();
+    }
+    <div class="rb-card table-responsive">
+        <table class="table rb-bookings mb-0">
+            <thead>
+                <tr>
+                    <th style="width:25%;">Booking / Cliente</th>
+                    <th style="width:20%;">Naviera</th>
+                    <th>Resumen documental</th>
+                    <th class="text-center" style="width:15%;">Archivos</th>
+                    <th class="text-end" style="width:55px;"></th>
+                </tr>
+            </thead>
+            <tbody>
+            @foreach(var booking in bookings)
+            {
+                var primera = booking.First();
+                int docs = booking.Count();
+                int conDocumento = booking.Count(x => !string.IsNullOrWhiteSpace(x.RutaFactura));
+                int conPago = booking.Count(x => !string.IsNullOrWhiteSpace(x.RutaComprobante));
+                int tipos = booking.Select(AtilsonCargoSpa.Pages.Finanzas.RespaldosModel.Clasificar).Distinct().Count();
+                string collapseId = $"rb-bkg-{booking.Key}";
+                var servicios = booking
+                    .GroupBy(x => AtilsonCargoSpa.Pages.Finanzas.RespaldosModel.GrupoVisible(x.GrupoCobro))
+                    .OrderBy(g => AtilsonCargoSpa.Pages.Finanzas.RespaldosModel.OrdenServicio(g.Key))
+                    .ThenBy(g => g.Key)
+                    .ToList();
+
+                <tr class="rb-booking-row @(primera.IdOperacionNavigation?.EsHistorica == true ? "rb-historico" : "")" data-bs-toggle="collapse" data-bs-target="#@collapseId" aria-expanded="false" aria-controls="@collapseId">
+                    <td>
+                        <span class="rb-booking">@primera.IdOperacionNavigation?.NumeroBooking</span>
+                        @if (primera.IdOperacionNavigation?.EsHistorica == true) { <span class="rb-hist-chip"><i class="bi bi-archive-fill"></i> Histórico Excel</span> }
+                        <span class="rb-sub">@(primera.IdOperacionNavigation?.IdClienteNavigation?.RazonSocial ?? "Sin cliente")</span>
+                    </td>
+                    <td><strong>@(primera.IdOperacionNavigation?.IdNavieraNavigation?.NombreNaviera ?? "—")</strong></td>
+                    <td>
+                        <div class="rb-summary">
+                            <span class="rb-stat"><i class="bi bi-files"></i>@docs registros</span>
+                            <span class="rb-stat"><i class="bi bi-grid"></i>@servicios.Count servicios</span>
+                            <span class="rb-stat"><i class="bi bi-tags"></i>@tipos tipos</span>
+                        </div>
+                    </td>
+                    <td class="text-center">
+                        <div class="rb-summary justify-content-center">
+                            <span class="rb-stat"><i class="bi bi-file-earmark-text"></i>@conDocumento docs</span>
+                            <span class="rb-stat"><i class="bi bi-receipt"></i>@conPago pagos</span>
+                        </div>
+                    </td>
+                    <td class="text-end"><i class="bi bi-chevron-right rb-chevron"></i></td>
+                </tr>
+                <tr>
+                    <td colspan="5" class="rb-detail-cell">
+                        <div id="@collapseId" class="collapse">
+                            <div class="rb-detail-wrap">
+                            @foreach(var servicio in servicios)
+                            {
+                                var filas = servicio.OrderByDescending(x => x.FechaModificacion ?? x.FechaCreacion).ThenBy(x => x.Concepto).ToList();
+                                <div class="rb-service">
+                                    <div class="rb-service-title">
+                                        <span>@servicio.Key</span>
+                                        <span>@filas.Count @(filas.Count == 1 ? "registro" : "registros")</span>
+                                    </div>
+                                    <div class="table-responsive">
+                                        <table class="table table-hover rb-detail-table">
+                                            <thead>
+                                                <tr>
+                                                    <th style="width:18%;">Cliente / Proveedor</th>
+                                                    <th>Concepto</th>
+                                                    <th style="width:14%;">Tipo documento</th>
+                                                    <th style="width:13%;">N° documento</th>
+                                                    <th style="width:18%;">Archivos</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                            @foreach(var tx in filas)
+                                            {
+                                                string contraparte = Model.ResolverContraparte(tx);
+                                                <tr>
+                                                    <td>
+                                                        <strong>@contraparte</strong>
+                                                        <span class="rb-sub">@(tx.TipoMovimiento == "EGRESO" ? "Proveedor / beneficiario" : "Cliente")</span>
+                                                    </td>
+                                                    <td><span class="rb-concepto">@tx.Concepto</span></td>
+                                                    <td><span class="rb-kind">@AtilsonCargoSpa.Pages.Finanzas.RespaldosModel.Clasificar(tx)</span></td>
+                                                    <td><span class="rb-docnum">@(tx.NumeroDocumento ?? "—")</span></td>
+                                                    <td>
+                                                        <div class="rb-files">
+                                                            @if(!string.IsNullOrWhiteSpace(tx.RutaFactura))
+                                                            {
+                                                                <a href="@tx.RutaFactura" target="_blank" rel="noopener" class="btn btn-outline-primary btn-sm" onclick="event.stopPropagation();"><i class="bi bi-file-earmark-text"></i> Documento</a>
+                                                            }
+                                                            @if(!string.IsNullOrWhiteSpace(tx.RutaComprobante))
+                                                            {
+                                                                <a href="@tx.RutaComprobante" target="_blank" rel="noopener" class="btn btn-outline-success btn-sm" onclick="event.stopPropagation();"><i class="bi bi-receipt-cutoff"></i> Pago</a>
+                                                            }
+                                                            @if(string.IsNullOrWhiteSpace(tx.RutaFactura) && string.IsNullOrWhiteSpace(tx.RutaComprobante))
+                                                            {
+                                                                <span class="text-muted" style="font-size:9.5px;">Registrado sin archivo</span>
+                                                            }
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            }
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            }
+                            </div>
+                        </div>
+                    </td>
+                </tr>
+            }
+            @if(!bookings.Any())
+            {
+                <tr><td colspan="5" class="text-center text-muted py-5"><i class="bi bi-inbox me-2"></i>No hay documentos que coincidan con los filtros.</td></tr>
+            }
+            </tbody>
+        </table>
+    </div>
+
+    @if (Model.TotalPaginas > 1)
+    {
+        <div class="d-flex justify-content-between align-items-center mt-3 flex-wrap gap-2">
+            <span class="text-muted" style="font-size:10.5px;font-weight:700;">@Model.TotalBookings bookings · página @Model.Pagina de @Model.TotalPaginas</span>
+            <nav aria-label="Paginación Respaldos">
+                <ul class="pagination pagination-sm mb-0">
+                    <li class="page-item @(Model.Pagina <= 1 ? "disabled" : "")">
+                        <a class="page-link" asp-page="./Respaldos"
+                           asp-route-Pagina="@(Model.Pagina - 1)"
+                           asp-route-Buscar="@Model.Buscar"
+                           asp-route-Nave="@Model.Nave"
+                           asp-route-Contraparte="@Model.Contraparte"
+                           asp-route-TipoDocumento="@Model.TipoDocumento"
+                           asp-route-Servicio="@Model.Servicio"><i class="bi bi-chevron-left"></i></a>
+                    </li>
+                    <li class="page-item disabled"><span class="page-link">@Model.Pagina / @Model.TotalPaginas</span></li>
+                    <li class="page-item @(Model.Pagina >= Model.TotalPaginas ? "disabled" : "")">
+                        <a class="page-link" asp-page="./Respaldos"
+                           asp-route-Pagina="@(Model.Pagina + 1)"
+                           asp-route-Buscar="@Model.Buscar"
+                           asp-route-Nave="@Model.Nave"
+                           asp-route-Contraparte="@Model.Contraparte"
+                           asp-route-TipoDocumento="@Model.TipoDocumento"
+                           asp-route-Servicio="@Model.Servicio"><i class="bi bi-chevron-right"></i></a>
+                    </li>
+                </ul>
+            </nav>
+        </div>
+    }
+</div>

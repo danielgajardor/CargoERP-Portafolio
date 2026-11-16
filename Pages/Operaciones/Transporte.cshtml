@@ -18,7 +18,7 @@
         --bg-soft: #f8fafc; 
     }
     
-    body { background-color: #f1f5f9; font-family: 'Inter', system-ui, sans-serif; }
+    body { background-color: #f1f5f9; font-family: var(--font-sans); }
 
     /* NAVEGACIÓN Y FILTROS */
     .workspace-nav { background: var(--bg-main); padding: 5px; border-radius: 8px; border: 1px solid var(--border-soft); display: inline-flex; gap: 2px; margin-bottom: 24px; box-shadow: 0 1px 3px rgba(0,0,0,0.02); }
@@ -133,6 +133,7 @@
         <a asp-page="./Maritimo" class="ws-btn"><i class="bi bi-water"></i> Marítimo</a>
         <a asp-page="./Transporte" class="ws-btn active"><i class="bi bi-truck"></i> Transporte</a>
         <a asp-page="./Documental" class="ws-btn"><i class="bi bi-file-earmark-check"></i> Documental</a>
+    <a asp-page="./Historicos" class="ws-btn"><i class="bi bi-clock-history"></i> Históricos</a>
     </div>
 
     <div class="filter-panel">
@@ -318,6 +319,8 @@
                                  data-patente="@(string.IsNullOrWhiteSpace(terr?.Patente) ? "" : terr.Patente)"
                                  data-planta="@(string.IsNullOrWhiteSpace(terr?.PlantaCarga) ? "" : terr.PlantaCarga)"
                                  data-deposito="@(string.IsNullOrWhiteSpace(terr?.DepositoRetiro) ? "" : terr.DepositoRetiro)"
+                                 data-correo-proveedor="@(terr?.CorreoTransporte ?? "")"
+                                 data-correo-cliente="@(item.IdClienteNavigation?.Correo ?? "")"
                                  data-fechastr="@(terr?.FechaCarga?.ToString("dd/MM/yyyy HH:mm") ?? "")">
                             </div>
 
@@ -609,6 +612,26 @@
             </tbody>
         </table>
     </div>
+
+    @if (Model.TotalPaginas > 1)
+    {
+        <div class="d-flex justify-content-between align-items-center mt-3 px-1 flex-wrap gap-2">
+            <span class="text-muted" style="font-size:10.5px;font-weight:700;">
+                @Model.TotalOperaciones operaciones · página @Model.Pagina de @Model.TotalPaginas
+            </span>
+            <nav aria-label="Paginación Transporte">
+                <ul class="pagination pagination-sm mb-0">
+                    <li class="page-item @(Model.Pagina <= 1 ? "disabled" : "")">
+                        <a class="page-link" asp-page="./Transporte" asp-route-Pagina="@(Model.Pagina - 1)" asp-route-SearchString="@Model.SearchString"><i class="bi bi-chevron-left"></i></a>
+                    </li>
+                    <li class="page-item disabled"><span class="page-link">@Model.Pagina / @Model.TotalPaginas</span></li>
+                    <li class="page-item @(Model.Pagina >= Model.TotalPaginas ? "disabled" : "")">
+                        <a class="page-link" asp-page="./Transporte" asp-route-Pagina="@(Model.Pagina + 1)" asp-route-SearchString="@Model.SearchString"><i class="bi bi-chevron-right"></i></a>
+                    </li>
+                </ul>
+            </nav>
+        </div>
+    }
 </div>
 
 <!-- MEGA MODAL UNIFICADO PARA TRANSPORTE -->
@@ -723,43 +746,56 @@
             let formGeneral = document.getElementById(`gen-form-${idOp}`) || document.getElementById(`gen-form-sub-${idOp}`);
 
             let empresa = (isModalOpen && formTerrestre?.querySelector('input[name="ModEmpresa"]')?.value) || d.empresa || "[EMPRESA]";
-            let conductor = (isModalOpen && formTerrestre?.querySelector('input[name="ModConductor"]')?.value) || d.conductor || "[CONDUCTOR]";
-            let rut = (isModalOpen && formTerrestre?.querySelector('input[name="ModRut"]')?.value) || d.rut || "[RUT]";
-            let telefono = (isModalOpen && formTerrestre?.querySelector('input[name="ModTelefono"]')?.value) || d.celular || "[TELEFONO]";
-            let patente = (isModalOpen && formTerrestre?.querySelector('input[name="ModPatente"]')?.value) || d.patente || "[PATENTE]";
-            let planta = (isModalOpen && formTerrestre?.querySelector('input[name="ModPlanta"]')?.value) || d.planta || "[PLANTA]";
-            let deposito = (isModalOpen && formTerrestre?.querySelector('input[name="ModDeposito"]')?.value) || d.deposito || "[DEPÓSITO]";
+            let conductor = (isModalOpen && formTerrestre?.querySelector('input[name="ModConductor"]')?.value) || d.conductor || "NO INFORMADO";
+            let rut = (isModalOpen && formTerrestre?.querySelector('input[name="ModRut"]')?.value) || d.rut || "NO INFORMADO";
+            let telefono = (isModalOpen && formTerrestre?.querySelector('input[name="ModTelefono"]')?.value) || d.celular || "NO INFORMADO";
+            let patente = (isModalOpen && formTerrestre?.querySelector('input[name="ModPatente"]')?.value) || d.patente || "NO INFORMADO";
+            let planta = (isModalOpen && formTerrestre?.querySelector('input[name="ModPlanta"]')?.value) || d.planta || "NO INFORMADA";
+            let deposito = (isModalOpen && formTerrestre?.querySelector('input[name="ModDeposito"]')?.value) || d.deposito || "NO INFORMADO";
             
             let fecha = d.fechastr;
             if(isModalOpen && formTerrestre?.querySelector('input[name="ModFechaCarga"]')?.value) {
                 let fVal = formTerrestre.querySelector('input[name="ModFechaCarga"]').value;
                 if(fVal) fecha = fVal.replace("T", " ");
             }
-            if(!fecha) fecha = "[FECHA - HORA]";
+            if(!fecha) fecha = "PENDIENTE";
 
             let contenedor = (isModalOpen && formGeneral?.querySelector('input[name="NumeroContenedor"]')?.value) || d.ncntr || "PENDIENTE";
             let sello = (isModalOpen && formGeneral?.querySelector('input[name="NumeroSello"]')?.value) || d.sello || "PENDIENTE";
             
-            let booking = d.booking || "[BOOKING]";
+            let booking = d.booking || "";
             let numcntrs = d.numcntrs || "1";
             let tcntr = d.tcntr || "40' HC";
             let commodity = d.commodity || "GENERAL";
             let pol = d.pol || "TBA";
-            let cliente = d.cliente || "[CLIENTE]";
+            let cliente = d.cliente || "";
+
+            if (!booking || !cliente) {
+                Swal.fire('Faltan datos del booking', 'No se puede generar un correo operativo sin Booking y Cliente guardados.', 'warning');
+                return;
+            }
 
             let to = ""; let cc = ""; let asunto = ""; let cuerpo = "";
 
             if(tipo === 'solicitud') {
                 document.getElementById('tipoCorreoTxt').innerText = "Enviando Solicitud al Proveedor";
-                to = "proveedor1@transporte.cl; proveedor2@transporte.cl; proveedor3@transporte.cl";
-                cc = "usuario@atilson.cl; finanzas@atilson.cl; booking_export@atilson.cl";
+                to = d.correoProveedor || "";
+                cc = "";
+                if (!to) {
+                    Swal.fire('Falta correo del proveedor', 'Guarda primero el correo operativo de la empresa de transporte o escríbelo manualmente desde el Detalle.', 'warning');
+                    return;
+                }
                 asunto = `SOLICITUD SERVICIO TRANSPORTE // BKG: ${booking} (${numcntrs} X ${tcntr}) // ${cliente.toUpperCase()}`;
                 cuerpo = `Estimado equipo de ${empresa}, buenos días:\n\nJunto con saludar, favor considerar el siguiente servicio, notar detalle:\n\nBOOKING: ${booking}\nT/UNIDAD: ${numcntrs}x ${tcntr}\nT/CARGA: ${commodity}\nRETIRO VACÍO: ${deposito}\nENTREGA FULL: ${pol}\nPAGO: 15 DÍAS UNA VEZ EMITIDA FACTURA.\n\nPRESENTACIÓN EN PLANTA: ${fecha} Hrs.\nPLANTA: ${planta}\n\nQuedamos atentos a confirmación y datos del conductor.\n\nSaludos Cordiales,\nOperaciones Atilson Cargo`;
             } 
             else if(tipo === 'preliminar') {
                 document.getElementById('tipoCorreoTxt').innerText = "Enviando Asignación Preliminar al Cliente";
-                to = "cliente1@empresa.cl; cliente2@empresa.cl; cliente3@empresa.cl; cliente4@empresa.cl";
-                cc = "operaciones@atilson.cl";
+                to = d.correoCliente || "";
+                cc = "";
+                if (!to) {
+                    Swal.fire('Falta correo del cliente', 'El cliente no tiene un correo registrado. Agrégalo en el maestro de Clientes antes de enviar.', 'warning');
+                    return;
+                }
                 asunto = `ASIGNACIÓN LOGÍSTICA PRELIMINAR // BKG: ${booking}`;
                 cuerpo = `Estimado Cliente, buenos días:\n\nLe enviamos los datos del conductor preliminar asignado para su carga (Booking: ${booking}):\n\nConductor: ${conductor}\nRUT: ${rut}\nTeléfono: ${telefono}\nPatente: ${patente}\nFecha Presentación: ${fecha}\n\n*Nota: El número de contenedor y sello serán enviados en la asignación completa cuando la unidad sea retirada del depósito y verificada.*\n\nSaludos Cordiales,\nOperaciones Atilson Cargo`;
             } 
@@ -775,8 +811,12 @@
                 }
                 
                 document.getElementById('tipoCorreoTxt').innerText = "Enviando Asignación Completa al Cliente";
-                to = "cliente1@empresa.cl; cliente2@empresa.cl; cliente3@empresa.cl; cliente4@empresa.cl";
-                cc = "operaciones@atilson.cl";
+                to = d.correoCliente || "";
+                cc = "";
+                if (!to) {
+                    Swal.fire('Falta correo del cliente', 'El cliente no tiene un correo registrado. Agrégalo en el maestro de Clientes antes de enviar.', 'warning');
+                    return;
+                }
                 asunto = `ASIGNACIÓN LOGÍSTICA COMPLETA // BKG: ${booking} // CONTENEDOR: ${contenedor}`;
                 cuerpo = `Estimado Cliente, buenos días:\n\nLe enviamos la asignación completa y definitiva para su carga:\n\nBooking: ${booking}\nContenedor: ${contenedor}\nSello: ${sello}\n\nDatos de Transporte:\nConductor: ${conductor}\nRUT: ${rut}\nTeléfono: ${telefono}\nPatente: ${patente}\nFecha Presentación: ${fecha}\n\nQuedamos atentos ante cualquier duda.\n\nSaludos Cordiales,\nOperaciones Atilson Cargo`;
             }

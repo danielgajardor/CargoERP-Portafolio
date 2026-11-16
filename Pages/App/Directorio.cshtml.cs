@@ -19,12 +19,16 @@ namespace AtilsonCargoSpa.Pages.App
         public record Persona(Usuario Usuario, PerfilUsuario? Perfil);
         public List<Persona> Personas { get; private set; } = new();
         public bool FaltaScript { get; private set; }
+        /// <summary>Id de quien mira el directorio (para no ofrecerle escribirse a sí mismo).</summary>
+        public int IdYo { get; private set; }
 
         public async Task OnGetAsync()
         {
             var usuarios = await _context.Usuarios.AsNoTracking()
                 .Where(u => u.Rol != "Cliente" && u.Activo == 1)
                 .OrderBy(u => u.NombreCompleto).ToListAsync();
+            string? correo = PerfilUsuarioService.CorreoDe(User)?.ToLower();
+            IdYo = usuarios.FirstOrDefault(u => u.Correo.ToLower() == correo)?.Id ?? 0;
             var perfiles = new Dictionary<int, PerfilUsuario>();
             try
             {

@@ -27,7 +27,7 @@
         }
     </div>
 </div>
-<div class="d-flex justify-content-end mb-2">
+<div class="tarifas-acciones">
     <button type="button" class="btn btn-sm btn-dark fw-bold px-3 shadow-sm" onclick="toggleNuevaTarifaForm('@idForm')">
         <i class="bi bi-plus-lg me-1"></i> @(esCliente ? "NUEVA VENTA COLLECT" : "NUEVA TARIFA COLLECT")
     </button>
@@ -41,8 +41,8 @@
                 <div class="faf-g"><label>Cliente</label><select name="IdCliente" asp-items="Model.Clientes" class="form-select-xs" required><option value="">- Cliente -</option></select></div>
             }
             <div class="faf-g"><label>Naviera</label><select name="IdNaviera" asp-items="Model.Navieras" class="form-select-xs" required><option value="">- Naviera -</option></select></div>
-                        <div class="faf-g"><label>POL <span class="text-muted fw-normal">(opcional)</span></label><select name="Pol" asp-items="puertosPol" class="form-select-xs"><option value="">- Todos -</option></select></div>
-            <div class="faf-g"><label>Destino (POD)</label><select name="Pod" asp-items="Model.Puertos" class="form-select-xs" required><option value="">- POD -</option></select></div>
+                        <div class="faf-g"><label>POL <span class="text-muted fw-normal">(opcional)</span></label><select name="Pol" asp-items="puertosPol" class="form-select-xs" data-ruta="pol"><option value="">- Todos -</option></select></div>
+            <div class="faf-g"><label>Destino (POD)</label><select name="Pod" asp-items="Model.Puertos" class="form-select-xs" data-ruta="pod" required><option value="">- POD -</option></select></div>
             <div class="faf-g"><label>Tarifa Pública (USD)</label><input name="TarifaPublicaUsd" type="number" step="0.01" min="0" class="form-control-xs fw-bold" required data-collect-publica="1" placeholder="0"></div>
             <div class="faf-g"><label>Tarifa Neta (USD)</label><input name="TarifaNetaUsd" type="number" step="0.01" min="0" class="form-control-xs fw-bold" required data-collect-neta="1" placeholder="0"></div>
             <div class="faf-g"><label>Rebate (USD)</label><div class="faf-total-iva" data-collect-rebate="1">—</div></div>
@@ -135,6 +135,16 @@
                     <td class="text-center" style="font-size:10.5px;">@(t.DiasLibresOrigen ?? "-") / @(t.DiasLibresDestino ?? "-") · Plug @(t.Plug ?? "-")</td>
                     <td class="text-center font-monospace text-muted" style="font-size:10.5px;">@t.FechaInicioVigencia.ToString("dd/MM/yyyy")<br />@(t.FechaFinVigencia?.ToString("dd/MM/yyyy") ?? "sin término")</td>
                     <td class="text-end pe-4">
+                        <div class="d-inline-flex align-items-center gap-1">
+                            <button type="button" class="btn btn-sm text-secondary border-0"
+                                    title="Historial completo" onclick="abrirModalHistorial('Collect', @t.Id)">
+                                <i class="bi bi-info-circle"></i>
+                            </button>
+                            <button type="button" class="btn btn-sm text-primary border-0"
+                                    title="Editar tarifa desde la fila" onclick="abrirEditorTarifaFila('Collect', @t.Id)">
+                                <i class="bi bi-pencil-square"></i>
+                            </button>
+                        </div>
                         <form method="post" asp-page-handler="ArchivarTarifaCollect" onsubmit="return confirm('¿Archivar esta tarifa Collect?');" class="m-0">
                             <input type="hidden" name="idTarifa" value="@t.Id" />
                             <button type="submit" class="btn btn-delete" title="Archivar"><i class="bi bi-trash"></i></button>

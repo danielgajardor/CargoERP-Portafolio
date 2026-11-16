@@ -14,8 +14,7 @@
    sin haber sido revisadas. Acotando todo a .cf-premium, esas vistas no
    cambian en absoluto.
    ========================================================================= */
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600&display=swap');
-
+/* Fuentes: se cargan una sola vez en _Layout (nov-2026). */
 /* ---------- 0. Tokens ---------- */
 .cf-premium {
     --cf-brand: #6d2d9e;
@@ -40,11 +39,11 @@
     --atilson-bg-soft: #f8f7fc;
     --atilson-border: #ece8f3;
 
-    font-family: 'Plus Jakarta Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+    font-family: var(--font-sans);
     padding-bottom: 48px;
 }
 .cf-premium .mono, .cf-premium .font-monospace {
-    font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Consolas, monospace !important;
+    font-family: var(--font-mono) !important;
 }
 
 body:has(.cf-premium) {
@@ -190,7 +189,7 @@ body:has(.cf-premium) {
 }
 .cf-res-chip--ext { color: #b91c1c; background: #fef2f2; border-color: #fecaca; }
 .cf-res-chip--pend { color: #b45309; background: #fffbeb; border-color: #fde68a; }
-.cf-res-monto { font-family: var(--bs-font-monospace, monospace); font-size: 12px; color: #475569; white-space: nowrap; }
+.cf-res-monto { font-family: var(--font-mono); font-size: 12px; color: #475569; white-space: nowrap; }
 .cf-res-monto + .cf-res-monto { margin-top: 2px; }
 .cf-res-pos { color: #15803d; font-weight: 700; }
 .cf-res-neg { color: #dc2626; font-weight: 700; }
@@ -209,3 +208,8 @@ body:has(.cf-premium) {
 .cf-exento { display: inline-block; font-family: inherit; font-size: 11px; font-weight: 800; letter-spacing: .3px; color: #475569; background: #f1f5f9; border: 1px solid #e2e8f0; border-radius: 999px; padding: 2px 10px; }
 .cf-equiv { display: block; font-size: 9.5px; color: #94a3b8; font-weight: 600; white-space: nowrap; }
 .cf-res-total--clp td { background: #f8f7fc; color: #33246f; }
+
+/* Documental (nov-2026): N° Documento y N° Factura en columnas separadas. */
+.row-group-header td.cf-doc-sub { font-size: 9.5px; font-weight: 800; color: #64748b; text-align: center; vertical-align: bottom; white-space: nowrap; letter-spacing: .2px; }
+td.cf-doc-num { min-width: 96px; border-right: 1px dashed #e2e8f0; }
+td.cf-doc-num + td { min-width: 170px; }

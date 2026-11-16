@@ -1,0 +1,218 @@
+/* =========================================================================
+   FINANZAS — CAPA COMÚN DEL MÓDULO (nov-2026)
+   Problema: cada pestaña de Finanzas tenía su propio estilo (Main Board con
+   .fmb, Control Financiero/Cobranza/OC con su "premium", Pagos/Respaldos/
+   Históricos/Consolidado con CSS en línea y letras de 8-9 px). Al pasar de una
+   pestaña a otra cambiaban el fondo, el encabezado, las tarjetas, las tablas
+   y hasta el orden (en Cobranza y Consolidado el menú iba antes del título).
+
+   Esta capa se carga en TODAS las páginas de Finanzas y se aplica con la
+   clase .fin-modulo en el contenedor raíz. Toma el lenguaje de Control
+   Financiero (el más trabajado) y lo extiende a todas: mismo fondo, mismo
+   encabezado, mismo menú, mismas tarjetas, filtros, tablas, chips y botones.
+   No cambia lógica ni handlers: solo presentación.
+   ========================================================================= */
+
+.fin-modulo {
+    --fin-brand: #6d2d9e;
+    --fin-brand-2: #8b5cf6;
+    --fin-deep: #2c1b4d;
+    --fin-ink: #140c26;
+    --fin-ink-2: #334155;
+    --fin-muted: #6b6880;
+    --fin-faint: #a19eb3;
+    --fin-line: #ece8f3;
+    --fin-line-2: #e2dcec;
+    --fin-soft: #f8f7fc;
+    --fin-tint: #f4eefb;
+    --fin-grad: linear-gradient(135deg, #6d2d9e 0%, #8b5cf6 55%, #60a5fa 100%);
+    --fin-grad-dark: linear-gradient(135deg, #2c1b4d, #5b2a8a);
+    --fin-shadow: 0 1px 2px rgba(20,12,38,.04), 0 18px 40px -26px rgba(44,27,77,.28);
+    --fin-radius: 16px;
+    --fin-radius-sm: 10px;
+
+    /* Escala de texto del módulo (antes había tablas en 8,5 px) */
+    --fin-t-label: 10.5px;
+    --fin-t-th: 10.5px;
+    --fin-t-td: 12.5px;
+    --fin-t-sub: 11.5px;
+
+    font-family: var(--font-sans);
+    color: var(--fin-ink);
+    padding-bottom: 48px;
+}
+
+body:has(.fin-modulo) {
+    background:
+        radial-gradient(1100px 460px at 100% -10%, rgba(139,92,246,.06), transparent 60%),
+        #f5f4f9;
+}
+
+/* ---------- 1. Encabezado común ---------- */
+.fin-modulo .page-header { align-items: center; margin-bottom: 18px; }
+.fin-modulo .page-header__icon {
+    width: 44px; height: 44px; border-radius: 12px; font-size: 19px;
+    background: var(--fin-grad); color: #fff;
+    box-shadow: 0 10px 20px -10px rgba(109,45,158,.6);
+}
+.fin-modulo .page-header h1,
+.fin-modulo .page-header__title {
+    font-size: 24px; font-weight: 800; letter-spacing: -.5px; color: var(--fin-ink); text-transform: none;
+}
+.fin-modulo .page-header__subtitle { font-size: 13px; color: var(--fin-muted); margin-top: 3px; }
+.fin-modulo .fin-header-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.fin-modulo .fin-header-actions .btn { font-size: 12px; }
+
+/* ---------- 2. Menú del módulo (mismo en todas las pestañas) ---------- */
+.fin-modulo .finanzas-nav-shell { margin-bottom: 22px !important; }
+.fin-modulo .workspace-nav.finanzas-nav {
+    background: #fff; border: 1px solid var(--fin-line); box-shadow: var(--fin-shadow);
+    padding: 5px; border-radius: 14px; gap: 4px;
+}
+.fin-modulo .finanzas-nav .ws-btn {
+    border-radius: 10px; font-weight: 700; font-size: 12.5px; color: var(--fin-muted);
+    padding-top: 9px; padding-bottom: 9px; border: 0; background: transparent;
+}
+.fin-modulo .finanzas-nav .ws-btn i { opacity: .85; }
+.fin-modulo .finanzas-nav .ws-btn:hover { background: var(--fin-tint); color: var(--fin-brand); }
+.fin-modulo .finanzas-nav .ws-btn.active {
+    background: var(--fin-grad-dark); color: #fff;
+    box-shadow: 0 10px 20px -10px rgba(44,27,77,.7);
+}
+.fin-modulo .finanzas-nav .ws-btn.active i { opacity: 1; }
+/* Las 8 secciones siempre visibles: en pantallas angostas el menú pasa a dos filas en vez
+   de esconder "Consolidado Cliente" detrás de un scroll horizontal. */
+.fin-modulo .finanzas-nav-shell { overflow: visible; }
+.fin-modulo .workspace-nav.finanzas-nav { width: 100%; min-width: 0; flex-wrap: wrap; }
+.fin-modulo .finanzas-nav .ws-btn { flex: 1 1 auto; white-space: nowrap; padding-left: 12px; padding-right: 12px; }
+@media (max-width: 1500px) {
+    .fin-modulo .finanzas-nav .ws-btn { font-size: 11.5px; padding-left: 9px; padding-right: 9px; letter-spacing: .2px; }
+}
+
+/* Selector de archivos (Datos Históricos, Respaldos) con el mismo estilo de botón. */
+.fin-modulo input[type="file"]::file-selector-button {
+    border: 0; border-right: 1px solid var(--fin-line); background: var(--fin-tint); color: var(--fin-brand);
+    font-weight: 700; font-size: 12px; padding: 8px 14px; margin: -6px 12px -6px -12px; cursor: pointer;
+}
+.fin-modulo input[type="file"]::file-selector-button:hover { background: #ebe1f7; }
+
+/* ---------- 3. Tarjetas y paneles ---------- */
+.fin-modulo :is(.fin-card, .fmb-card, .pg-card, .rb-card, .hist-card, .fin-table-wrapper, .cf-filter-card, .con-filter, .erp-card) {
+    background: #fff;
+    border: 1px solid var(--fin-line) !important;
+    border-radius: var(--fin-radius) !important;
+    box-shadow: var(--fin-shadow) !important;
+}
+.fin-modulo :is(.pg-card, .rb-card, .hist-card, .fin-table-wrapper) { overflow: hidden; }
+.fin-modulo .fin-table-wrapper > .border-bottom,
+.fin-modulo :is(.pg-tabs, .rb-tabs) { border-color: var(--fin-line) !important; }
+.fin-modulo .fin-section-title,
+.fin-modulo .fmb-section-label {
+    font-size: var(--fin-t-label); font-weight: 800; letter-spacing: .6px; text-transform: uppercase;
+    color: var(--fin-muted); margin: 0 0 10px;
+}
+
+/* ---------- 4. Filtros (misma barra en Control Financiero, Pagos, Respaldos, Consolidado...) ---------- */
+.fin-modulo :is(.pg-field, .rb-field, .cf-filter-field, .con-filter > div) label,
+.fin-modulo .hist-label {
+    font-size: var(--fin-t-label) !important; font-weight: 800 !important; letter-spacing: .5px !important;
+    text-transform: uppercase; color: var(--fin-muted) !important; margin: 0 0 5px 2px;
+}
+.fin-modulo :is(.pg-field, .rb-field, .cf-filter-field, .con-filter) :is(.form-control, .form-select),
+.fin-modulo .fmb-periodo select {
+    height: 38px !important; min-height: 38px !important;
+    font-size: 12.5px !important; font-weight: 600 !important;
+    border-radius: var(--fin-radius-sm) !important;
+    border-color: var(--fin-line-2) !important; background-color: #fbfaff !important; color: var(--fin-ink);
+}
+.fin-modulo .form-control:focus,
+.fin-modulo .form-select:focus {
+    border-color: var(--fin-brand-2) !important; box-shadow: 0 0 0 4px rgba(139,92,246,.12) !important; background-color: #fff !important;
+}
+.fin-modulo :is(.pg-filter-btn, .rb-filter-btn, .con-filter-actions .btn, .cf-filter-actions .btn) {
+    height: 38px !important; font-size: 12px !important; font-weight: 700 !important; border-radius: var(--fin-radius-sm) !important;
+}
+.fin-modulo :is(.pg-reset, .rb-reset) { height: 38px !important; width: 40px !important; border-radius: var(--fin-radius-sm) !important; }
+.fin-modulo :is(.pg-filter, .rb-filter) { padding: 16px 18px !important; gap: 12px !important; }
+.fin-modulo .con-filter { padding: 16px 18px !important; gap: 12px !important; }
+
+/* ---------- 5. Tablas ---------- */
+.fin-modulo .table { color: var(--fin-ink-2); }
+.fin-modulo :is(.pg-bookings, .rb-bookings, .hist-table, .fmb-table, .table-main-grid, .con-table, .pg-detail-table, .rb-detail-table) > thead > tr > th,
+.fin-modulo .fin-table-wrapper .table > thead > tr > th {
+    font-size: var(--fin-t-th) !important; font-weight: 800 !important; letter-spacing: .5px !important;
+    text-transform: uppercase; color: var(--fin-muted) !important;
+    background: var(--fin-soft) !important; border-bottom: 1px solid var(--fin-line-2) !important;
+    padding-top: 11px !important; padding-bottom: 11px !important; white-space: nowrap;
+}
+.fin-modulo :is(.pg-bookings, .rb-bookings, .hist-table, .fmb-table, .con-table) > tbody > tr > td,
+.fin-modulo .fin-table-wrapper .table > tbody > tr > td {
+    font-size: var(--fin-t-td) !important; border-color: var(--fin-line) !important;
+    padding-top: 12px !important; padding-bottom: 12px !important;
+}
+.fin-modulo :is(.pg-detail-table, .rb-detail-table) > tbody > tr > td { font-size: 12px !important; }
+.fin-modulo :is(.pg-booking-row, .rb-booking-row):hover > td { background: var(--fin-tint) !important; }
+.fin-modulo :is(.pg-booking, .rb-booking, .hist-bkg) { font-size: 13px !important; font-weight: 800 !important; color: var(--fin-ink) !important; letter-spacing: -.1px; }
+.fin-modulo :is(.pg-sub, .rb-sub, .hist-note) { font-size: var(--fin-t-sub) !important; color: var(--fin-muted) !important; }
+.fin-modulo :is(.pg-monto, .rb-docnum, .hist-money, .mono, .font-monospace) { font-family: var(--font-mono) !important; font-variant-numeric: tabular-nums; }
+.fin-modulo :is(.pg-detail-cell, .rb-detail-cell) { background: var(--fin-soft) !important; }
+.fin-modulo :is(.pg-service, .rb-service) { border-color: var(--fin-line) !important; border-radius: 12px !important; }
+.fin-modulo :is(.pg-service-title, .rb-service-title) {
+    background: var(--fin-tint) !important; color: var(--fin-brand) !important; border-color: var(--fin-line) !important;
+    font-size: 11px !important; font-weight: 800 !important;
+}
+.fin-modulo :is(.pg-chevron, .rb-chevron) { color: var(--fin-faint); }
+.fin-modulo :is(.pg-booking-row, .rb-booking-row)[aria-expanded="true"] :is(.pg-chevron, .rb-chevron) { color: var(--fin-brand); }
+
+/* ---------- 6. Pestañas internas (Pagos: proveedores/clientes...) ---------- */
+.fin-modulo .pg-tabs { background: #fff !important; padding: 8px !important; gap: 6px !important; }
+.fin-modulo .pg-tabs .nav-link {
+    font-size: 12.5px !important; font-weight: 700 !important; border-radius: 10px !important; padding: 9px 16px !important; color: var(--fin-muted) !important;
+}
+.fin-modulo .pg-tabs .nav-link:hover { background: var(--fin-tint) !important; color: var(--fin-brand) !important; }
+.fin-modulo .pg-tabs .nav-link.active { background: var(--fin-grad-dark) !important; color: #fff !important; box-shadow: 0 8px 18px -10px rgba(44,27,77,.7) !important; }
+.fin-modulo .pg-count { font-size: 10.5px !important; height: 20px !important; min-width: 20px !important; }
+
+/* ---------- 7. Chips y badges (mínimo 10,5 px) ---------- */
+.fin-modulo :is(.pg-stat, .rb-stat, .rb-kind, .pg-badge, .pg-completo-chip, .pg-pend-chip, .pg-hist-chip, .rb-hist-chip, .hist-chip, .con-hist-chip) {
+    font-size: 10.5px !important; font-weight: 700 !important; padding: 4px 9px !important; border-radius: 999px !important;
+}
+.fin-modulo :is(.pg-stat, .rb-stat, .rb-kind) { border-color: var(--fin-line-2) !important; background: #fff !important; color: var(--fin-ink-2) !important; }
+.fin-modulo :is(.pg-doc-link, .pg-block) { font-size: 11px !important; }
+.fin-modulo :is(.pg-pay .btn, .pg-ver, .rb-files .btn, .pg-pay .form-control) { font-size: 11px !important; border-radius: 8px !important; }
+.fin-modulo .badge-status { font-size: 10.5px; }
+
+/* ---------- 8. Botones ---------- */
+.fin-modulo .btn { border-radius: 10px; transition: background .18s ease, box-shadow .18s ease, transform .18s ease; }
+.fin-modulo .btn-dark,
+.fin-modulo .btn-primary {
+    background: var(--fin-grad-dark) !important; border: 0 !important; color: #fff !important;
+    box-shadow: 0 10px 22px -12px rgba(44,27,77,.85) !important;
+}
+.fin-modulo .btn-dark:hover:not(:disabled),
+.fin-modulo .btn-primary:hover:not(:disabled) { background: linear-gradient(135deg, #3a2363, #6d2d9e) !important; transform: translateY(-1px); }
+.fin-modulo .btn-outline-secondary,
+.fin-modulo .btn-light.border { border-color: var(--fin-line-2) !important; color: var(--fin-ink-2) !important; background: #fff !important; }
+.fin-modulo .btn-outline-secondary:hover,
+.fin-modulo .btn-light.border:hover { background: var(--fin-tint) !important; color: var(--fin-brand) !important; }
+
+/* ---------- 9. Estados vacíos y avisos ---------- */
+.fin-modulo :is(.pg-empty, .fmb-empty) { font-size: 13px !important; color: var(--fin-muted) !important; }
+.fin-modulo .alert { border-radius: 14px; font-size: 12.5px; }
+.fin-modulo .empty-state { border-color: var(--fin-line) !important; border-radius: var(--fin-radius) !important; }
+
+/* ---------- 10. Indicadores del día (UF / USD / EUR) ---------- */
+.fin-modulo .fin-ind { font-size: 12px; }
+
+@media (max-width: 767.98px) {
+    .fin-modulo .page-header { align-items: flex-start; }
+    .fin-modulo .fin-header-actions { width: 100%; }
+}
+@media (prefers-reduced-motion: reduce) {
+    .fin-modulo .btn { transition: none; }
+}
+
+/* ---------- 11. Tarjeta genérica con cabecera (Consolidado y nuevas vistas) ---------- */
+.fin-modulo .fin-card__head { background: var(--fin-soft) !important; border-color: var(--fin-line) !important; }
+.fin-modulo .con-table > tfoot > tr > td { background: var(--fin-tint); color: var(--fin-ink); font-size: 12.5px; border-top: 1px solid var(--fin-line-2); padding-top: 12px; padding-bottom: 12px; }
+.fin-modulo .con-filter label { font-size: var(--fin-t-label) !important; }

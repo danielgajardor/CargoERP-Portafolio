@@ -1,0 +1,79 @@
+@page
+@model AtilsonCargoSpa.Pages.App.ChatModel
+@* Chat del equipo (nov-2026). La lógica está en wwwroot/js/chat-interno.js; los estilos en
+   wwwroot/css/chat-interno.css. Datos iniciales en #chatDatos para no esperar la primera llamada. *@
+@{
+    ViewData["Title"] = "Chat del equipo";
+}
+<link rel="stylesheet" href="~/css/chat-interno.css" asp-append-version="true" />
+
+<div class="ch">
+    <header class="ch-cab">
+        <div>
+            <h1>Chat del equipo</h1>
+            <p>Escríbele a una persona del equipo o a todos en el grupo Equipo Atilson. Las conversaciones privadas solo las ven sus dos participantes.</p>
+        </div>
+    </header>
+
+    @if (!Model.Disponible)
+    {
+        <div class="ch-aviso error"><i class="bi bi-exclamation-triangle" aria-hidden="true"></i><span>Falta correr <b>Sql/2026-11_chat_interno.sql</b> en la base para usar el chat.</span></div>
+    }
+    else if (Model.Yo == null)
+    {
+        <div class="ch-aviso error"><i class="bi bi-exclamation-triangle" aria-hidden="true"></i><span>Tu cuenta no está activa como parte del equipo, así que no puede usar el chat.</span></div>
+    }
+    else
+    {
+        @Html.AntiForgeryToken()
+        <script type="application/json" id="chatDatos">@Json.Serialize(new { yo = Model.Yo.Id, abrir = Model.Abrir, conversaciones = Model.Conversaciones, equipo = Model.Equipo })</script>
+
+        <div class="ch-app" id="chatApp">
+            <aside class="ch-lista" aria-label="Conversaciones">
+                <div class="ch-lista-top">
+                    <label class="ch-buscar">
+                        <i class="bi bi-search" aria-hidden="true"></i>
+                        <input type="search" id="chatFiltro" placeholder="Buscar conversación o persona" aria-label="Buscar conversación o persona" autocomplete="off" />
+                    </label>
+                    <button type="button" class="ch-btn-icono" id="chatNuevo" title="Nuevo mensaje" aria-label="Nuevo mensaje" aria-expanded="false" aria-controls="chatPersonas"><i class="bi bi-pencil-square"></i></button>
+                </div>
+                <div class="ch-items" id="chatItems" role="list"></div>
+                <div class="ch-personas" id="chatPersonas" hidden>
+                    <div class="ch-personas-cab">
+                        <b>Nuevo mensaje</b>
+                        <button type="button" class="ch-btn-icono" id="chatPersonasCerrar" aria-label="Cerrar"><i class="bi bi-x-lg"></i></button>
+                    </div>
+                    <div class="ch-personas-lista" id="chatPersonasLista" role="list"></div>
+                </div>
+            </aside>
+
+            <section class="ch-hilo" id="chatHilo" aria-live="off">
+                <div class="ch-vacio" id="chatVacio">
+                    <i class="bi bi-chat-dots" aria-hidden="true"></i>
+                    <p>Elige una conversación o escríbele a alguien del equipo.</p>
+                </div>
+                <header class="ch-hilo-cab" id="chatCab" hidden>
+                    <button type="button" class="ch-btn-icono ch-volver" id="chatVolver" aria-label="Volver a las conversaciones"><i class="bi bi-arrow-left"></i></button>
+                    <div class="ch-av" id="chatCabAv" aria-hidden="true"></div>
+                    <div class="ch-hilo-tit">
+                        <h2 id="chatCabNombre"></h2>
+                        <p id="chatCabSub"></p>
+                    </div>
+                </header>
+                <div class="ch-mensajes" id="chatMensajes" hidden></div>
+                <form class="ch-escribir" id="chatForm" hidden autocomplete="off">
+                    <textarea id="chatTexto" rows="1" maxlength="2000" placeholder="Escribe un mensaje" aria-label="Mensaje"></textarea>
+                    <button type="submit" class="ch-enviar" id="chatEnviar" aria-label="Enviar"><i class="bi bi-send-fill"></i></button>
+                </form>
+                <p class="ch-ayuda" id="chatAyuda" hidden>Enter envía el mensaje. Shift + Enter agrega una línea.</p>
+            </section>
+        </div>
+    }
+</div>
+
+@section Scripts {
+    @if (Model.Disponible && Model.Yo != null)
+    {
+        <script src="~/js/chat-interno.js" asp-append-version="true"></script>
+    }
+}

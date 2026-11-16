@@ -66,13 +66,16 @@
                     var v = d[p[0]], el = document.getElementById(p[1]);
                     if (!el) return;
                     el.textContent = v && v.valor ? '$' + fmt.format(v.valor) : 'N/D';
-                    if (v && v.respaldo) respaldo = true;
+                    if (!v || v.respaldo || !v.fecha) respaldo = true;
                     if (v && v.fecha) fechas.push(v.fecha);
                     if (v && v.fuente && fuentes.indexOf(v.fuente) < 0) fuentes.push(v.fuente);
+                    el.title = (v && v.fecha ? 'Publicado: ' + v.fecha : 'Fecha sin verificar')
+                        + ' · ' + (v && v.fuente ? v.fuente : 'Fuente no disponible');
                 });
                 ind.classList.toggle('respaldo', respaldo);
-                ind.title = (respaldo ? 'Último valor disponible (sin conexión con la fuente)' : 'Valores del día' + (fechas.length ? ' (' + fechas[0] + ')' : ''))
-                    + (fuentes.length === 1 && !respaldo ? ' · Fuente: ' + fuentes[0] : '');
+                ind.title = (respaldo ? 'Indicadores pendientes de actualización o sin fuente oficial' : 'Indicadores publicados')
+                    + (fuentes.length ? ' · Fuentes: ' + fuentes.join(', ') : '')
+                    + (fechas.length ? ' · Consulta la fecha de cada valor' : ' · Sin fechas verificadas');
             })
             .catch(function () {
                 ['top-uf', 'top-usd', 'top-eur'].forEach(function (id) { var el = document.getElementById(id); if (el) el.textContent = 'N/D'; });
@@ -384,7 +387,7 @@
         var txt = document.getElementById('asisTexto'), enviar = document.getElementById('asisEnviar');
         var sug = document.getElementById('asisSugerencias');
         if (!panel || !form) return;
-        var CLAVE = 'atilson-asistente-v2';
+        var CLAVE = 'atilson-asistente-v4';
         var bienvenida = msgs.innerHTML, sugInicio = Array.prototype.map.call(sug.querySelectorAll('button'), function (b) { return b.textContent; });
         var historial = [], estado = null, registro = [], ocupado = false;
 

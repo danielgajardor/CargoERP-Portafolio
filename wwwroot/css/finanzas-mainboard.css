@@ -84,6 +84,9 @@ body:has(.fmb) { background: #f5f6fa; }
 .fmb-table tbody td { padding: 10px 14px; border-bottom: 1px solid #f1f5f9; vertical-align: middle; color: var(--fmb-ink-2); }
 .fmb-table tbody tr:last-child td { border-bottom: 0; }
 .fmb-table tbody tr:hover td { background: #fafbff; }
+.fmb-table tbody tr.fmb-historico td { background:#f1f5f9 !important; color:#64748b !important; border-color:#d9e0e8 !important; }
+.fmb-table tbody tr.fmb-historico:hover td { background:#e9eef4 !important; }
+.fmb-hist-chip { display:inline-flex; align-items:center; gap:3px; margin-left:6px; padding:2px 6px; border-radius:999px; background:#e5e7eb; color:#4b5563; border:1px solid #d1d5db; font-size:8px; font-weight:850; text-transform:uppercase; vertical-align:middle; }
 .fmb-table .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .fmb-table th.num { text-align: right; }
 .fmb-booking { font-weight: 800; color: var(--fmb-ink); text-decoration: none; }

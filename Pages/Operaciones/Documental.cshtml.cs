@@ -22,15 +22,22 @@ namespace AtilsonCargoSpa.Pages.Operaciones
 
         [BindProperty(SupportsGet = true)]
         public string? SearchString { get; set; }
+        [BindProperty(SupportsGet = true)]
+        public int Pagina { get; set; } = 1;
+        public const int TamanoPagina = 20;
+        public int TotalOperaciones { get; set; }
+        public int TotalPaginas { get; set; }
 
         public async Task OnGetAsync()
         {
             int[] serviciosDoc = { 1, 3, 4, 7, 8, 10, 11, 14 };
 
             var query = _context.Operaciones
+                .AsNoTracking()
+                .AsSplitQuery()
                 .Include(o => o.IdClienteNavigation)
                 .Include(o => o.OperacionesDocumentales)
-                .Where(o => !o.IsDeleted && o.IdTipoServicio.HasValue && serviciosDoc.Contains(o.IdTipoServicio.Value))
+                .Where(o => !o.IsDeleted && !o.EsHistorica && o.IdTipoServicio.HasValue && serviciosDoc.Contains(o.IdTipoServicio.Value))
                 .AsQueryable();
 
             if (!string.IsNullOrEmpty(SearchString))
@@ -44,7 +51,14 @@ namespace AtilsonCargoSpa.Pages.Operaciones
                 );
             }
 
-            Operaciones = await query.OrderByDescending(o => o.Id).ToListAsync();
+            TotalOperaciones = await query.CountAsync();
+            TotalPaginas = System.Math.Max(1, (int)System.Math.Ceiling(TotalOperaciones / (double)TamanoPagina));
+            Pagina = System.Math.Clamp(Pagina, 1, TotalPaginas);
+
+            Operaciones = await query.OrderByDescending(o => o.Id)
+                .Skip((Pagina - 1) * TamanoPagina)
+                .Take(TamanoPagina)
+                .ToListAsync();
         }
 
         // HANDLER PARA GUARDAR LA EDICIÓN DESDE EL MODAL RÁPIDO DOCUMENTAL

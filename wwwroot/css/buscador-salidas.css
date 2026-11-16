@@ -1,0 +1,90 @@
+/* Buscador de salidas · Datos del Embarque en Operaciones › Create (nov-2026).
+   Mismo lenguaje que el formulario: blanco, borde suave, radios de 12px, morado ATILSON solo
+   para lo elegido y para los pasos. */
+
+.emb-card { background: #fff; border: 1px solid var(--border-soft, #e2e8f0); border-radius: 12px; padding: 18px 20px; }
+.emb-paso { display: flex; align-items: center; gap: 10px; font-size: 13px; font-weight: 700; color: var(--txt-main, #1e293b); margin-bottom: 14px; }
+.emb-num { width: 22px; height: 22px; border-radius: 50%; background: rgba(109, 45, 158, .1); color: var(--atilson-purple, #6d2d9e); display: inline-flex; align-items: center; justify-content: center; font-size: 11.5px; font-weight: 800; flex-shrink: 0; }
+.emb-paso-nota { font-size: 11px; font-weight: 500; color: var(--txt-muted, #64748b); }
+
+.emb-btn-buscar { background: var(--atilson-dark, #0f172a); color: #fff; border: 1px solid var(--atilson-dark, #0f172a); border-radius: 8px; height: 46px; font-weight: 700; font-size: 13px; }
+.emb-btn-buscar:hover, .emb-btn-buscar:focus { background: #1e293b; color: #fff; }
+.emb-btn-buscar:disabled { opacity: .7; }
+.emb-btn-sec { border: 1px solid var(--border-soft, #e2e8f0); background: #fff; border-radius: 8px; font-size: 12.5px; font-weight: 700; color: var(--txt-main, #1e293b); padding: 7px 14px; }
+.emb-btn-sec:hover, .emb-btn-sec:focus { border-color: var(--atilson-purple, #6d2d9e); color: var(--atilson-purple, #6d2d9e); background: #fff; }
+
+.emb-aviso { margin-top: 12px; font-size: 12px; font-weight: 600; border-radius: 8px; padding: 9px 12px; background: #fffbeb; color: #92400e; border: 1px solid #fde68a; }
+.emb-aviso--info { background: #f8fafc; color: #475569; border-color: var(--border-soft, #e2e8f0); }
+.emb-aviso a, .emb-aviso button.emb-link { font-weight: 700; color: inherit; text-decoration: underline; background: none; border: 0; padding: 0; }
+
+.emb-resultados { padding: 0 2px; }
+.emb-res-cab { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+.emb-filtros { display: flex; gap: 6px; flex-wrap: wrap; }
+.emb-chip { border: 1px solid var(--border-soft, #e2e8f0); background: #fff; border-radius: 8px; padding: 3px 10px; font-size: 11.5px; font-weight: 700; color: var(--txt-muted, #64748b); cursor: pointer; }
+.emb-chip:hover { border-color: #cbd5e1; color: var(--txt-main, #1e293b); }
+.emb-chip.activo { background: rgba(109, 45, 158, .08); border-color: rgba(109, 45, 158, .35); color: var(--atilson-purple, #6d2d9e); }
+
+.emb-lista { display: grid; gap: 10px; }
+.emb-salida { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 2.4fr) minmax(0, .9fr) 118px; gap: 16px; align-items: center; background: #fff; border: 1px solid var(--border-soft, #e2e8f0); border-radius: 12px; padding: 14px 18px; transition: border-color .15s ease; }
+.emb-salida:hover { border-color: #cbd5e1; }
+.emb-salida.elegida { border: 2px solid var(--atilson-purple, #6d2d9e); padding: 13px 17px; }
+.emb-naviera { font-size: 10.5px; font-weight: 700; color: var(--txt-muted, #64748b); text-transform: uppercase; letter-spacing: .4px; }
+.emb-nave-txt { font-size: 14px; font-weight: 800; color: var(--txt-main, #1e293b); margin: 2px 0 6px; word-break: break-word; }
+.emb-pills { display: flex; gap: 6px; flex-wrap: wrap; }
+.emb-pill { display: inline-flex; align-items: center; gap: 4px; font-size: 10.5px; font-weight: 700; padding: 2px 8px; border-radius: 6px; }
+.emb-pill--directo { background: #ecfdf5; color: #047857; }
+.emb-pill--transbordo { background: #fffbeb; color: #b45309; }
+.emb-pill--zarpada { background: #f1f5f9; color: #475569; }
+
+.emb-ruta { display: grid; grid-template-columns: minmax(0, 1fr) 64px minmax(0, 1fr); gap: 10px; align-items: center; }
+.emb-lbl { font-size: 10px; font-weight: 700; color: var(--txt-muted, #64748b); text-transform: uppercase; letter-spacing: .4px; margin-bottom: 2px; }
+.emb-fecha { font-size: 13.5px; font-weight: 800; color: var(--txt-main, #1e293b); white-space: nowrap; }
+.emb-puerto { font-size: 11.5px; color: var(--txt-muted, #64748b); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.emb-transito { text-align: center; font-size: 11px; font-weight: 700; color: var(--txt-muted, #64748b); line-height: 1.2; }
+.emb-transito i { display: block; font-size: 15px; }
+.emb-corte { font-size: 12px; color: var(--txt-main, #1e293b); font-weight: 700; white-space: nowrap; }
+.emb-accion { text-align: right; }
+.emb-btn-elegir { background: #fff; border: 1px solid var(--atilson-dark, #0f172a); color: var(--atilson-dark, #0f172a); font-size: 12px; font-weight: 700; border-radius: 8px; padding: 6px 14px; width: 100%; }
+.emb-btn-elegir:hover, .emb-btn-elegir:focus { background: var(--atilson-dark, #0f172a); color: #fff; }
+.emb-elegida-tag { display: inline-flex; align-items: center; justify-content: center; gap: 4px; background: rgba(109, 45, 158, .1); color: var(--atilson-purple, #6d2d9e); font-size: 12px; font-weight: 700; border-radius: 8px; padding: 6px 12px; width: 100%; }
+.emb-obs { grid-column: 1 / -1; font-size: 11.5px; color: var(--txt-muted, #64748b); border-top: 1px dashed var(--border-soft, #e2e8f0); padding-top: 8px; margin-top: -4px; }
+
+.emb-res-pie { display: flex; justify-content: center; gap: 10px; margin-top: 14px; flex-wrap: wrap; }
+.emb-vacio { text-align: center; padding: 22px; border: 1px dashed #cbd5e1; border-radius: 12px; color: var(--txt-muted, #64748b); font-size: 13px; background: #fff; }
+.emb-vacio strong { color: var(--txt-main, #1e293b); }
+.emb-cargando { text-align: center; padding: 18px; color: var(--txt-muted, #64748b); font-size: 12.5px; }
+
+/* «Salida elegida»: Naviera, Nave / Viaje y Ruta como dato (no se editan), con el mismo alto
+   y la misma grilla que los campos de abajo. */
+.emb-dato-val { font-size: 13.5px; font-weight: 800; color: var(--txt-main, #1e293b); line-height: 1.5; min-height: 46px; padding: 12px 16px; border: 1px solid transparent; border-radius: 8px; background: #f1f5f9; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.emb-dato-val i { font-size: 12px; color: var(--txt-muted, #64748b); }
+.emb-btn-cambiar { height: 46px; padding: 0 16px; }
+.emb-card--falta { border-color: #fca5a5; box-shadow: 0 0 0 3px rgba(239, 68, 68, .12); }
+
+/* Lista de puertos (POL / POD): país entre paréntesis, gris y alineado a la derecha. */
+.pto-op { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; width: 100%; }
+.pto-op-nombre { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pto-op-pais { flex-shrink: 0; font-size: 10.5px; font-weight: 600; color: #94a3b8; letter-spacing: .02em; }
+.select2-results__option--highlighted .pto-op-pais,
+.select2-results__option--selected .pto-op-pais { color: inherit; opacity: .75; }
+
+/* Espejos de POL/POD en la pestaña Marítimo. */
+.emb-espejo[readonly] { background: #f1f5f9 !important; color: var(--txt-muted, #64748b) !important; cursor: default; box-shadow: none !important; }
+
+/* Ventana «Agregar salida» (mismos campos que Itinerarios). */
+.emb-modal .modal-content { border: 0; border-radius: 14px; }
+.emb-modal .modal-header { border-bottom: 1px solid var(--border-soft, #e2e8f0); padding: 16px 22px; }
+.emb-modal .modal-title { font-size: 16px; font-weight: 800; color: var(--txt-main, #1e293b); }
+.emb-modal .modal-body { padding: 18px 22px; }
+.emb-modal .modal-footer { border-top: 1px solid var(--border-soft, #e2e8f0); padding: 12px 22px; }
+.emb-modal .emb-modal-nota { font-size: 11.5px; color: var(--txt-muted, #64748b); }
+.nc-swal { text-align: left; font-size: 13px; color: #475569; }
+.nc-parecidas { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.nc-parecida { border: 1px solid #cbd5e1; background: #fff; border-radius: 8px; padding: 6px 12px; font-weight: 700; font-size: 12.5px; color: #0f172a; cursor: pointer; }
+.nc-parecida:hover { border-color: #6d2d9e; color: #6d2d9e; }
+
+@media (max-width: 991.98px) {
+    .emb-salida { grid-template-columns: 1fr; gap: 10px; }
+    .emb-accion { text-align: left; }
+    .emb-btn-elegir, .emb-elegida-tag { width: auto; }
+}

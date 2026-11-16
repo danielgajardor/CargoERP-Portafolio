@@ -43,6 +43,80 @@ namespace AtilsonCargoSpa.Services
             catch (Exception ex) { _logger.LogDebug(ex, "Sin tabla TicketsSoporte"); return 0; }
         }
 
+        public record ResumenAvisosEquipo(int Total, int UltimoTicketId, DateTime? UltimaFecha,
+            string Titulo, string Texto);
+
+        /// <summary>
+        /// Cuenta MENSAJES de clientes que esperan respuesta, no todas las consultas abiertas.
+        /// La apertura original suma 1; cada nuevo mensaje desde la última respuesta suma 1.
+        /// Las consultas respondidas o cerradas no generan indicadores.
+        /// </summary>
+        public async Task<ResumenAvisosEquipo> AvisosPendientesEquipoAsync()
+        {
+            try
+            {
+                var abiertos = await _context.TicketsSoporte.AsNoTracking()
+                    .Where(t => t.Estado == TicketSoporte.EstadoAbierto)
+                    .Select(t => new
+                    {
+                        t.Id, t.Tipo, t.NombreUsuario, t.Detalle,
+                        t.FechaCreacion, t.FechaRespuesta, t.UltimoMensaje
+                    })
+                    .ToListAsync();
+                if (abiertos.Count == 0)
+                    return new ResumenAvisosEquipo(0, 0, null, "", "");
+
+                var nuevos = await (
+                    from m in _context.MensajesSoporte.AsNoTracking()
+                    join t in _context.TicketsSoporte.AsNoTracking() on m.IdTicket equals t.Id
+                    where t.Estado == TicketSoporte.EstadoAbierto &&
+                          m.Autor == MensajeSoporte.AutorCliente &&
+                          (t.FechaRespuesta == null || m.Fecha > t.FechaRespuesta)
+                    group m by m.IdTicket into g
+                    select new
+                    {
+                        IdTicket = g.Key,
+                        Numero = g.Count(),
+                        UltimoMensajeId = g.Max(m => m.Id),
+                        UltimaFecha = g.Max(m => m.Fecha)
+                    }).ToListAsync();
+                var porTicket = nuevos.ToDictionary(x => x.IdTicket);
+
+                int total = abiertos.Sum(t =>
+                    (t.FechaRespuesta == null ? 1 : 0) +
+                    (porTicket.TryGetValue(t.Id, out var n) ? n.Numero : 0));
+
+                var ultimo = abiertos
+                    .Where(t => t.FechaRespuesta == null ||
+                        (porTicket.TryGetValue(t.Id, out var n) && n.Numero > 0))
+                    .OrderByDescending(t =>
+                        porTicket.TryGetValue(t.Id, out var n) &&
+                        (t.FechaRespuesta == null || n.UltimaFecha > t.FechaRespuesta)
+                        ? n.UltimaFecha : t.FechaCreacion)
+                    .FirstOrDefault();
+                if (ultimo == null)
+                    return new ResumenAvisosEquipo(0, 0, null, "", "");
+
+                DateTime fechaUltima = porTicket.TryGetValue(ultimo.Id, out var info)
+                    ? info.UltimaFecha : ultimo.FechaCreacion;
+                string texto = ultimo.Detalle ?? "";
+                if (info != null && info.UltimoMensajeId > 0)
+                {
+                    texto = await _context.MensajesSoporte.AsNoTracking()
+                        .Where(m => m.Id == info.UltimoMensajeId)
+                        .Select(m => m.Texto).FirstOrDefaultAsync() ?? texto;
+                }
+                return new ResumenAvisosEquipo(total, ultimo.Id, fechaUltima,
+                    string.IsNullOrWhiteSpace(ultimo.NombreUsuario) ? "Mensaje del cliente" : ultimo.NombreUsuario!,
+                    texto.Length > 140 ? texto[..140] + "…" : texto);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Soporte: no se pudieron contar los mensajes pendientes.");
+                return new ResumenAvisosEquipo(0, 0, null, "", "");
+            }
+        }
+
         /// <summary>Conversaciones del cliente con respuestas del equipo que aún no ha visto.</summary>
         public async Task<int> ContarNoLeidasClienteAsync(int idCliente)
         {

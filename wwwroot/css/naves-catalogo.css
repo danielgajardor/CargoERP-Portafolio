@@ -1,0 +1,10 @@
+/* Lista de naves del catálogo (nov-2026): Itinerarios › Agregar salida y la ventana
+   «Agregar salida» de Create. Nombre a la izquierda; naviera a la derecha con su color. */
+.nc-grupo { display: block; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; color: #94a3b8; padding-top: 2px; }
+.nc-op { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; width: 100%; }
+.nc-op-nombre { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; font-weight: 600; color: #1e293b; }
+.nc-op-naviera { flex-shrink: 0; font-size: 10.5px; font-weight: 800; letter-spacing: .03em; text-transform: uppercase; }
+.nc-crear { font-size: 13px; font-weight: 700; color: #6d2d9e; }
+.select2-results__option--highlighted .nc-op-nombre,
+.select2-results__option--highlighted .nc-crear { color: inherit; }
+.select2-results__option--highlighted .nc-op-naviera { color: inherit !important; opacity: .85; }

@@ -137,7 +137,7 @@
                     <div class="af-grid af-grid--6">
                         <div class="af-field af-col-3">
                             <label class="af-label" for="selPol">Puerto de origen <span class="af-req">*</span></label>
-                            <select name="NuevaCotizacion.IdPuertoOrigen" id="selPol" class="af-select select2-enable">
+                            <select name="NuevaCotizacion.IdPuertoOrigen" id="selPol" class="af-select select2-enable" data-ruta="pol">
                                 <option value="">-- Selecciona un puerto --</option>
                                 @foreach (var g in puertosPorPais)
                                 {
@@ -152,7 +152,7 @@
                         </div>
                         <div class="af-field af-col-3">
                             <label class="af-label" for="selPod">Puerto de destino <span class="af-req">*</span></label>
-                            <select name="NuevaCotizacion.IdPuertoDestino" id="selPod" class="af-select select2-enable">
+                            <select name="NuevaCotizacion.IdPuertoDestino" id="selPod" class="af-select select2-enable" data-ruta="pod">
                                 <option value="">-- Selecciona un puerto --</option>
                                 @foreach (var g in puertosPorPais)
                                 {

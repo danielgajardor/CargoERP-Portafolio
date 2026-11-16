@@ -505,7 +505,7 @@ namespace AtilsonCargoSpa.Services
         }
         private static readonly Dictionary<string, string> Alias = new()
         {
-            ["valpo"] = "valparaiso", ["sai"] = "san antonio", ["san antonio chile"] = "san antonio", ["la"] = "los angeles", ["long beach"] = "long beach",
+            ["valpo"] = "valparaiso", ["sai"] = "san antonio", ["san antonio chile"] = "san antonio", ["long beach"] = "long beach",
             ["hong kong"] = "hong kong", ["nueva york"] = "new york", ["filadelfia"] = "philadelphia", ["amberes"] = "antwerp", ["hamburgo"] = "hamburg",
             ["el callao"] = "callao", ["shangai"] = "shanghai", ["new york city"] = "new york", ["antwerpen"] = "antwerp"
         };
@@ -628,7 +628,7 @@ namespace AtilsonCargoSpa.Services
             {
                 var (pol, pod) = Roles(puertos, e.Datos.GetValueOrDefault("tipo") == "Importación");
                 if (pol != null) e.Datos.TryAdd("origen", pol.Nombre);
-                if (pod != null) e.Datos.TryAdd("destino", pod.Nombre);
+                if (pod != null && (pol == null || PuertosHelper.Clave(pod.Puerto) != PuertosHelper.Clave(pol.Puerto))) e.Datos.TryAdd("destino", pod.Nombre);
                 if (!e.Datos.ContainsKey("tipo") && pol != null && PuertosHelper.EsChileno(pol.Puerto)) e.Datos["tipo"] = "Exportación";
                 if (!e.Datos.ContainsKey("tipo") && pod != null && PuertosHelper.EsChileno(pod.Puerto) && pol != null) e.Datos["tipo"] = "Importación";
             }
@@ -638,7 +638,13 @@ namespace AtilsonCargoSpa.Services
 
         private Respuesta Preguntar(EstadoAsistente e, string prefijo = "")
         {
-            string? falta = OrdenPasos.FirstOrDefault(p => !e.Datos.ContainsKey(p));
+            string? falta = OrdenPasos.FirstOrDefault(p => !e.Datos.TryGetValue(p, out var valor) || string.IsNullOrWhiteSpace(valor));
+            if (falta == null && string.Equals(e.Datos["origen"], e.Datos["destino"], StringComparison.OrdinalIgnoreCase))
+            {
+                e.Datos.Remove("destino");
+                falta = "destino";
+                prefijo += "El origen y destino no pueden ser el mismo. "; 
+            }
             bool imp = e.Datos.GetValueOrDefault("tipo") == "Importación";
             if (falta == null)
             {
@@ -683,6 +689,11 @@ namespace AtilsonCargoSpa.Services
 
             if (e.Paso == 7)
             {
+                // El estado vuelve desde el navegador: nunca enviar una solicitud incompleta
+                // aunque alguien altere el JSON o una respuesta salte accidentalmente un paso.
+                if (OrdenPasos.Any(p => !e.Datos.TryGetValue(p, out var v) || string.IsNullOrWhiteSpace(v)) ||
+                    string.Equals(e.Datos.GetValueOrDefault("origen"), e.Datos.GetValueOrDefault("destino"), StringComparison.OrdinalIgnoreCase))
+                    return Preguntar(e, "Antes de enviarla necesito confirmar toda la ruta. ");
                 if (Hay(n, "corregir", "cambiar", "editar", "modificar"))
                 {
                     var correo = e.Datos.GetValueOrDefault("correo"); var contacto = e.Datos.GetValueOrDefault("contacto");
@@ -707,8 +718,15 @@ namespace AtilsonCargoSpa.Services
                 case "origen":
                 case "destino":
                     var ps = await DetectarPuertosAsync(n);
-                    e.Datos[paso] = ps.Count > 0 ? ps[0].Nombre : Capitalizar(valor);
-                    if (ps.Count > 1 && paso == "origen") e.Datos.TryAdd("destino", ps[1].Nombre);
+                    var (origenDetectado, destinoDetectado) = Roles(ps, e.Datos.GetValueOrDefault("tipo") == "Importación");
+                    // En la pregunta de destino, un solo puerto mencionado ES el destino,
+                    // nunca una sugerencia inferida desde otro mensaje.
+                    e.Datos[paso] = ps.Count > 0
+                        ? (paso == "origen" ? origenDetectado?.Nombre ?? ps[0].Nombre : destinoDetectado?.Nombre ?? ps[0].Nombre)
+                        : Capitalizar(valor);
+                    if (ps.Count > 1 && paso == "origen" && destinoDetectado != null &&
+                        !string.Equals(e.Datos["origen"], destinoDetectado.Nombre, StringComparison.OrdinalIgnoreCase))
+                        e.Datos.TryAdd("destino", destinoDetectado.Nombre);
                     if (!e.Datos.ContainsKey("contenedor") && DetectarContenedor(n) is string c1) e.Datos["contenedor"] = c1;
                     break;
                 case "contenedor":
@@ -779,9 +797,10 @@ namespace AtilsonCargoSpa.Services
         private string Sistema()
         {
             var sb = new StringBuilder();
-            sb.AppendLine("Eres el asistente virtual del sitio web de Atilson Cargo SpA, freight forwarder con oficina en A. Prat 814 Of. 503, Valparaíso, Chile.");
+            sb.AppendLine("Eres el asistente virtual del sitio web de Atilson Cargo SpA, freight forwarder con oficina en Av. Demo 1234 Of. 101, Valparaíso, Chile.");
             sb.AppendLine("Respondes en español de Chile, cordial y profesional, en 1 a 4 frases cortas. Sin markdown.");
             sb.AppendLine("Servicios: marítimo FCL dry y reefer (exportación e importación, prepaid o collect), terrestre (depósito, planta y puerto), documental (BL, matrices, certificados), agencia de aduanas (DUS, DIN, SAG, junto a agentes de aduana habilitados) y portal de clientes 24/7.");
+            sb.AppendLine("Nunca inventes puertos de origen o destino, rutas, destinos, nombres de navieras, reservas ni datos no proporcionados. Si el cliente menciona solo origen, pregunta destino; si menciona solo destino, pregunta origen. No asumas que 'LA' o la palabra española 'la' significa Los Ángeles. Si falta información, pregúntala en vez de rellenarla.");
             sb.AppendLine("No inventes tarifas, tiempos ni fechas; deriva a cotizar en el portal o al formulario. No tienes acceso a datos de clientes. Contacto: " + Correo + ".");
             return sb.ToString();
         }

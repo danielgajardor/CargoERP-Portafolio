@@ -127,8 +127,7 @@ namespace AtilsonCargoSpa.Pages.Operaciones
                                "Operaciones Atilson\n" +
                                "CARGOFLOW DEMO SPA\n" +
                                "___________________________________________________________\n" +
-                               "Edificio Mar del Sur, Calle Blanco Nº 1623 Of. 1104 Valparaíso, Chile.\n" +
-                               "(+56) 9 0000 0000\n" +
+                               "Av. Demo 1234 Of. 101, Valparaíso, Chile.\n" +
                                "operaciones@cargoflow-demo.cl\n" +
                                "www.cargoflow-demo.cl";
             // ==========================================
@@ -155,7 +154,7 @@ namespace AtilsonCargoSpa.Pages.Operaciones
                        "Operaciones Atilson\n" +
                        "CARGOFLOW DEMO SPA\n" +
                        "___________________________________________________________\n" +
-                       "Edificio Mar del Sur, Calle Blanco Nº 1623 Of. 1104 Valparaíso, Chile.\n" +
+                       "Av. Demo 1234 Of. 101, Valparaíso, Chile.\n" +
                        "www.cargoflow-demo.cl";
 
             return Page();

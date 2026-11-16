@@ -4,8 +4,7 @@
    que controlan el modo edición (toggleEditMode / cancelEditMode).
    Todo queda acotado a .dt-premium para no afectar otras vistas.
    ========================================================================= */
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600&display=swap');
-
+/* Fuentes: se cargan una sola vez en _Layout (nov-2026). */
 @property --dt-pct { syntax: '<number>'; inherits: true; initial-value: 0; }
 
 /* ---------- 0. Tokens (también armoniza las variables existentes) ---------- */
@@ -63,13 +62,13 @@ body:has(.dt-premium) {
 }
 
 .dt-premium .mono,
-.dt-premium .font-monospace { font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Consolas, monospace !important; letter-spacing: -.2px; }
+.dt-premium .font-monospace { font-family: var(--font-mono) !important; letter-spacing: -.2px; }
 
 .dt-hero, .dt-strip, .dt-timeline, .dt-closed,
 .dt-premium #detalleTabs,
 .dt-premium .section-title-sm,
 .dt-premium .form-subcard-title,
-.swal2-popup { font-family: 'Plus Jakarta Sans', system-ui, -apple-system, 'Segoe UI', sans-serif; }
+.swal2-popup { font-family: var(--font-sans); }
 
 /* ---------- 1. HERO ---------- */
 .dt-hero {
@@ -468,7 +467,7 @@ button.dt-chip-bad:hover { background: rgba(239,68,68,.3); }
 
 /* Tipografía: .pro-title/.pro-input/etc. heredan Jakarta Sans de una sola
    vez poniéndola en el contenedor raíz (font-family hereda por defecto). */
-.dt-premium .pro-wrapper { font-family: 'Plus Jakarta Sans', system-ui, -apple-system, 'Segoe UI', sans-serif; }
+.dt-premium .pro-wrapper { font-family: var(--font-sans); }
 
 /* --- Cascarón: sidebar + contenido --- */
 .dt-premium .pro-wrapper {

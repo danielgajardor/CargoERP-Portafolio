@@ -1,0 +1,22 @@
+/* Chat del equipo (nov-2026): aviso de mensaje nuevo en cualquier página del ERP (chat-aviso.js). */
+.chat-toast {
+    position: fixed; right: 20px; bottom: 20px; z-index: 1080; width: min(360px, calc(100vw - 32px));
+    display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 4px 12px; align-items: start;
+    background: #fff; border: 1px solid #e3dfee; border-radius: 16px; padding: 14px 14px 14px 16px;
+    box-shadow: 0 14px 40px rgba(22, 14, 47, .18); color: #1e1835; text-decoration: none;
+    transform: translateY(16px); opacity: 0; transition: transform .25s ease, opacity .25s ease;
+}
+.chat-toast.visible { transform: none; opacity: 1; }
+.chat-toast:hover { color: #1e1835; border-color: #c9c1e6; }
+.chat-toast > i { grid-row: span 2; font-size: 20px; color: #443094; margin-top: 1px; }
+.chat-toast b { font-size: 14px; }
+.chat-toast span { grid-column: 2; font-size: 13.5px; color: #5d5872; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.chat-toast button { grid-row: 1; grid-column: 3; border: 0; background: none; color: #5d5872; padding: 0 2px; font-size: 14px; line-height: 1; }
+@media (prefers-reduced-motion: reduce) { .chat-toast { transition: none; } }
+
+/* Avisos de clientes en soporte comparten la estética del chat interno. */
+.soporte-toast { z-index: 1086; }
+.soporte-toast > i { color: #2563eb; }
+
+/* El contador del menú se oculta con [hidden] cuando no hay mensajes sin leer. */
+.nav-badge-traspaso[hidden] { display: none; }

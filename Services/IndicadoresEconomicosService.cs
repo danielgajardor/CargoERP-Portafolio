@@ -34,11 +34,10 @@ namespace AtilsonCargoSpa.Services
     /// Al final siempre queda el último valor guardado (App_Data/indicadores.json) y, si nunca
     /// se obtuvo uno real, un valor fijo de respaldo.
     ///
-    /// El token está en appsettings.json › BancoCentral:Token (repositorio privado; vigencia de
-    /// un año: se renueva en si3.bcentral.cl › Mi Cuenta › "Renovar token"). Una variable de
-    /// entorno BancoCentral__Token lo reemplaza sin tocar el archivo. BancoCentral:Usuario y
-    /// BancoCentral:Clave (email y contraseña de la BDE) se usan con el servicio SOAP cuando el
-    /// Banco Central rechaza el token o no hay token.
+    /// El token se configura exclusivamente en secretos/variables de entorno del servidor
+    /// mediante BancoCentral__Token. Nunca guardarlo en appsettings.json ni en Git.
+    /// BancoCentral__Usuario y BancoCentral__Clave permiten respaldo SOAP cuando
+    /// REST no está disponible. La API requiere cuenta BDE habilitada.
     /// </summary>
     public class IndicadoresEconomicosService
     {
@@ -61,10 +60,11 @@ namespace AtilsonCargoSpa.Services
         private static readonly Dictionary<string, (IndicadorValor Valor, DateTime Vence, bool Definitivo)> _cache = new();
         private static readonly object _lock = new();
 
-        // Solo se usan si nunca se ha podido obtener un valor real (ni hay uno guardado).
-        private const decimal UF_RESPALDO = 39500m;
-        private const decimal DOLAR_RESPALDO = 950m;
-        private const decimal EURO_RESPALDO = 1030m;
+        // Nunca inventar tasas para Finanzas: sin fuente real se devuelve 0 / sin fecha.
+        // El valor solo es válido para conversiones si tiene fecha reciente y procedencia real.
+        private const decimal UF_RESPALDO = 0m;
+        private const decimal DOLAR_RESPALDO = 0m;
+        private const decimal EURO_RESPALDO = 0m;
 
         public IndicadoresEconomicosService(IHttpClientFactory httpClientFactory, ILogger<IndicadoresEconomicosService> logger,
             IConfiguration config, IWebHostEnvironment env)
@@ -75,11 +75,49 @@ namespace AtilsonCargoSpa.Services
             _archivo = Path.Combine(env.ContentRootPath, "App_Data", "indicadores.json");
         }
 
-        public async Task<decimal> ObtenerValorUfAsync() => (await ObtenerAsync(Uf)).Valor;
-        public async Task<decimal> ObtenerValorDolarAsync() => (await ObtenerAsync(Dolar)).Valor;
+        public async Task<decimal> ObtenerValorUfAsync() => ValidarValorParaConversion(await ObtenerAsync(Uf), "UF");
+        public async Task<decimal> ObtenerValorDolarAsync() => ValidarValorParaConversion(await ObtenerAsync(Dolar), "dólar observado");
+
+        private static decimal ValidarValorParaConversion(IndicadorValor dato, string nombre)
+        {
+            // Una tasa sin fuente real o demasiado antigua NO puede entrar a montos contables.
+            if (dato.Valor <= 0m || !dato.Fecha.HasValue || dato.Fecha.Value.Date < DateTime.Today.AddDays(-7))
+                throw new InvalidOperationException("No hay valor real reciente de " + nombre +
+                    " disponible. Comprueba la conexión del Banco Central y reintenta antes de sincronizar Finanzas.");
+            return dato.Valor;
+        }
         public Task<IndicadorValor> ObtenerUfAsync() => ObtenerAsync(Uf);
         public Task<IndicadorValor> ObtenerDolarAsync() => ObtenerAsync(Dolar);
         public Task<IndicadorValor> ObtenerEuroAsync() => ObtenerAsync(Euro);
+
+        /// <summary>
+        /// Lectura instantánea para pintar pantallas: nunca espera HTTP.
+        /// El actualizador hospedado obtiene en segundo plano valores oficiales.
+        /// Si aún no llegó, se muestra claramente el último valor o un respaldo.
+        /// </summary>
+        public IndicadorValor ObtenerDisponibleSinRed(string codigo)
+        {
+            lock (_lock)
+            {
+                if (_cache.TryGetValue(codigo, out var actual))
+                {
+                    if (actual.Vence > DateTime.Now) return actual.Valor;
+                    return actual.Valor with
+                    {
+                        EsRespaldo = true,
+                        Fuente = "Último valor disponible (" + actual.Valor.Fuente + ")"
+                    };
+                }
+            }
+            var guardado = (BancoCentralConfigurado ? Leer(ClaveBancoCentral(codigo)) : null)
+                ?? Leer(codigo);
+            if (guardado != null)
+                return guardado with { EsRespaldo = true, Fuente = "Último valor guardado (" + guardado.Fuente + ")" };
+            return new IndicadorValor(codigo == Uf ? UF_RESPALDO : codigo == Euro ? EURO_RESPALDO : DOLAR_RESPALDO,
+                null, BancoCentralConfigurado ? "Sin valor real: Banco Central no disponible" : "Sin valor real: configurar BancoCentral__Token", true);
+        }
+
+
 
         /// <summary>
         /// Valor del indicador. Las páginas no esperan a internet si el actualizador en segundo
@@ -139,7 +177,7 @@ namespace AtilsonCargoSpa.Services
                 var bc = Leer(ClaveBancoCentral(codigo));
                 if (bc != null && bc.Fecha != null && bc.Fecha.Value.Date >= DateTime.Today.AddDays(-5))
                 {
-                    var ultimo = bc with { EsRespaldo = false };
+                    var ultimo = bc with { EsRespaldo = true, Fuente = "Banco Central (último valor publicado)" };
                     lock (_lock) { _cache[codigo] = (ultimo, DateTime.Now.AddMinutes(30), false); }
                     return ultimo;
                 }
@@ -173,7 +211,8 @@ namespace AtilsonCargoSpa.Services
             var guardado = (conBancoCentral ? Leer(ClaveBancoCentral(codigo)) : null) ?? Leer(codigo);
             var respaldo = guardado != null
                 ? guardado with { Fuente = "último valor guardado (" + guardado.Fuente + ")", EsRespaldo = true }
-                : new IndicadorValor(codigo == Uf ? UF_RESPALDO : codigo == Euro ? EURO_RESPALDO : DOLAR_RESPALDO, null, "valor de respaldo", true);
+                : new IndicadorValor(codigo == Uf ? UF_RESPALDO : codigo == Euro ? EURO_RESPALDO : DOLAR_RESPALDO, null,
+                    conBancoCentral ? "Banco Central no disponible (sin tasa real)" : "Banco Central sin credenciales (sin tasa real)", true);
             // Una falla no se reintenta en cada página: 15 minutos (el actualizador sí reintenta).
             lock (_lock) { _cache[codigo] = (respaldo, DateTime.Now.AddMinutes(15), false); }
             return respaldo;
@@ -250,18 +289,29 @@ namespace AtilsonCargoSpa.Services
 
             if (!string.IsNullOrWhiteSpace(token))
             {
-                var client = ClienteBc();
-                client.DefaultRequestHeaders.Accept.ParseAdd("application/json");
-                using var resp = await client.GetAsync(Api + "?token=" + Uri.EscapeDataString(token.Trim())
-                    + "&function=GetSeries&timeseries=" + SerieBancoCentral(codigo) + "&firstdate=" + desde + "&lastdate=" + hasta);
-                if (!resp.IsSuccessStatusCode) throw new HttpRequestException("HTTP " + (int)resp.StatusCode);
-                using var doc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync());
-                var raiz = doc.RootElement;
-                // Codigo distinto de 0: credencial rechazada (-5), serie inexistente, etc.
-                if (raiz.TryGetProperty("Codigo", out var cod) && cod.ValueKind == JsonValueKind.Number && cod.GetInt32() != 0)
-                    Rechazo(codigo, "token (REST)", cod.GetInt32(), raiz.TryGetProperty("Descripcion", out var d) ? d.GetString() : null);
-                else
-                    return UltimaObservacion(raiz, hoy);
+                try
+                {
+                    var client = ClienteBc();
+                    client.DefaultRequestHeaders.Accept.ParseAdd("application/json");
+                    using var resp = await client.GetAsync(Api + "?token=" + Uri.EscapeDataString(token.Trim())
+                        + "&function=GetSeries&timeseries=" + SerieBancoCentral(codigo) + "&firstdate=" + desde + "&lastdate=" + hasta);
+                    if (!resp.IsSuccessStatusCode) throw new HttpRequestException("HTTP " + (int)resp.StatusCode);
+                    using var doc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync());
+                    var raiz = doc.RootElement;
+                    if (raiz.TryGetProperty("Codigo", out var cod) && cod.ValueKind == JsonValueKind.Number && cod.GetInt32() != 0)
+                        Rechazo(codigo, "token (REST)", cod.GetInt32(), raiz.TryGetProperty("Descripcion", out var d) ? d.GetString() : null);
+                    else
+                    {
+                        var dato = UltimaObservacion(raiz, hoy);
+                        if (dato != null) return dato;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    // La excepción HTTP puede contener la URL; nunca registrar secretos del token.
+                    _logger.LogWarning("Consulta REST Banco Central falló ({Tipo}) para {Codigo}. Intentando SOAP si está configurado.",
+                        ex.GetType().Name, codigo);
+                }
             }
 
             if (!string.IsNullOrWhiteSpace(usuario) && !string.IsNullOrWhiteSpace(clave))

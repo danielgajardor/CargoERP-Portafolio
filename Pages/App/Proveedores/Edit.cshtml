@@ -1,19 +1,19 @@
 @page "{id:int?}"
 @model AtilsonCargoSpa.Pages.App.Proveedores.EditModel
 @{
-    ViewData["Title"] = Model.EsNuevo ? "Nuevo proveedor" : $"Proveedor: {Model.NombreOriginal}";
+    ViewData["Title"] = Model.EsNuevo ? $"Nuevo {Model.NombreTipo}" : $"{Model.NombreOriginal} · {Model.NombreTipo}";
 }
 <link rel="stylesheet" href="~/css/maestros.css" asp-append-version="true" />
 
 <div class="container-fluid py-4 mx mx-ficha-wrap">
     <header class="mx-cabecera">
         <div>
-            <div class="mx-miga"><a asp-page="./Index">Maestros › Proveedores</a></div>
-            <h1 class="mx-titulo">@(Model.EsNuevo ? "Nuevo proveedor" : Model.NombreOriginal)</h1>
-            <p class="mx-subtitulo">@(Model.EsNuevo ? "Registra una empresa de transporte o un depósito." : "Edita los datos del proveedor. Cada cambio queda registrado con tu usuario, fecha y hora.")</p>
+            <div class="mx-miga"><a asp-page="./Index" asp-route-tipo="@Model.TipoVista">Maestros › @(Model.Form.EsDeposito ? "Depósitos de almacenamiento" : "Transportistas")</a></div>
+            <h1 class="mx-titulo">@(Model.EsNuevo ? (Model.Form.EsDeposito ? "Nuevo depósito de almacenamiento" : "Nuevo transportista") : Model.NombreOriginal)</h1>
+            <p class="mx-subtitulo">@(Model.EsNuevo ? (Model.Form.EsDeposito ? "Registra la empresa proveedora de servicios de depósito o almacenamiento (tipo 12)." : "Registra una empresa de transporte para las operaciones y tarifas terrestres.") : "Edita los datos de este proveedor. Cada cambio queda registrado con tu usuario, fecha y hora.")</p>
         </div>
         <div class="mx-acciones">
-            <a asp-page="./Index" class="mx-btn mx-btn-secundario"><i class="bi bi-arrow-left"></i> Volver a la lista</a>
+            <a asp-page="./Index" asp-route-tipo="@Model.TipoVista" class="mx-btn mx-btn-secundario"><i class="bi bi-arrow-left"></i> Volver a la lista</a>
         </div>
     </header>
 
@@ -26,13 +26,14 @@
         <div class="mx-ficha">
             <div>
                 <section class="mx-tarjeta">
-                    <div class="mx-tarjeta-cab"><i class="bi bi-truck"></i><h2>Datos del proveedor</h2></div>
+                    <div class="mx-tarjeta-cab"><i class="bi @(Model.Form.EsDeposito ? "bi-building" : "bi-truck")"></i><h2>Datos @(Model.Form.EsDeposito ? "del depósito" : "del transportista")</h2></div>
                     <div class="mx-tarjeta-cuerpo">
                         <div class="mx-campos">
                             <div class="mx-campo c8">
                                 <label asp-for="Form.Nombre">Nombre<span class="req">*</span></label>
-                                <input asp-for="Form.Nombre" class="mx-input" maxlength="100" required autocomplete="off"
+                                <input asp-for="Form.Nombre" class="mx-input" maxlength="100" required autocomplete="off" readonly="@(!Model.EsNuevo)" title="@(Model.EsNuevo ? null : "El nombre no se puede cambiar: si es otra empresa, inactiva este registro y crea uno nuevo.")"
                                        data-mx-nombre-original="@Model.NombreOriginal" data-mx-aviso="avisoNombre" />
+                                @if (!Model.EsNuevo) { <small class="mx-ayuda d-block mt-1"><i class="bi bi-lock"></i> El nombre no se puede cambiar. Si es otra empresa, inactiva este registro y crea uno nuevo.</small> }
                                 <span asp-validation-for="Form.Nombre" class="mx-error-campo"></span>
                                 @if (!Model.EsNuevo)
                                 {
@@ -63,7 +64,7 @@
                                     <input type="radio" id="tipoDeposito" name="Form.EsDeposito" value="true" checked="@Model.Form.EsDeposito" />
                                     <label for="tipoDeposito" class="mx-est-activo">Depósito</label>
                                 </div>
-                                <div class="mx-ayuda">Transporte: aparece como empresa de transporte en Operaciones y en las tarifas. Depósito: aparece en almacenamiento.</div>
+                                <div class="mx-ayuda">Transporte: empresa utilizada en operaciones terrestres y tarifas de transporte. Depósito (tipo 12): proveedor de almacenamiento. Puedes cambiar la categoría aquí, pero eso alterará en qué listado aparece; sus registros históricos no se borran.</div>
                             </div>
                         </div>
                     </div>
@@ -92,17 +93,19 @@
                                 <span asp-validation-for="Form.IdCiudad" class="mx-error-campo"></span>
                             </div>
                         </div>
-                        @if (!Model.EsNuevo && Model.TarifasTransporte > 0)
+                        @if (!Model.EsNuevo && (Model.TarifasTransporte > 0 || Model.TarifasAlmacenamiento > 0))
                         {
-                            <div class="mx-ayuda mt-3"><i class="bi bi-info-circle"></i> Tiene @Model.TarifasTransporte tarifa(s) de transporte activas en Comercial.</div>
+                            <div class="mx-ayuda mt-3"><i class="bi bi-info-circle"></i>
+                                Tarifas activas en Comercial: @Model.TarifasTransporte de transporte y @Model.TarifasAlmacenamiento de almacenamiento.
+                            </div>
                         }
                     </div>
                 </section>
 
                 <div class="mx-pie">
                     <span class="mx-pie-nota"><i class="bi bi-shield-check"></i> Se guardará a nombre de <strong>@AtilsonCargoSpa.Services.MaestrosAuditoria.Usuario(User)</strong>.</span>
-                    <a asp-page="./Index" class="mx-btn mx-btn-secundario">Cancelar</a>
-                    <button type="submit" class="mx-btn mx-btn-primario" data-mx-guardar><i class="bi bi-check2"></i> <span>@(Model.EsNuevo ? "Crear proveedor" : "Guardar cambios")</span></button>
+                    <a asp-page="./Index" asp-route-tipo="@Model.TipoVista" class="mx-btn mx-btn-secundario">Cancelar</a>
+                    <button type="submit" class="mx-btn mx-btn-primario" data-mx-guardar><i class="bi bi-check2"></i> <span>@(Model.EsNuevo ? (Model.Form.EsDeposito ? "Crear depósito" : "Crear transportista") : "Guardar cambios")</span></button>
                 </div>
             </div>
 

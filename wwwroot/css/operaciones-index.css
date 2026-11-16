@@ -9,7 +9,7 @@
     }
 
     .font-mono {
-    font-family: 'SFMono-Regular', Consolas, monospace;
+    font-family: var(--font-mono);
     }
 
     .fw-black {
@@ -80,7 +80,7 @@
 
     body {
     background-color: #f1f5f9;
-    font-family: 'Inter', system-ui, sans-serif;
+    font-family: var(--font-sans);
     }
 
     /* NAVEGACIÓN Y FILTROS */
@@ -210,6 +210,56 @@
     color: #dc2626;
     border-color: #fca5a5;
     }
+
+    /* SCROLL HORIZONTAL VISIBLE — usable también con mouse */
+    .ops-scroll-tools {
+        display:flex;
+        align-items:center;
+        justify-content:space-between;
+        gap:10px;
+        margin-bottom:5px;
+        padding:0 2px;
+    }
+    .ops-scroll-hint {
+        display:flex;
+        align-items:center;
+        gap:6px;
+        color:#64748b;
+        font-size:9.5px;
+        font-weight:750;
+    }
+    .ops-scroll-actions { display:flex; gap:5px; }
+    .ops-scroll-btn {
+        width:32px;
+        height:30px;
+        display:grid;
+        place-items:center;
+        border:1px solid #dbe3ec;
+        border-radius:7px;
+        background:#fff;
+        color:#334155;
+        box-shadow:0 1px 2px rgba(15,23,42,.04);
+        cursor:pointer;
+    }
+    .ops-scroll-btn:hover { background:#f8fafc; border-color:#cbd5e1; }
+    .ops-scroll-btn:disabled { opacity:.35; cursor:default; }
+    .ops-top-scroll {
+        overflow-x:auto;
+        overflow-y:hidden;
+        height:13px;
+        margin-bottom:4px;
+        scrollbar-width:auto;
+        scrollbar-color:#94a3b8 #e2e8f0;
+    }
+    .ops-top-scroll > div { height:1px; min-width:100%; }
+    .ops-top-scroll::-webkit-scrollbar,
+    #opsTableScroll::-webkit-scrollbar { height:11px; }
+    .ops-top-scroll::-webkit-scrollbar-track,
+    #opsTableScroll::-webkit-scrollbar-track { background:#e2e8f0; border-radius:999px; }
+    .ops-top-scroll::-webkit-scrollbar-thumb,
+    #opsTableScroll::-webkit-scrollbar-thumb { background:#94a3b8; border-radius:999px; border:2px solid #e2e8f0; }
+    .ops-top-scroll::-webkit-scrollbar-thumb:hover,
+    #opsTableScroll::-webkit-scrollbar-thumb:hover { background:#64748b; }
 
     /* TABLA PRINCIPAL */
     .table-container {
@@ -914,6 +964,26 @@
     display: block !important;
     margin-top: 12px;
     }
+    .ops-alert-modal { border-radius:14px !important; overflow:hidden; }
+    .ops-alert-modal-head { background:#fff; border-bottom:1px solid #e2e8f0; padding:16px 18px; }
+    .ops-alert-modal-body { background:#f8fafc; padding:16px; max-height:72vh; overflow-y:auto; }
+    .ops-alert-summary { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:11px 13px; background:#fff; border:1px solid #e2e8f0; border-radius:10px; margin-bottom:10px; }
+    .ops-alert-summary strong { display:block; font-size:13px; color:#0f172a; }
+    .ops-alert-kicker { display:block; font-size:8px; font-weight:850; color:#94a3b8; text-transform:uppercase; letter-spacing:.06em; }
+    .ops-alert-count { display:inline-flex; align-items:center; gap:5px; font-size:9px; font-weight:850; color:#475569; background:#f8fafc; border:1px solid #e2e8f0; border-radius:999px; padding:5px 8px; }
+    .ops-alert-card { background:#fff; border:1px solid #e2e8f0; border-left-width:4px; border-radius:10px; padding:12px; margin-bottom:9px; box-shadow:0 2px 7px rgba(15,23,42,.035); }
+    .ops-alert-card.critical { border-left-color:#dc2626; }
+    .ops-alert-card.warning { border-left-color:#d97706; }
+    .ops-alert-card.info { border-left-color:#0284c7; }
+    .ops-alert-card-head { display:flex; align-items:center; justify-content:space-between; margin-bottom:7px; font-size:9px; font-weight:900; text-transform:uppercase; letter-spacing:.04em; color:#475569; }
+    .ops-alert-card-head span { display:flex; align-items:center; gap:6px; }
+    .ops-alert-card-body > div { margin:0 !important; box-shadow:none !important; background:#fff !important; padding:8px 9px !important; font-size:10.5px !important; line-height:1.45 !important; }
+    .ops-alert-action { width:100%; min-height:31px; margin-top:8px; border:1px solid #dbe3ec; border-radius:7px; background:#0f172a; color:#fff; display:flex; align-items:center; justify-content:center; gap:6px; text-decoration:none; font-size:9.5px; font-weight:850; }
+    .ops-alert-action:hover { background:#1e293b; color:#fff; }
+    .ops-alert-empty { display:flex; flex-direction:column; align-items:center; text-align:center; gap:5px; padding:34px 15px; color:#64748b; }
+    .ops-alert-empty i { font-size:28px; color:#16a34a; }
+    .ops-alert-empty strong { color:#334155; font-size:12px; }
+    .ops-alert-empty span { font-size:10px; }
 
     .erp-label {
     font-size: 10px;

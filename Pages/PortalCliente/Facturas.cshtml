@@ -190,6 +190,14 @@
     .pc-inv:hover { border-color: #ddd1ec; box-shadow: 0 22px 46px -26px rgba(44,27,77,.35); }
     .pc-inv:hover::before, .pc-inv.is-open::before { opacity: 1; }
     .pc-inv.is-open { border-color: #d2c1ea; box-shadow: 0 26px 60px -30px rgba(109,45,158,.45); }
+    .pc-inv.is-historic { background:#f8fafc; border-color:#d9e0e8; box-shadow:none; }
+    .pc-inv.is-historic::before { background:#64748b; opacity:1; }
+    .pc-inv.is-historic:hover { border-color:#cbd5e1; box-shadow:0 12px 30px -24px rgba(15,23,42,.3); }
+    .pc-inv.is-historic .pc-inv-head { background:#f8fafc; }
+    .pc-inv.is-historic .pc-bkg,
+    .pc-inv.is-historic .pc-amount,
+    .pc-inv.is-historic .pc-mroute { color:#475569; }
+    .pc-hist-chip { display:inline-flex;align-items:center;gap:4px;margin-top:5px;padding:3px 7px;border-radius:999px;background:#e5e7eb;color:#4b5563;border:1px solid #d1d5db;font-size:8.5px;font-weight:850;text-transform:uppercase;letter-spacing:.25px; }
 
     .pc-inv-head {
         display: grid; align-items: center; gap: 22px; padding: 20px 22px 20px 26px; cursor: pointer;
@@ -503,7 +511,7 @@
                     string pol = op.IdPuertoOrigenNavigation?.NombrePuerto ?? "Origen";
                     string pod = op.IdPuertoDestinoNavigation?.NombrePuerto ?? "Destino";
 
-                    <article class="pc-inv @(tienePendientes ? "" : "is-paid")" id="inv-@op.Id" data-cat="@(tienePendientes ? "saldo" : "pagada")" style="--i:@(idx++);">
+                    <article class="pc-inv @(tienePendientes ? "" : "is-paid") @(op.EsHistorica ? "is-historic" : "")" id="inv-@op.Id" data-cat="@(tienePendientes ? "saldo" : "pagada")" style="--i:@(idx++);">
                         <div class="pc-inv-head" role="button" tabindex="0" data-bs-toggle="collapse" data-bs-target="#fact-@op.Id" aria-expanded="false" aria-controls="fact-@op.Id">
 
                             <div class="pc-c-id">
@@ -511,6 +519,7 @@
                                 <div style="min-width:0;">
                                     <span class="pc-lbl">Booking</span>
                                     <span class="pc-bkg mono">@(op.NumeroBooking ?? "S/N")</span>
+                                    @if (op.EsHistorica) { <span class="pc-hist-chip"><i class="bi bi-archive-fill"></i> Histórico pre-ERP</span> }
                                     <span class="pc-date mono">@(op.FechaCreacion?.ToString("dd MMM yyyy", es) ?? "—")</span>
                                 </div>
                             </div>

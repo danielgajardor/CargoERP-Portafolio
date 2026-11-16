@@ -193,7 +193,7 @@ namespace AtilsonCargoSpa.Helpers
             : doc.AplicaSag == true ? "SAG"
             : null;
 
-        // esDus = false → Honorarios. La Tarifa Plana Paquetizada (ej. Promar) no entra
+        // esDus = false → Honorarios. La Tarifa Plana Paquetizada (ej. Marfrio) no entra
         // acá: tiene su propio cálculo. Primero la venta del mismo servicio (SAG o
         // SERNAPESCA); si no hay, una sin clasificación (o las antiguas "COMUNES").
         public static TarifasCliente? ElegirDocumental(IEnumerable<TarifasCliente> ventas, bool esDus, string? clasificacion)

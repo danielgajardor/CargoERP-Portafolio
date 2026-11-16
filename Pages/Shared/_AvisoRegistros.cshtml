@@ -4,29 +4,27 @@
    El aviso se cierra con "Entendido" y vuelve a aparecer solo cuando llega una solicitud nueva
    (se recuerda en este navegador el último número visto). *@
 @inject AtilsonCargoSpa.Services.RegistroClientesService RegistroClientes
-@inject AtilsonCargoSpa.Services.RegistroEquipoService RegistroEquipo
 @{
-    var items = new List<(string Tipo, int Id, string Nombre, DateTime Fecha, string Url)>();
+    // El aviso es un contenedor ligero en todas las vistas del ERP.
+    // Los eventos llegan DESPUÉS de pintar la página desde AvisosPendientes,
+    // evitando bloqueos SQL por cada cambio de vista.
     bool interno = User.Identity?.IsAuthenticated == true && !User.IsInRole("Cliente");
     bool esAdmin = AtilsonCargoSpa.Helpers.PermisosEquipo.EsAdmin(User);
-    bool veEmpresas = interno && (esAdmin || AtilsonCargoSpa.Helpers.PermisosEquipo.EsJefatura(User) || User.IsInRole("Ventas"));
-    if (veEmpresas)
-        foreach (var x in await RegistroClientes.UltimasPendientesAsync())
-            items.Add(("e", x.Id, x.Nombre, x.Fecha, "/App/Clientes/Solicitudes"));
-    if (interno && esAdmin)
-        foreach (var x in await RegistroEquipo.UltimasPendientesAsync())
-            items.Add(("q", x.Id, x.Nombre, x.Fecha, "/App/Equipo/Index"));
-    int maxE = items.Where(i => i.Tipo == "e").Select(i => i.Id).DefaultIfEmpty(0).Max();
-    int maxQ = items.Where(i => i.Tipo == "q").Select(i => i.Id).DefaultIfEmpty(0).Max();
+    var items = new List<(string Tipo, int Id, string Nombre, DateTime Fecha, string Url)>();
+    int maxC = 0, maxR = 0, maxE = 0, maxQ = 0;
+    // El descarte de una cuenta no debe ocultar avisos de otra persona
+    // que inicia sesión en el mismo navegador.
+    string usuarioAvisos = (User.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value
+        ?? User.Identity?.Name ?? "interno").Trim().ToLowerInvariant();
 }
-@if (items.Count > 0)
+@if (interno)
 {
-    <aside class="aviso-reg" id="avisoRegistros" role="status" aria-live="polite" hidden data-e="@maxE" data-q="@maxQ">
+    <aside class="aviso-reg" id="avisoRegistros" role="status" aria-live="polite" hidden data-usuario="@usuarioAvisos" data-e="@maxE" data-q="@maxQ" data-c="@maxC" data-r="@maxR">
         <div class="aviso-reg-cab">
             <span class="aviso-reg-ico"><i class="bi bi-person-plus"></i></span>
             <div>
-                <b>@(items.Count == 1 ? "Nueva solicitud de registro" : "Solicitudes de registro por revisar")</b>
-                <small>Esperan tu revisión en Maestros.</small>
+                <b>@(items.Count == 1 ? "Nueva solicitud del portal" : "Nuevas solicitudes desde el portal")</b>
+                <small>Revisa las solicitudes pendientes desde el ERP.</small>
             </div>
             <button type="button" class="aviso-reg-x" data-cerrar aria-label="Cerrar aviso"><i class="bi bi-x-lg"></i></button>
         </div>
@@ -35,7 +33,7 @@
             {
                 <li data-tipo="@i.Tipo" data-id="@i.Id">
                     <a href="@i.Url">
-                        <span class="aviso-reg-tag @(i.Tipo == "e" ? "emp" : "eq")">@(i.Tipo == "e" ? "Empresa" : "Equipo")</span>
+                        <span class="aviso-reg-tag @(i.Tipo == "e" ? "emp" : i.Tipo == "q" ? "eq" : "portal")">@(i.Tipo == "e" ? "Empresa" : i.Tipo == "q" ? "Equipo" : i.Tipo == "c" ? "Comercial" : "Operaciones")</span>
                         <span class="aviso-reg-nom">@i.Nombre</span>
                         <time>@i.Fecha.ToString("dd-MM HH:mm")</time>
                     </a>
@@ -66,6 +64,7 @@
         .aviso-reg-tag { font-size: 10.5px; font-weight: 700; padding: 2px 7px; border-radius: 999px; }
         .aviso-reg-tag.emp { background: #e0f2fe; color: #075985; }
         .aviso-reg-tag.eq { background: #ede9fe; color: #5b21b6; }
+        .aviso-reg-tag.portal { background: #fef3c7; color: #92400e; }
         .aviso-reg-nom { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .aviso-reg time { color: #8a84a3; font-size: 11.5px; font-variant-numeric: tabular-nums; }
         .aviso-reg-nota { margin: 10px 0 0; padding: 8px 10px; border-radius: 10px; background: #fff7ed; color: #9a3412; font-size: 12px; }
@@ -76,21 +75,76 @@
     <script>
         (function () {
             var a = document.getElementById('avisoRegistros'); if (!a) return;
-            var visto = { e: 0, q: 0 };
-            try { visto = JSON.parse(localStorage.getItem('atilson-registros-vistos') || '{}'); } catch (x) { }
-            visto.e = visto.e || 0; visto.q = visto.q || 0;
+            var visto = { e: 0, q: 0, c: 0, r: 0 };
+            var claveVistos = 'atilson-registros-vistos-v2:' + (a.dataset.usuario || 'interno');
+            try { visto = JSON.parse(localStorage.getItem(claveVistos) || '{}'); } catch (x) { }
+            visto.e = visto.e || 0; visto.q = visto.q || 0; visto.c = visto.c || 0; visto.r = visto.r || 0;
             var hayNuevo = false;
             a.querySelectorAll('li[data-tipo]').forEach(function (li) {
                 if (+li.dataset.id > (visto[li.dataset.tipo] || 0)) { li.classList.add('nuevo'); hayNuevo = true; }
             });
-            if (!hayNuevo) return;
-            a.hidden = false;
+            if (hayNuevo) a.hidden = false;
             a.querySelectorAll('[data-cerrar]').forEach(function (b) {
                 b.addEventListener('click', function () {
                     a.hidden = true;
-                    try { localStorage.setItem('atilson-registros-vistos', JSON.stringify({ e: Math.max(visto.e, +a.dataset.e), q: Math.max(visto.q, +a.dataset.q) })); } catch (x) { }
+                    ['e','q','c','r'].forEach(function (tipo) {
+                        visto[tipo] = Math.max(visto[tipo] || 0, +(a.dataset[tipo] || 0));
+                    });
+                    try { localStorage.setItem(claveVistos, JSON.stringify(visto)); } catch (x) { }
                 });
             });
+            // Actualización sin recargar: el mismo feed alimenta la campana y este aviso.
+            async function actualizarAvisos() {
+                try {
+                    const res = await fetch('/Operaciones/Index?handler=AvisosPendientes', {
+                        credentials: 'same-origin', cache: 'no-store'
+                    });
+                    if (!res.ok) return;
+                    const items = await res.json();
+                    if (!Array.isArray(items)) return;
+                    const lista = a.querySelector('ul');
+                    if (!lista) return;
+                    const pendientesNuevos = items.filter(function (item) {
+                        return item.id > (visto[item.tipo] || 0);
+                    });
+                    lista.replaceChildren();
+                    items.slice(0, 4).forEach(function (item) {
+                        const li = document.createElement('li');
+                        li.dataset.tipo = item.tipo;
+                        li.dataset.id = String(item.id);
+                        if (item.id > (visto[item.tipo] || 0)) li.className = 'nuevo';
+                        const link = document.createElement('a');
+                        link.href = item.url;
+                        const tipo = document.createElement('span');
+                        tipo.className = 'aviso-reg-tag ' + (item.tipo === 'e' ? 'emp' : item.tipo === 'q' ? 'eq' : 'portal');
+                        tipo.textContent = item.tipo === 'e' ? 'Empresa' : item.tipo === 'q' ? 'Equipo' : item.tipo === 'c' ? 'Comercial' : 'Operaciones';
+                        const nombre = document.createElement('span');
+                        nombre.className = 'aviso-reg-nom';
+                        nombre.textContent = item.titulo;
+                        const fecha = document.createElement('time');
+                        fecha.textContent = item.fecha;
+                        link.append(tipo, nombre, fecha);
+                        li.append(link);
+                        lista.append(li);
+                    });
+                    ['e','q','c','r'].forEach(function (tipo) {
+                        a.dataset[tipo] = String(Math.max(0, ...items.filter(x => x.tipo === tipo).map(x => x.id)));
+                    });
+                    if (pendientesNuevos.length) a.hidden = false;
+
+                    const boton = document.getElementById('btnNotificacionesPortal');
+                    if (boton) {
+                        const cantidadAnterior = Number(boton.dataset.cantidad || 0);
+                        boton.dataset.cantidad = String(items.length);
+                        boton.hidden = items.length === 0;
+                        boton.querySelector('.cantidad-avisos-portal').textContent =
+                            'HAY ' + items.length + ' NOTIFICACIÓN(ES) PENDIENTE(S)';
+                        if (items.length !== cantidadAnterior) boton.dataset.desactualizado = '1';
+                    }
+                } catch (_) { /* Sin conexión: conservar la última vista sin interrumpir el ERP. */ }
+            }
+            window.setInterval(actualizarAvisos, 30000);
+            window.setTimeout(actualizarAvisos, 1200);
         })();
     </script>
 }

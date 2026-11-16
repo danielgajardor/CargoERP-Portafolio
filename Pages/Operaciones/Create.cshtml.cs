@@ -82,7 +82,7 @@ namespace AtilsonCargoSpa.Pages.Operaciones
                 // Refuerzo para clientes si la naviera lo pone en un formato extraño
                 if (string.IsNullOrEmpty(cliente) || cliente.Length < 4)
                 {
-                    if (textoCompleto.Contains("PROMAR", StringComparison.OrdinalIgnoreCase)) cliente = "PROMAR INVERSIONES";
+                    if (textoCompleto.Contains("MARFRIO", StringComparison.OrdinalIgnoreCase)) cliente = "MARFRIO INVERSIONES";
                     else if (textoCompleto.Contains("ATILSON", StringComparison.OrdinalIgnoreCase)) cliente = "ATILSON";
                 }
 
@@ -277,7 +277,8 @@ namespace AtilsonCargoSpa.Pages.Operaciones
                         zonaEntrega = cot.ZonaEntrega,
                         idNaviera = cot.IdNaviera,
                         naviera = cot.IdNavieraNavigation?.NombreNaviera,
-                        nave = cot.Nave,
+                        nave = it != null ? it.NaveViaje : cot.Nave,
+                        idItinerario = it?.Id,
                         booking = cot.NumeroBooking,
                         instructivo = cot.NumeroInstructivo,
                         etd = etd?.ToString("yyyy-MM-dd", inv),
@@ -336,6 +337,21 @@ namespace AtilsonCargoSpa.Pages.Operaciones
         [BindProperty]
         public Operacione Operacione { get; set; } = default!;
 
+        // Parámetros reefer (nov-2026): los inputs numéricos del navegador envían punto
+        // decimal ("-0.5") y algunos campos de texto traen unidades ("15 CBM", "5.0%").
+        // double.TryParse con la cultura del servidor (es-CL) tomaba el punto como miles
+        // y guardaba -0.5 °C como -5 °C. Acepta punto o coma como decimal.
+        private static decimal? LeerNumero(string? valor)
+        {
+            if (string.IsNullOrWhiteSpace(valor)) return null;
+            var limpio = new string(valor.Trim().Where(c => char.IsDigit(c) || c == '.' || c == ',' || c == '-').ToArray());
+            if (limpio.Length == 0) return null;
+            if (limpio.Contains(',') && !limpio.Contains('.')) limpio = limpio.Replace(',', '.');
+            else limpio = limpio.Replace(",", "");
+            return decimal.TryParse(limpio, System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture, out var n) ? n : null;
+        }
+
         public async Task<IActionResult> OnPostAsync(
             IFormFile? ArchivoInstructivoTerrestre,
             IFormFile? DocInstructivo,
@@ -352,6 +368,9 @@ namespace AtilsonCargoSpa.Pages.Operaciones
             if (bookingExiste)
             {
                 TempData["ErrorBooking"] = $"El número de Booking/Referencia '{Operacione.NumeroBooking}' ya se encuentra registrado. Verifique el dato.";
+                // El formulario se guarda por fetch y espera JSON: así el mensaje llega a la pantalla.
+                if (Request.Headers["X-Requested-With"] == "XMLHttpRequest")
+                    return new JsonResult(new { success = false, message = TempData["ErrorBooking"] });
                 await CargarSelectListsAsync();
                 return Page();
             }
@@ -375,8 +394,13 @@ namespace AtilsonCargoSpa.Pages.Operaciones
                     Operacione.IdNaviera = _context.Navieras.FirstOrDefault()?.Id ?? 1;
                 Operacione.Nave = string.IsNullOrWhiteSpace(Operacione.Nave) ? null : Operacione.Nave.Trim().ToUpper();
                 Operacione.IdTipoCarga = 1;
-                Operacione.IdPuertoOrigen = null;
-                Operacione.IdPuertoDestino = null;
+                // nov-2026: Datos del Embarque pide POL y POD en todos los servicios (buscador de
+                // salidas), así que también se guardan sin tramo marítimo. Los costos marítimos
+                // siguen dependiendo del tipo de servicio, no de que haya puertos.
+                if (Operacione.IdPuertoOrigen != null && !await _context.Puertos.AnyAsync(p => p.Id == Operacione.IdPuertoOrigen))
+                    Operacione.IdPuertoOrigen = null;
+                if (Operacione.IdPuertoDestino != null && !await _context.Puertos.AnyAsync(p => p.Id == Operacione.IdPuertoDestino))
+                    Operacione.IdPuertoDestino = null;
             }
 
             else
@@ -386,6 +410,37 @@ namespace AtilsonCargoSpa.Pages.Operaciones
                 if (Operacione.IdTipoCarga == 0)
                     Operacione.IdTipoCarga = 1;
             }
+
+            // nov-2026: origen y destino no pueden ser del mismo país (p. ej. Valparaíso → San Antonio).
+            var paisRepetido = await AtilsonCargoSpa.Helpers.PuertosHelper.MismoPaisAsync(_context, Operacione.IdPuertoOrigen, Operacione.IdPuertoDestino);
+            if (paisRepetido != null)
+            {
+                string msgPais = AtilsonCargoSpa.Helpers.PuertosHelper.MensajeMismoPais(paisRepetido);
+                if (Request.Headers["X-Requested-With"] == "XMLHttpRequest")
+                    return new JsonResult(new { success = false, message = msgPais });
+                TempData["ErrorBooking"] = msgPais;
+                await CargarSelectListsAsync();
+                return Page();
+            }
+
+            // Nave / Viaje del maestro de itinerarios (nov-2026): el Id de la salida solo se
+            // guarda si existe y corresponde a la nave elegida.
+            if (!string.IsNullOrWhiteSpace(Operacione.Nave)) Operacione.Nave = Operacione.Nave.Trim().ToUpper();
+            Operacione.IdItinerario = await AtilsonCargoSpa.Helpers.ItinerariosHelper.ResolverSalidaAsync(
+                _context, Operacione.IdItinerario, Operacione.Nave, Operacione.IdNaviera > 0 ? Operacione.IdNaviera : null);
+            // nov-2026: la nave se elige de una salida del maestro de itinerarios. Si no está, se
+            // agrega con "Agregar salida" en Datos del Embarque; no se escribe a mano.
+            if (!string.IsNullOrWhiteSpace(Operacione.Nave) && Operacione.IdItinerario == null)
+            {
+                string msgNave = $"La nave «{Operacione.Nave}» no está en Itinerarios. Búscala en Datos del Embarque o agrégala con «Agregar salida».";
+                if (Request.Headers["X-Requested-With"] == "XMLHttpRequest")
+                    return new JsonResult(new { success = false, message = msgNave });
+                TempData["ErrorBooking"] = msgNave;
+                await CargarSelectListsAsync();
+                return Page();
+            }
+            // Si la salida elegida ya zarpó, su zarpe queda como ETD Real (como al registrarlo en Itinerarios).
+            await AtilsonCargoSpa.Helpers.ItinerariosHelper.AjustarZarpeAlCambiarSalidaAsync(_context, Operacione, null, Operacione.EtdReal);
 
             // Propietario de Contrato: solo valores de la lista; "Otros" guarda el texto.
             Operacione.PropietarioContrato = AtilsonCargoSpa.Models.Operacione.NormalizarPropietarioContrato(Operacione.PropietarioContrato);
@@ -414,6 +469,13 @@ namespace AtilsonCargoSpa.Pages.Operaciones
 
             Operacione.TerminalPortuario = esMaritimo ? termMaritimo : termTerrestre;
 
+            // Solo documental (nov-2026): el terminal del ISPS se elige en el paso Documental, y es
+            // el único que vale (con POL en Datos del Embarque, el terminal marítimo/terrestre se
+            // autocompleta en campos ocultos; "Sin ISPS / no aplica" debe quedar sin terminal).
+            string? termIspsDoc = Request.Form["TerminalIspsDoc"].FirstOrDefault()?.Trim().ToUpper();
+            if (!esMaritimo && !esTerrestre)
+                Operacione.TerminalPortuario = string.IsNullOrWhiteSpace(termIspsDoc) ? null : termIspsDoc;
+
             // --- CORRELATIVO ATL-YYYYMM-XXX ---
             int anioActual = DateTime.Now.Year;
             int mesActual = DateTime.Now.Month;
@@ -433,11 +495,11 @@ namespace AtilsonCargoSpa.Pages.Operaciones
                 Operacione.CondicionReefer = Request.Form["CondicionReefer"];
                 Operacione.MarcaAc = Request.Form["MarcaAc"];
                 Operacione.Atmosfera = Request.Form["TipoAtmosfera"];
-                if (double.TryParse(Request.Form["TempSeteada"], out double temp)) Operacione.Temperatura = temp;
-                if (double.TryParse(Request.Form["Ventilacion"], out double vent)) Operacione.Ventilacion = vent;
-                if (double.TryParse(Request.Form["Humedad"], out double hum)) Operacione.Humedad = hum;
-                if (double.TryParse(Request.Form["NivelO2"], out double o2)) Operacione.O2 = o2;
-                if (double.TryParse(Request.Form["NivelCO2"], out double co2)) Operacione.Co2 = co2;
+                if (LeerNumero(Request.Form["TempSeteada"]) is decimal temp) Operacione.Temperatura = (double)temp;
+                if (LeerNumero(Request.Form["Ventilacion"]) is decimal vent) Operacione.Ventilacion = (double)vent;
+                if (LeerNumero(Request.Form["Humedad"]) is decimal hum) Operacione.Humedad = (double)hum;
+                if (LeerNumero(Request.Form["NivelO2"]) is decimal o2) Operacione.O2 = (double)o2;
+                if (LeerNumero(Request.Form["NivelCO2"]) is decimal co2) Operacione.Co2 = (double)co2;
             }
             else
             {
@@ -526,11 +588,13 @@ namespace AtilsonCargoSpa.Pages.Operaciones
 
             // Solo documental (oct-2026): el depósito de retiro vacío se elige en Documental
             // y se guarda en un registro terrestre principal (lo usa la tarifa del Gate).
-            if (!esTerrestre && !esMaritimo && !string.IsNullOrWhiteSpace(Request.Form["DepositoRetiroGateDoc"]))
+            if (!esTerrestre && !esMaritimo && (!string.IsNullOrWhiteSpace(Request.Form["DepositoRetiroGateDoc"]) || !string.IsNullOrWhiteSpace(termIspsDoc)))
             {
                 Operacione.OperacionesTerrestres.Add(new OperacionesTerrestre
                 {
-                    DepositoRetiro = Request.Form["DepositoRetiroGateDoc"].ToString().Trim(),
+                    DepositoRetiro = string.IsNullOrWhiteSpace(Request.Form["DepositoRetiroGateDoc"]) ? null : Request.Form["DepositoRetiroGateDoc"].ToString().Trim(),
+                    // Terminal del ISPS: el motor de Finanzas lo lee del registro terrestre principal.
+                    TerminalTerrestreStr = string.IsNullOrWhiteSpace(termIspsDoc) ? null : termIspsDoc,
                     FechaCreacion = DateTime.Now,
                     UsuarioCreador = nombreUsuario,
                     Activo = true,
@@ -620,11 +684,11 @@ namespace AtilsonCargoSpa.Pages.Operaciones
                     nuevaUnidad.CondicionReefer = Request.Form[$"ContenedoresExtra[{i}].CondicionReefer"];
                     nuevaUnidad.TipoAtmosfera = Request.Form[$"ContenedoresExtra[{i}].TipoAtmosfera"];
                     nuevaUnidad.MarcaAc = Request.Form[$"ContenedoresExtra[{i}].MarcaAc"];
-                    if (decimal.TryParse(Request.Form[$"ContenedoresExtra[{i}].TempSeteada"], out decimal tempExt)) nuevaUnidad.Temperatura = tempExt;
-                    if (int.TryParse(Request.Form[$"ContenedoresExtra[{i}].Humedad"], out int humExt)) nuevaUnidad.Humedad = humExt;
-                    if (int.TryParse(Request.Form[$"ContenedoresExtra[{i}].Ventilacion"], out int ventExt)) nuevaUnidad.Ventilacion = ventExt;
-                    if (decimal.TryParse(Request.Form[$"ContenedoresExtra[{i}].NivelO2"], out decimal o2Ext)) nuevaUnidad.NivelO2 = o2Ext;
-                    if (decimal.TryParse(Request.Form[$"ContenedoresExtra[{i}].NivelCO2"], out decimal co2Ext)) nuevaUnidad.NivelCo2 = co2Ext;
+                    if (LeerNumero(Request.Form[$"ContenedoresExtra[{i}].TempSeteada"]) is decimal tempExt) nuevaUnidad.Temperatura = tempExt;
+                    if (LeerNumero(Request.Form[$"ContenedoresExtra[{i}].Humedad"]) is decimal humExt) nuevaUnidad.Humedad = (int)Math.Round(humExt);
+                    if (LeerNumero(Request.Form[$"ContenedoresExtra[{i}].Ventilacion"]) is decimal ventExt) nuevaUnidad.Ventilacion = (int)Math.Round(ventExt);
+                    if (LeerNumero(Request.Form[$"ContenedoresExtra[{i}].NivelO2"]) is decimal o2Ext) nuevaUnidad.NivelO2 = o2Ext;
+                    if (LeerNumero(Request.Form[$"ContenedoresExtra[{i}].NivelCO2"]) is decimal co2Ext) nuevaUnidad.NivelCo2 = co2Ext;
                 }
 
                 Operacione.Unidadestecnicas.Add(nuevaUnidad);
@@ -683,6 +747,10 @@ namespace AtilsonCargoSpa.Pages.Operaciones
             // el instante en que se crea la operación — no solo tras el primer edit.
             await _finanzasSync.SincronizarAsync(Operacione.Id, nombreUsuario);
 
+            // Fechas de la nave: lo que el booking trae distinto de su salida (stacking, corte, ETD, ETA)
+            // queda en la salida (Itinerarios) y se copia a los demás bookings de esa nave y viaje.
+            var fechasNave = await AtilsonCargoSpa.Services.FechasNave.DesdeBookingAsync(_context, Operacione, null, nombreUsuario, "Crear operación");
+
             // Si la operación nace de una solicitud de reserva del Portal
             // (Create?cotId=N), se marca como convertida: deja de aparecer en el
             // Centro de Notificaciones y no se vuelve a crear por error.
@@ -696,7 +764,8 @@ namespace AtilsonCargoSpa.Pages.Operaciones
                 }
             }
 
-            TempData["SuccessMsg"] = $"La operación {Operacione.NumeroBooking} fue creada exitosamente.";
+            TempData["SuccessMsg"] = $"La operación {Operacione.NumeroBooking} fue creada exitosamente."
+                + fechasNave.Mensaje();
 
             bool esAjax = Request.Headers["X-Requested-With"] == "XMLHttpRequest";
             bool generarPdf = Request.Form["GenerarPdfDirecto"] == "true";

@@ -17,6 +17,8 @@
 
 <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
 <link rel="stylesheet" href="~/css/cotizaciones-ops.css" asp-append-version="true" />
+<link rel="stylesheet" href="~/css/naves-catalogo.css" asp-append-version="true" />
+<link rel="stylesheet" href="~/css/maestros.css" asp-append-version="true" />
 
 <div class="container-fluid py-4 cot-ops">
 
@@ -31,6 +33,20 @@
         <partial name="_CotizacionesNav" model="@("itinerarios")" />
     </div>
 
+    @if (TempData["AvisoItinerario"] is string avisoIt)
+    {
+        <div class="alert alert-success cot-aviso d-flex align-items-center gap-2" role="status"><i class="bi bi-check-circle-fill"></i><span>@avisoIt</span></div>
+    }
+    @if (TempData["ErrorItinerario"] is string errIt)
+    {
+        <div class="alert alert-danger cot-aviso" role="alert">
+            <div class="d-flex align-items-center gap-2"><i class="bi bi-x-circle-fill"></i><span>@errIt</span></div>
+            @if (TempData["ErroresItinerario"] is string detalleIt)
+            {
+                <pre class="it-errores mb-0 mt-2">@detalleIt</pre>
+            }
+        </div>
+    }
     @if (aviso.Texto != null)
     {
         <div class="alert alert-@aviso.Tipo cot-aviso d-flex align-items-center gap-2" role="status">
@@ -70,23 +86,23 @@
                         </select>
                     </div>
                     <div class="col-md-5">
-                        <label class="cot-label" for="itNave">Nave <span class="text-danger">*</span></label>
-                        <input id="itNave" name="Input.Nave" class="form-control text-uppercase" list="dlNaves" maxlength="150" value="@Model.Input.Nave" placeholder="Ej: MSC FLAVIA" required autocomplete="off" />
-                        <datalist id="dlNaves">
-                            @foreach (var nave in Model.NavesSugeridas)
+                        <label class="cot-label" for="itNave">Nave <span class="text-danger">*</span> <span class="cot-muted">del catálogo · si no está, créala desde la lista · <a asp-page="/App/Naves/Index" class="cot-muted">Maestro de naves</a></span></label>
+                        @* nov-2026: la nave se elige del catálogo (dbo.naves); el N° de viaje se escribe siempre. *@
+                        <select id="itNave" name="Input.Nave" class="form-select" required>
+                            @if (!string.IsNullOrWhiteSpace(Model.Input.Nave))
                             {
-                                <option value="@nave"></option>
+                                <option value="@Model.Input.Nave" selected>@Model.Input.Nave</option>
                             }
-                        </datalist>
+                        </select>
                     </div>
                     <div class="col-md-3">
-                        <label class="cot-label" for="itViaje">N° viaje</label>
-                        <input id="itViaje" name="Input.NumeroViaje" class="form-control text-uppercase" maxlength="40" value="@Model.Input.NumeroViaje" placeholder="Ej: 432N" />
+                        <label class="cot-label" for="itViaje">N° viaje <span class="text-danger">*</span></label>
+                        <input id="itViaje" name="Input.NumeroViaje" class="form-control text-uppercase" maxlength="40" value="@Model.Input.NumeroViaje" placeholder="Ej: 432N" required />
                     </div>
 
                     <div class="col-md-6">
                         <label class="cot-label" for="itPol">Puerto de origen (POL) <span class="text-danger">*</span></label>
-                        <select id="itPol" name="Input.IdPuertoOrigen" class="form-select it-select2" required>
+                        <select id="itPol" name="Input.IdPuertoOrigen" class="form-select it-select2" data-ruta="pol" required>
                             <option value="">Seleccionar…</option>
                             @foreach (var g in puertosPorPais)
                             {
@@ -101,7 +117,7 @@
                     </div>
                     <div class="col-md-6">
                         <label class="cot-label" for="itPod">Puerto de destino (POD) <span class="text-danger">*</span></label>
-                        <select id="itPod" name="Input.IdPuertoDestino" class="form-select it-select2" required>
+                        <select id="itPod" name="Input.IdPuertoDestino" class="form-select it-select2" data-ruta="pod" required>
                             <option value="">Seleccionar…</option>
                             @foreach (var g in puertosPorPais)
                             {
@@ -116,12 +132,12 @@
                     </div>
 
                     <div class="col-sm-6 col-lg-3">
-                        <label class="cot-label" for="itEtd">ETD (zarpe) <span class="text-danger">*</span></label>
-                        <input id="itEtd" type="date" name="Input.Etd" class="form-control" value="@Model.Input.Etd" required />
+                        <label class="cot-label" for="itEtd">ETD · fecha y hora de zarpe <span class="text-danger">*</span></label>
+                        <input id="itEtd" type="datetime-local" name="Input.Etd" class="form-control" value="@Model.Input.Etd" required />
                     </div>
                     <div class="col-sm-6 col-lg-3">
-                        <label class="cot-label" for="itEta">ETA (arribo) <span class="text-danger">*</span></label>
-                        <input id="itEta" type="date" name="Input.Eta" class="form-control" value="@Model.Input.Eta" required />
+                        <label class="cot-label" for="itEta">ETA · fecha y hora de arribo <span class="text-danger">*</span></label>
+                        <input id="itEta" type="datetime-local" name="Input.Eta" class="form-control" value="@Model.Input.Eta" required />
                         <small class="it-transit" id="itTransit" aria-live="polite"></small>
                     </div>
                     <div class="col-sm-6 col-lg-3">
@@ -131,6 +147,30 @@
                     <div class="col-sm-6 col-lg-3">
                         <label class="cot-label" for="itTransbordo">Transbordo</label>
                         <input id="itTransbordo" name="Input.Transbordo" class="form-control text-uppercase" maxlength="150" value="@Model.Input.Transbordo" placeholder="Vacío = directo" />
+                    </div>
+                    @* 13-nov: stacking de la salida (opcional; las navieras no siempre lo informan). *@
+                    <div class="col-12">
+                        <div class="it-stk">
+                            <div class="it-stk__tit"><i class="bi bi-box-arrow-in-down me-1"></i> Stacking <span class="cot-muted">(opcional · se copia a los bookings de esta nave según su carga Dry o Reefer)</span></div>
+                            <div class="row g-2">
+                                <div class="col-sm-6 col-lg-3">
+                                    <label class="cot-label" for="itStkDryIni">Dry · apertura</label>
+                                    <input id="itStkDryIni" type="datetime-local" name="Input.StackingInicioDry" class="form-control" value="@Model.Input.StackingInicioDry" />
+                                </div>
+                                <div class="col-sm-6 col-lg-3">
+                                    <label class="cot-label" for="itStkDryFin">Dry · cierre</label>
+                                    <input id="itStkDryFin" type="datetime-local" name="Input.StackingFinDry" class="form-control" value="@Model.Input.StackingFinDry" />
+                                </div>
+                                <div class="col-sm-6 col-lg-3">
+                                    <label class="cot-label" for="itStkRfIni">Reefer · apertura</label>
+                                    <input id="itStkRfIni" type="datetime-local" name="Input.StackingInicioReefer" class="form-control" value="@Model.Input.StackingInicioReefer" />
+                                </div>
+                                <div class="col-sm-6 col-lg-3">
+                                    <label class="cot-label" for="itStkRfFin">Reefer · cierre</label>
+                                    <input id="itStkRfFin" type="datetime-local" name="Input.StackingFinReefer" class="form-control" value="@Model.Input.StackingFinReefer" />
+                                </div>
+                            </div>
+                        </div>
                     </div>
                     <div class="col-12">
                         <label class="cot-label" for="itObs">Observaciones <span class="cot-muted">(las ve el cliente)</span></label>
@@ -150,28 +190,51 @@
                     <button type="submit" class="btn btn-atilson cot-btn-primary"><i class="bi bi-check2 me-1"></i>@(editando ? "Guardar cambios" : "Agregar salida")</button>
                 </div>
             </form>
+            @if (editando && Model.Registro != null)
+            {
+                @* 13-nov: registro de cambios de la salida (usuario, fecha y hora de cada alta o cambio). *@
+                <details class="it-registro mt-3">
+                    <summary><i class="bi bi-clock-history me-1"></i> Registro de cambios de esta salida (@Model.Registro.Historial.Count)</summary>
+                    <partial name="/Pages/App/_MaestroRegistro.cshtml" model="Model.Registro" />
+                </details>
+            }
+        </div>
+    </section>
+
+    <!-- Carga masiva (plantilla Excel) -->
+    <section class="erp-card it-masiva mb-4">
+        <div class="it-masiva__texto">
+            <strong><i class="bi bi-file-earmark-spreadsheet me-1"></i> Carga masiva</strong>
+            <small>Completa la plantilla (una fila por salida) y súbela. Si una salida ya existe se actualizan sus fechas; si una fila tiene un error no se carga ninguna.</small>
+        </div>
+        <div class="it-masiva__acciones">
+            <a class="btn btn-sm btn-atilson-outline" asp-page-handler="Plantilla"><i class="bi bi-download me-1"></i> Descargar plantilla</a>
+            <form method="post" asp-page-handler="CargaMasiva" enctype="multipart/form-data" class="d-flex gap-2 align-items-center m-0">
+                <input type="file" name="ArchivoItinerarios" accept=".xlsx" class="form-control form-control-sm" required aria-label="Archivo de itinerarios (.xlsx)" />
+                <button type="submit" class="btn btn-sm btn-atilson"><i class="bi bi-upload me-1"></i> Cargar</button>
+            </form>
         </div>
     </section>
 
     <!-- Filtros -->
     <form method="get" class="it-filters" role="search" aria-label="Filtrar salidas">
-        <select name="pol" class="form-select" aria-label="Filtrar por puerto de origen">
+        <select name="pol" class="form-select" data-ruta="pol" aria-label="Filtrar por puerto de origen">
             <option value="">Todos los POL</option>
             @foreach (var p in Model.Puertos.Where(PuertosHelper.EsChileno))
             {
-                <option value="@p.Id" selected="@(Model.Pol == p.Id)">@p.NombrePuerto</option>
+                <option value="@p.Id" data-pais="@p.Pais" selected="@(Model.Pol == p.Id)">@p.NombrePuerto</option>
             }
             <option disabled>──────────</option>
             @foreach (var p in Model.Puertos.Where(p => !PuertosHelper.EsChileno(p)))
             {
-                <option value="@p.Id" selected="@(Model.Pol == p.Id)">@p.NombrePuerto (@p.Pais)</option>
+                <option value="@p.Id" data-pais="@p.Pais" selected="@(Model.Pol == p.Id)">@p.NombrePuerto (@p.Pais)</option>
             }
         </select>
-        <select name="pod" class="form-select" aria-label="Filtrar por puerto de destino">
+        <select name="pod" class="form-select" data-ruta="pod" aria-label="Filtrar por puerto de destino">
             <option value="">Todos los POD</option>
             @foreach (var p in Model.Puertos)
             {
-                <option value="@p.Id" selected="@(Model.Pod == p.Id)">@p.NombrePuerto@(PuertosHelper.EsChileno(p) ? "" : " (" + p.Pais + ")")</option>
+                <option value="@p.Id" data-pais="@p.Pais" selected="@(Model.Pod == p.Id)">@p.NombrePuerto@(PuertosHelper.EsChileno(p) ? "" : " (" + p.Pais + ")")</option>
             }
         </select>
         <select name="naviera" class="form-select" aria-label="Filtrar por naviera">
@@ -208,7 +271,21 @@
             <section class="it-week" aria-label="@ItinerariosHelper.EtiquetaSemana(semana.Key)">
                 <h2 class="it-week__title">@ItinerariosHelper.EtiquetaSemana(semana.Key) <span>@semana.Count() salida@(semana.Count() == 1 ? "" : "s")</span></h2>
                 <div class="table-responsive erp-card p-0">
+                    @* Mismo ancho de columnas en todas las semanas (tabla de ancho fijo). *@
                     <table class="table erp-table it-table mb-0">
+                        <colgroup>
+                            <col class="it-c-naviera" />
+                            <col class="it-c-nave" />
+                            <col class="it-c-ruta" />
+                            <col class="it-c-fecha" />
+                            <col class="it-c-fecha" />
+                            <col class="it-c-transito" />
+                            <col class="it-c-corte" />
+                            <col class="it-c-zarpe" />
+                            <col class="it-c-zarpe" />
+                            <col class="it-c-estado" />
+                            <col class="it-c-acciones" />
+                        </colgroup>
                         <thead>
                             <tr>
                                 <th scope="col">Naviera</th>
@@ -216,7 +293,10 @@
                                 <th scope="col">Ruta</th>
                                 <th scope="col">ETD</th>
                                 <th scope="col">ETA</th>
-                                <th scope="col">Corte doc.</th>
+                                <th scope="col">Tránsito</th>
+                                <th scope="col">Corte doc. / stacking</th>
+                                <th scope="col">Zarpe efectivo</th>
+                                <th scope="col">Arribo efectivo</th>
                                 <th scope="col">Estado</th>
                                 <th scope="col" class="text-end"><span class="visually-hidden">Acciones</span></th>
                             </tr>
@@ -237,14 +317,59 @@
                                         {
                                             <span class="it-viaje">@s.NumeroViaje</span>
                                         }
+                                        <span class="it-sub">Salida #@s.Id</span>
                                     </td>
                                     <td>
                                         @(s.IdPuertoOrigenNavigation?.NombrePuerto ?? "?") <i class="bi bi-arrow-right it-arrow"></i> @(s.IdPuertoDestinoNavigation?.NombrePuerto ?? "?")
-                                        <span class="it-sub">@(string.IsNullOrWhiteSpace(s.Transbordo) ? "Directo" : "Vía " + s.Transbordo) · @s.DiasTransito días</span>
+                                        <span class="it-sub">@(string.IsNullOrWhiteSpace(s.Transbordo) ? "Directo" : "Vía " + s.Transbordo)</span>
                                     </td>
-                                    <td class="it-date">@s.Etd.ToString("ddd dd'/'MM", cl)</td>
-                                    <td class="it-date">@s.Eta.ToString("ddd dd'/'MM", cl)</td>
-                                    <td class="it-date">@(s.CorteDocumental?.ToString("dd'/'MM HH:mm", cl) ?? "—")</td>
+                                    <td class="it-date">@s.Etd.ToString("ddd dd'/'MM", cl) @if (s.HoraEtd != null) { <span class="it-hora">@s.HoraEtd.Value.ToString("HH:mm")</span> }</td>
+                                    <td class="it-date">@s.Eta.ToString("ddd dd'/'MM", cl) @if (s.HoraEta != null) { <span class="it-hora">@s.HoraEta.Value.ToString("HH:mm")</span> }</td>
+                                    <td class="it-date">@s.DiasTransito días</td>
+                                    <td class="it-date">
+                                        @(s.CorteDocumental?.ToString("dd'/'MM HH:mm", cl) ?? "—")
+                                        @{ var stkLineas = AtilsonCargoSpa.Services.FechasNave.Resumen(s.StackingInicioDry, s.StackingFinDry, s.StackingInicioReefer, s.StackingFinReefer); }
+                                        <span class="it-stk-cel" title="Stacking Dry: @(s.StackingInicioDry?.ToString("dd'/'MM HH:mm", cl) ?? "—") a @(s.StackingFinDry?.ToString("dd'/'MM HH:mm", cl) ?? "—") · Reefer: @(s.StackingInicioReefer?.ToString("dd'/'MM HH:mm", cl) ?? "—") a @(s.StackingFinReefer?.ToString("dd'/'MM HH:mm", cl) ?? "—")">
+                                            @if (stkLineas.Count == 0)
+                                            {
+                                                <span>Sin stacking</span>
+                                            }
+                                            @foreach (var l in stkLineas)
+                                            {
+                                                <span class="it-stk-l"><b>@l.Tipo</b> <span class="it-stk-r">@l.Rango</span></span>
+                                            }
+                                        </span>
+                                    </td>
+                                    <td class="it-date">
+                                        @if (s.ZarpeEfectivo != null)
+                                        {
+                                            <span class="it-zarpe"><i class="bi bi-check-circle-fill"></i> @s.ZarpeEfectivo.Value.ToString("dd'/'MM HH:mm", cl)</span>
+                                            @if (Model.UltimaFechaReal.TryGetValue(s.Id + "|Zarpe efectivo", out var hz))
+                                            {
+                                                <span class="it-quien" title="Registrado por @hz.Usuario el @hz.FechaCambio.ToString("dd'/'MM'/'yyyy HH:mm")">@hz.Usuario · @hz.FechaCambio.ToString("dd'/'MM HH:mm")</span>
+                                            }
+                                        }
+                                        <button type="button" class="btn btn-link btn-sm it-zarpe-btn p-0" data-bs-toggle="modal" data-bs-target="#modalZarpe"
+                                                data-id="@s.Id" data-nave="@s.NaveViaje" data-zarpe="@(s.ZarpeEfectivo?.ToString("yyyy-MM-ddTHH:mm") ?? "")"
+                                                data-etd="@s.EtdFechaHora.ToString("yyyy-MM-ddTHH:mm")">
+                                            @(s.ZarpeEfectivo == null ? "Registrar" : "Cambiar")
+                                        </button>
+                                    </td>
+                                    <td class="it-date">
+                                        @if (s.ArriboEfectivo != null)
+                                        {
+                                            <span class="it-zarpe"><i class="bi bi-check-circle-fill"></i> @s.ArriboEfectivo.Value.ToString("dd'/'MM HH:mm", cl)</span>
+                                            @if (Model.UltimaFechaReal.TryGetValue(s.Id + "|Arribo efectivo", out var ha))
+                                            {
+                                                <span class="it-quien" title="Registrado por @ha.Usuario el @ha.FechaCambio.ToString("dd'/'MM'/'yyyy HH:mm")">@ha.Usuario · @ha.FechaCambio.ToString("dd'/'MM HH:mm")</span>
+                                            }
+                                        }
+                                        <button type="button" class="btn btn-link btn-sm it-zarpe-btn p-0" data-bs-toggle="modal" data-bs-target="#modalArribo"
+                                                data-id="@s.Id" data-nave="@s.NaveViaje" data-arribo="@(s.ArriboEfectivo?.ToString("yyyy-MM-ddTHH:mm") ?? "")"
+                                                data-eta="@s.EtaFechaHora.ToString("yyyy-MM-ddTHH:mm")">
+                                            @(s.ArriboEfectivo == null ? "Registrar" : "Cambiar")
+                                        </button>
+                                    </td>
                                     <td>
                                         @if (zarpada)
                                         {
@@ -264,6 +389,9 @@
                                         }
                                     </td>
                                     <td class="text-end it-actions">
+                                        <button type="button" class="btn btn-sm btn-atilson-outline" onclick="itHistorial(@s.Id, this)" data-nave="@s.NaveViaje"
+                                                title="Historial de cambios@(string.IsNullOrWhiteSpace(s.UsuarioCreador) ? "" : " · creada por " + s.UsuarioCreador + " el " + s.FechaCreacion.ToString("dd'/'MM'/'yyyy HH:mm"))"
+                                                aria-label="Historial de la salida @s.Nave"><i class="bi bi-clock-history"></i></button>
                                         <a class="btn btn-sm btn-atilson-outline" asp-page="./Itinerarios" asp-route-editar="@s.Id" asp-route-pol="@Model.Pol" asp-route-pod="@Model.Pod" asp-route-naviera="@Model.Naviera" title="Editar" aria-label="Editar salida @s.Nave"><i class="bi bi-pencil"></i></a>
                                         <a class="btn btn-sm btn-atilson-outline" asp-page="./Itinerarios" asp-route-copiar="@s.Id" asp-route-pol="@Model.Pol" asp-route-pod="@Model.Pod" asp-route-naviera="@Model.Naviera" title="Copiar a la semana siguiente" aria-label="Copiar salida a la semana siguiente"><i class="bi bi-copy"></i></a>
                                         <form method="post" asp-page-handler="Eliminar" class="d-inline" onsubmit="return confirm('¿Eliminar esta salida? Los clientes dejarán de verla.');">
@@ -284,13 +412,140 @@
     }
 </div>
 
+<div class="modal fade" id="modalZarpe" tabindex="-1" aria-labelledby="modalZarpeTitulo" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <form method="post" asp-page-handler="Zarpe" class="modal-content it-form-real" data-tipo="zarpe">
+            <div class="modal-header">
+                <h5 class="modal-title" id="modalZarpeTitulo">Zarpe efectivo</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" name="idSalida" id="zarpeIdSalida" />
+                <input type="hidden" name="Pol" value="@Model.Pol" />
+                <input type="hidden" name="Pod" value="@Model.Pod" />
+                <input type="hidden" name="Naviera" value="@Model.Naviera" />
+                <input type="hidden" name="VerPasadas" value="@(Model.VerPasadas ? "true" : "false")" />
+                <p class="cot-muted mb-2" id="zarpeNave"></p>
+                <label class="cot-label" for="zarpeFecha">Fecha y hora real del zarpe</label>
+                <input type="datetime-local" class="form-control" name="zarpe" id="zarpeFecha" />
+                <small class="cot-muted d-block mt-2">Es independiente de la ETD. Se copia al «Zarpe Real» de los bookings de esta salida que todavía no lo tienen (en el Mainboard, bajo la ETD), sus contenedores pasan a «Zarpe» y se apaga la alerta de la ETD. Déjalo vacío para quitarlo.</small>
+                <div class="form-check mt-3">
+                    <input class="form-check-input" type="checkbox" name="notificar" value="true" id="zarpeNotificar" checked />
+                    <label class="form-check-label" for="zarpeNotificar">Enviar la confirmación de zarpe a los clientes de la nave</label>
+                </div>
+                <div class="it-dest" id="zarpeDest"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-link cot-link-btn" data-bs-dismiss="modal">Cancelar</button>
+                <button type="submit" class="btn btn-atilson cot-btn-primary"><i class="bi bi-check2 me-1"></i> Guardar zarpe</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+@* 13-nov: Arribo efectivo por salida (ciclo de la nave). *@
+<div class="modal fade" id="modalArribo" tabindex="-1" aria-labelledby="modalArriboTitulo" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <form method="post" asp-page-handler="Arribo" class="modal-content it-form-real" data-tipo="arribo">
+            <div class="modal-header">
+                <h5 class="modal-title" id="modalArriboTitulo">Arribo efectivo</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" name="idSalida" id="arriboIdSalida" />
+                <input type="hidden" name="Pol" value="@Model.Pol" />
+                <input type="hidden" name="Pod" value="@Model.Pod" />
+                <input type="hidden" name="Naviera" value="@Model.Naviera" />
+                <input type="hidden" name="VerPasadas" value="@(Model.VerPasadas ? "true" : "false")" />
+                <p class="cot-muted mb-2" id="arriboNave"></p>
+                <label class="cot-label" for="arriboFecha">Fecha y hora real del arribo a destino</label>
+                <input type="datetime-local" class="form-control" name="arribo" id="arriboFecha" />
+                <small class="cot-muted d-block mt-2">Se copia al «Arribo Efectivo» de los bookings de esta salida que todavía no lo tienen (en el Mainboard, bajo la ETA). Sus contenedores pasan a «Arribado» y se activa la alerta «Retiro pendiente». Déjalo vacío para quitarlo.</small>
+                <div class="form-check mt-3">
+                    <input class="form-check-input" type="checkbox" name="notificar" value="true" id="arriboNotificar" checked />
+                    <label class="form-check-label" for="arriboNotificar">Enviar la confirmación de arribo a los clientes de la nave</label>
+                </div>
+                <div class="it-dest" id="arriboDest"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-link cot-link-btn" data-bs-dismiss="modal">Cancelar</button>
+                <button type="submit" class="btn btn-atilson cot-btn-primary"><i class="bi bi-check2 me-1"></i> Guardar arribo</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+@* 13-nov: historial de una salida. *@
+<div class="modal fade" id="modalHistorial" tabindex="-1" aria-labelledby="modalHistorialTitulo" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="modalHistorialTitulo">Historial de la salida</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body" id="historialCuerpo"></div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .it-stk { border: 1px dashed #d8c7ee; border-radius: 10px; padding: 10px 12px; background: #fcfaff; }
+    .it-stk__tit { font-size: 12.5px; font-weight: 800; color: #475569; margin-bottom: 6px; }
+    .it-stk-cel { display:block; font-size:10.5px; line-height:1.35; color:#64748b; white-space:normal; text-transform:none; }
+    .it-stk-l { display:block; }
+    .it-stk-l b { font-weight:800; color:#6d2d9e; margin-right:2px; }
+    .it-stk-r { white-space:nowrap; }
+    .it-quien { display:block; font-size:10px; color:#94a3b8; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .it-dest { margin-top:10px; font-size:12px; color:#475569; }
+    .it-dest ul { margin:6px 0 0; padding-left:0; list-style:none; max-height:180px; overflow:auto; border:1px solid #e2e8f0; border-radius:8px; }
+    .it-dest li { display:flex; justify-content:space-between; gap:10px; padding:5px 9px; border-top:1px solid #f1f5f9; }
+    .it-dest li:first-child { border-top:0; }
+    .it-dest li span:last-child { color:#64748b; }
+    .it-dest .sin-correo { color:#dc2626; font-weight:700; }
+    .it-masiva { display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap; padding:14px 18px; }
+    .it-masiva__texto { display:flex; flex-direction:column; gap:2px; max-width:620px; }
+    .it-masiva__texto small { color:#6e6a80; font-size:12px; }
+    .it-masiva__acciones { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+    .it-masiva__acciones input[type=file] { max-width:260px; }
+    .it-hora { display:block; font-size:11px; color:#6e6a80; }
+    .it-zarpe { display:block; color:#15803d; font-weight:700; font-size:12px; }
+    .it-zarpe-btn { font-size:11.5px; font-weight:700; }
+    .it-registro > summary { cursor:pointer; font-size:12.5px; font-weight:700; color:#475569; }
+    .it-registro .mx-tarjeta { margin-top:10px; box-shadow:none; }
+    .nc-swal { text-align:left; font-size:13px; color:#475569; }
+    .nc-parecidas { display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; }
+    .nc-parecida { border:1px solid #cbd5e1; background:#fff; border-radius:8px; padding:6px 12px; font-weight:700; font-size:12.5px; color:#0f172a; cursor:pointer; }
+    .nc-parecida:hover { border-color:#6d2d9e; color:#6d2d9e; }
+    /* Columnas alineadas entre semanas: cada semana es su propia tabla, con el mismo ancho fijo. */
+    .it-table { table-layout: fixed; width: 100%; min-width: 1150px; }
+    .it-table th, .it-table td { overflow-wrap: anywhere; }
+    .it-table .it-c-naviera { width: 136px; }
+    .it-table .it-c-fecha { width: 100px; }
+    .it-table .it-c-transito { width: 82px; }
+    .it-table .it-c-corte { width: 104px; }
+    .it-table .it-c-zarpe { width: 116px; }
+    .it-table .it-c-estado { width: 128px; }
+    .it-table .it-c-acciones { width: 122px; }
+    .it-table .it-date { overflow: hidden; text-overflow: ellipsis; }
+    .it-errores { white-space:pre-wrap; font-size:12px; font-family:inherit; background:rgba(255,255,255,.6); border-radius:8px; padding:8px 10px; max-height:260px; overflow:auto; }
+</style>
+
 @section Scripts {
     <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script src="~/js/naves-catalogo.js" asp-append-version="true"></script>
     <script>
         (function () {
-            if (window.jQuery && $.fn.select2) {
+            // Las listas se arman al terminar de cargar la página: así toman el ajuste de posición
+            // del zoom de la vista (escala-vista.js, que carga después) y el desplegable queda
+            // justo bajo el campo.
+            document.addEventListener('DOMContentLoaded', function () {
+                if (window.escalaVistaParchear) window.escalaVistaParchear();
+                if (!window.jQuery || !$.fn.select2) return;
                 $('.it-select2').select2({ width: '100%', language: { noResults: function () { return 'Sin resultados'; } } });
-            }
+                // Nave del catálogo: primero las de la naviera elegida, después las demás.
+                if (window.NavesCatalogo) NavesCatalogo.enlazar(document.getElementById('itNave'), document.getElementById('itNaviera'));
+            });
 
             const etd = document.getElementById('itEtd');
             const eta = document.getElementById('itEta');
@@ -298,16 +553,94 @@
             function calcularTransito() {
                 if (!etd || !eta || !transit) return;
                 if (!etd.value || !eta.value) { transit.textContent = ''; return; }
-                const dias = Math.round((new Date(eta.value) - new Date(etd.value)) / 86400000);
-                transit.textContent = dias < 0 ? 'La ETA no puede ser anterior a la ETD' : dias + ' días de tránsito';
-                transit.classList.toggle('is-error', dias < 0);
-                eta.setCustomValidity(dias < 0 ? 'La ETA no puede ser anterior a la ETD' : '');
+                // Días de tránsito entre las fechas (la hora no cambia el conteo de días).
+                const fEtd = new Date(etd.value.substring(0, 10)), fEta = new Date(eta.value.substring(0, 10));
+                const dias = Math.round((fEta - fEtd) / 86400000);
+                const invalido = (new Date(eta.value) - new Date(etd.value)) < 0;
+                transit.textContent = invalido ? 'La ETA no puede ser anterior a la ETD' : dias + ' días de tránsito';
+                transit.classList.toggle('is-error', invalido);
+                eta.setCustomValidity(invalido ? 'La ETA no puede ser anterior a la ETD' : '');
             }
             if (etd) {
                 etd.addEventListener('change', function () { if (eta && !eta.value) eta.min = etd.value; calcularTransito(); });
                 eta.addEventListener('change', calcularTransito);
                 calcularTransito();
             }
+
+            const modalZarpe = document.getElementById('modalZarpe');
+            if (modalZarpe) {
+                modalZarpe.addEventListener('show.bs.modal', function (ev) {
+                    const b = ev.relatedTarget;
+                    if (!b) return;
+                    document.getElementById('zarpeIdSalida').value = b.dataset.id;
+                    document.getElementById('zarpeNave').textContent = b.dataset.nave + ' · ETD ' + (b.dataset.etd || '').replace('T', ' ');
+                    document.getElementById('zarpeFecha').value = b.dataset.zarpe || b.dataset.etd || '';
+                    // Si ya estaba registrado, cambiarlo no reenvía la confirmación salvo que se marque.
+                    document.getElementById('zarpeNotificar').checked = !b.dataset.zarpe;
+                    document.querySelector('.it-form-real[data-tipo="zarpe"]').dataset.confirmado = '';
+                    cargarDestinatarios('zarpe', b.dataset.id);
+                });
+            }
+            const modalArribo = document.getElementById('modalArribo');
+            if (modalArribo) {
+                modalArribo.addEventListener('show.bs.modal', function (ev) {
+                    const b = ev.relatedTarget;
+                    if (!b) return;
+                    document.getElementById('arriboIdSalida').value = b.dataset.id;
+                    document.getElementById('arriboNave').textContent = b.dataset.nave + ' · ETA ' + (b.dataset.eta || '').replace('T', ' ');
+                    document.getElementById('arriboFecha').value = b.dataset.arribo || b.dataset.eta || '';
+                    document.getElementById('arriboNotificar').checked = !b.dataset.arribo;
+                    document.querySelector('.it-form-real[data-tipo="arribo"]').dataset.confirmado = '';
+                    cargarDestinatarios('arribo', b.dataset.id);
+                });
+            }
+
+            // 13-nov: antes de enviar, a quién le llega la confirmación (bookings marítimos de la nave).
+            const esc = t => String(t ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+            async function cargarDestinatarios(tipo, idSalida) {
+                const caja = document.getElementById(tipo + 'Dest');
+                caja.dataset.n = '0';
+                caja.innerHTML = '<span class="cot-muted">Buscando los bookings de la nave…</span>';
+                try {
+                    const r = await fetch('/Operaciones/Itinerarios?handler=Destinatarios&tipo=' + tipo + '&idSalida=' + encodeURIComponent(idSalida));
+                    const d = await r.json();
+                    const lista = d.lista || [];
+                    caja.dataset.n = String(lista.filter(x => x.correo).length);
+                    caja.innerHTML = lista.length
+                        ? '<strong>' + lista.length + ' booking(s) marítimo(s) reciben la fecha:</strong><ul>' + lista.map(x => '<li><span>' + esc(x.booking) + ' · ' + esc(x.cliente) + '</span><span class="' + (x.correo ? '' : 'sin-correo') + '">' + esc(x.correo || 'sin correo') + '</span></li>').join('') + '</ul>'
+                        : '<span class="cot-muted">Ningún booking marítimo pendiente de esta fecha en la nave: solo se guarda en la salida.</span>';
+                } catch (e) { caja.innerHTML = '<span class="text-danger">No se pudo cargar la lista de clientes.</span>'; }
+            }
+            document.querySelectorAll('.it-form-real').forEach(function (f) {
+                f.addEventListener('submit', async function (e) {
+                    if (f.dataset.confirmado === '1') return;
+                    const tipo = f.dataset.tipo;
+                    const notificar = document.getElementById(tipo + 'Notificar');
+                    const fecha = document.getElementById(tipo + 'Fecha').value;
+                    const n = parseInt(document.getElementById(tipo + 'Dest').dataset.n || '0', 10);
+                    if (!notificar.checked || !fecha || !n || !window.Swal) return;
+                    e.preventDefault();
+                    const q = await Swal.fire({
+                        icon: 'question', title: '¿Enviar la confirmación de ' + tipo + '?',
+                        text: 'Se enviará un correo a ' + n + ' cliente(s) de la nave.',
+                        showCancelButton: true, showDenyButton: true, confirmButtonText: 'Sí, guardar y enviar', denyButtonText: 'Guardar sin enviar', cancelButtonText: 'Cancelar', confirmButtonColor: '#0f172a'
+                    });
+                    if (q.isDismissed) return;
+                    if (q.isDenied) notificar.checked = false;
+                    f.dataset.confirmado = '1';
+                    f.submit();
+                });
+            });
+            window.itHistorial = async function (id, btn) {
+                document.getElementById('modalHistorialTitulo').textContent = 'Historial · ' + (btn.dataset.nave || 'salida');
+                const cuerpo = document.getElementById('historialCuerpo');
+                cuerpo.innerHTML = '<span class="cot-muted">Cargando…</span>';
+                bootstrap.Modal.getOrCreateInstance(document.getElementById('modalHistorial')).show();
+                try {
+                    const r = await fetch('/Operaciones/Itinerarios?handler=Historial&id=' + id);
+                    cuerpo.innerHTML = r.ok ? await r.text() : '<span class="text-danger">No se pudo cargar el historial.</span>';
+                } catch (e) { cuerpo.innerHTML = '<span class="text-danger">No se pudo cargar el historial.</span>'; }
+            };
 
             const form = document.getElementById('formSalida');
             if (form) {

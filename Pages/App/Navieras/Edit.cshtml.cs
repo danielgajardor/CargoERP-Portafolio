@@ -93,11 +93,8 @@ namespace AtilsonCargoSpa.Pages.App.Navieras
         {
             monto = null;
             if (string.IsNullOrWhiteSpace(texto)) return true;
-            var t = texto.Trim().Replace(" ", "");
-            // "150,50" o "150.50" -> 150.50 (sin separador de miles).
-            if (t.Count(c => c == ',' || c == '.') > 1) return false;
-            t = t.Replace(',', '.');
-            if (!decimal.TryParse(t, NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out var v) || v < 0) return false;
+            // "150,50", "150.50", "1.500" (miles) o "1.500,50": misma regla que Comercial.
+            if (!AtilsonCargoSpa.Helpers.MontoHelper.TryParse(texto, out var v) || v < 0) return false;
             monto = Math.Round(v, 2);
             return true;
         }
@@ -127,6 +124,12 @@ namespace AtilsonCargoSpa.Pages.App.Navieras
                 ModelState.AddModelError("Form.LinkTracking", "Pega el enlace completo (empieza con https://).");
 
             // Duplicados: solo si el nombre es nuevo o cambió (no bloquea editar registros antiguos).
+            // 13-nov-2026 (minuta de maestros): un registro existente no se renombra (p. ej. CMA CGM → MSC):
+            // las reglas de negocio están ligadas a él. Solo se corrigen mayúsculas o tildes; si es otra
+            // empresa, se inactiva este registro y se crea uno nuevo. Todo cambio queda en el historial.
+            if (n != null && !string.IsNullOrEmpty(Form.Nombre) && MaestrosAuditoria.Normalizar(n.NombreNaviera) != MaestrosAuditoria.Normalizar(Form.Nombre))
+                ModelState.AddModelError("Form.Nombre", $"No se puede renombrar la naviera «{n.NombreNaviera}». Si es otra empresa, inactiva este registro y crea uno nuevo.");
+
             if (!string.IsNullOrEmpty(Form.Nombre) && (n == null || MaestrosAuditoria.Normalizar(n.NombreNaviera) != MaestrosAuditoria.Normalizar(Form.Nombre)))
             {
                 string clave = MaestrosAuditoria.Normalizar(Form.Nombre);

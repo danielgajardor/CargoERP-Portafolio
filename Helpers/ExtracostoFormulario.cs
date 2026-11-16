@@ -74,16 +74,9 @@ namespace AtilsonCargoSpa.Helpers
             return Responsables.FirstOrDefault(r => r.Equals(valor.Trim(), StringComparison.OrdinalIgnoreCase));
         }
 
-        /// <summary>Acepta "1234.5", "1234,5" y "1.234.567" (miles con punto).</summary>
-        public static decimal? LeerMonto(string? texto)
-        {
-            if (string.IsNullOrWhiteSpace(texto)) return null;
-            string t = texto.Trim().Replace(" ", "").Replace("$", "");
-            if (t.Contains(',') && t.Contains('.')) t = t.Replace(".", "").Replace(',', '.');
-            else if (t.Contains(',')) t = t.Replace(',', '.');
-            else if (t.Count(c => c == '.') > 1) t = t.Replace(".", "");
-            return decimal.TryParse(t, NumberStyles.Number, CultureInfo.InvariantCulture, out var m) ? m : null;
-        }
+        /// <summary>Acepta "1234.5", "1234,5", "45.000" y "1.234.567" (miles con punto). Antes
+        /// "45.000" quedaba en 45. Misma regla que Comercial (MontoHelper).</summary>
+        public static decimal? LeerMonto(string? texto) => MontoHelper.ParseONulo(texto);
 
         /// <summary>
         /// Lee y valida el formulario, guarda la evidencia y agrega el extracosto al contexto
