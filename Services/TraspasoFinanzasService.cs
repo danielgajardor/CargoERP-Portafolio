@@ -185,7 +185,9 @@ namespace AtilsonCargoSpa.Services
             "UpdateGate", "QuickEditMaritimo", "QuickEditTransporte", "QuickEditDocumental", "QuickEditGenerales",
             "QuickEditCourier", "EditarEmbarque", "GuardarAlmacenamiento", "SubirRespaldoAlmacen",
             "GuardarDepositoRetiro", "GuardarEmisionBl", "FinalizarServicio", "UpdateLar", "ToggleIngreso",
-            "ActualizarModalidadCert", "Delete", "EnviarFinanzas"
+            "ActualizarModalidadCert", "Delete", "EnviarFinanzas",
+            // nov-2026: el terminal del ISPS (servicio solo documental) cambia el costo y el cobro.
+            "GuardarTerminalIsps"
         };
 
         // Cambio de estado del contenedor: con la tarea finalizada solo se permiten los

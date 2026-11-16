@@ -54,6 +54,10 @@ public partial class Operacione
 
     public string? Nave { get; set; }
 
+    // Salida del maestro de itinerarios elegida en Nave / Viaje (nov-2026). Null en los
+    // bookings anteriores o si la nave vino de un documento y no está en el maestro.
+    public int? IdItinerario { get; set; }
+
     public string? Transbordo { get; set; }
 
     public string? Comentarios { get; set; }
@@ -71,6 +75,12 @@ public partial class Operacione
     public double? Humedad { get; set; }
 
     public bool IsDeleted { get; set; }
+
+    // Operaciones anteriores a la puesta en marcha, importadas desde Excel.
+    // Son solo lectura en Operaciones, pero participan de Finanzas/Cobranza/Consolidado.
+    public bool EsHistorica { get; set; }
+    public string? OrigenHistorico { get; set; }
+    public DateTime? FechaImportacionHistorica { get; set; }
 
     public int? CondicionPago { get; set; }
 
@@ -99,6 +109,16 @@ public partial class Operacione
 
     public DateTime? EtdReal { get; set; }
     public DateTime? EtaReal { get; set; }
+
+    // Ciclo de la nave (nov-2026, Sql/2026-11_ciclo_naves_pagos_permisos.sql): marcas que apagan las
+    // alertas del Mainboard. Zarpe Real = EtdReal y Arribo Efectivo = EtaReal (ya existían).
+    public DateTime? CorreoZarpeEnviado { get; set; }      // confirmación de zarpe enviada al cliente
+    public DateTime? AvisoLlegadaEnviado { get; set; }     // aviso de llegada (alerta de 10 días antes de la ETA)
+    public string? UsuarioAvisoLlegada { get; set; }
+    public DateTime? RevisionNave5 { get; set; }           // chequeo "sin demoras" a 5 días de la ETA
+    public DateTime? RevisionNave3 { get; set; }           // chequeo "sin demoras" a 3 días de la ETA
+    public string? UsuarioRevisionNave { get; set; }
+    public DateTime? CorreoArriboEnviado { get; set; }     // confirmación de arribo enviada al cliente
 
     public string? TipoCorreccionBl { get; set; }
     public string? CorreccionBlNuevoValor { get; set; }

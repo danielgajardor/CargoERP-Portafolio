@@ -18,7 +18,7 @@
    y cambiaría el color visible en decenas de pantallas sin forma de
    verificarlo visualmente en este entorno. Se deja pendiente para revisión
    con el equipo de diseño/negocio en vez de decidirlo unilateralmente aquí. */
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+/* Fuentes: se cargan en _Layout / _LayoutCliente (nov-2026). */
 
 :root {
     /* Colores Corporativos Atilson */
@@ -34,7 +34,7 @@
 
 body {
     /* zoom: 0.9;  <-- LO DEJAMOS COMENTADO O LO BORRAS */
-    font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    font-family: var(--font-sans, 'Plus Jakarta Sans', 'Inter', system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif);
     background-color: var(--atilson-secondary);
     color: var(--atilson-text-dark);
     -webkit-font-smoothing: antialiased;

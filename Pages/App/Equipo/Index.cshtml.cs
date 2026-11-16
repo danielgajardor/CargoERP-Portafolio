@@ -107,6 +107,29 @@ namespace AtilsonCargoSpa.Pages.App.Equipo
             return RedirectToPage(new { vista = "usuarios" });
         }
 
+        // Permiso por persona "Tarifas de transporte" (13-nov-2026): administrar y cargar los costos de
+        // transportistas en Comercial sin tener rol comercial. Se aplica al próximo inicio de sesión.
+        public async Task<IActionResult> OnPostPermisoTransporteAsync(int id, bool activar)
+        {
+            var u = await _context.Usuarios.FirstOrDefaultAsync(x => x.Id == id && x.Rol != "Cliente");
+            if (u == null)
+            {
+                TempData["ToastError"] = "No se encontró la persona.";
+                return RedirectToPage(new { vista = "usuarios" });
+            }
+            if (u.PermisoTarifasTransporte != activar)
+            {
+                u.PermisoTarifasTransporte = activar;
+                MaestrosAuditoria.RegistrarEvento(_context, "Usuario", u.Id, activar ? "Permiso tarifas de transporte: otorgado" : "Permiso tarifas de transporte: quitado",
+                    MaestrosAuditoria.Usuario(User), u.NombreCompleto);
+                await _context.SaveChangesAsync();
+            }
+            TempData["ToastOk"] = activar
+                ? $"{u.NombreCompleto} podrá administrar las tarifas de transporte (al volver a iniciar sesión)."
+                : $"{u.NombreCompleto} ya no tiene el permiso de tarifas de transporte.";
+            return RedirectToPage(new { vista = "usuarios" });
+        }
+
         public async Task<IActionResult> OnPostEstadoAsync(int id, bool activar)
         {
             var (ok, m) = await _equipo.CambiarEstadoAsync(id, activar, CorreoActual, MaestrosAuditoria.Usuario(User));

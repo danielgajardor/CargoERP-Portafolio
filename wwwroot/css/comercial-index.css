@@ -213,7 +213,7 @@
     }
     body {
         background-color: #f8fafc;
-        font-family: 'Inter', system-ui, sans-serif;
+        font-family: var(--font-sans);
         color: var(--text-main);
     }
         .nav-tabs-main {
@@ -480,7 +480,7 @@
         margin: 0;
         width: 100%;
         border-collapse: collapse;
-        font-family: 'Segoe UI', system-ui, sans-serif;
+        font-family: var(--font-sans);
     }
         .table-erp th {
             background: #ffffff;
@@ -623,7 +623,7 @@ text-transform: uppercase;
 .faf-total-iva {
     min-height: 33px; display: flex; align-items: center; padding: 0 10px;
     border: 1px dashed #cbd5e1; border-radius: 6px; background: #f8fafc;
-    font-size: 12px; font-weight: 800; color: #0f172a; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 12px; font-weight: 800; color: #0f172a; font-family: var(--font-mono);
 }
 /* "Tarifa + IVA" editable (venta marítima): se ve como un campo normal */
 input.faf-total-iva {
@@ -654,3 +654,18 @@ input.faf-total-iva:focus { outline: none; border-color: #7c3aed; box-shadow: 0 
 
 /* Venta reefer sin clasificar (aplica a RF Fresco y RF Congelado) */
 .badge-rf-ambos { display: inline-block; margin-left: 8px; font-size: 9px; font-weight: 700; color: #475569; background: #f1f5f9; border: 1px solid #e2e8f0; border-radius: 999px; padding: 1px 7px; vertical-align: middle; }
+
+
+/* Edición en línea de todas las tarifas: sin ventanas modales. */
+.tarifa-editando > td { background: #f3f0ff !important; border-bottom-color: #c6b5ef !important; }
+.tarifa-inline-editor > td { background: #faf9ff !important; padding: 10px 14px 16px !important; border-bottom: 2px solid #d6c9f0 !important; }
+.tarifa-editor-contenido { border: 1px solid #d6c9f0; border-radius: 12px; background: #fff; padding: 14px; box-shadow: 0 4px 15px rgba(48, 32, 91, .06); }
+.tarifa-editor-titulo { font-size: 12px; font-weight: 850; color: #30205b; margin-bottom: 12px; }
+.tarifa-editor-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(155px, 1fr)); gap: 10px; align-items: end; }
+.tarifa-editor-campo, .tarifa-editor-motivo { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.tarifa-editor-campo > span, .tarifa-editor-motivo > span { font-size: 10px; font-weight: 800; color: #475569; }
+.tarifa-editor-campo .form-control, .tarifa-editor-motivo .form-control { min-width: 0; height: 32px; font-size: 11px; border-color: #d6dce6; border-radius: 7px; }
+.tarifa-editor-campo textarea.form-control { height: auto; }
+.tarifa-editor-motivo { margin-top: 12px; }
+.tarifa-editor-acciones { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
+@media (max-width: 640px) { .tarifa-editor-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }

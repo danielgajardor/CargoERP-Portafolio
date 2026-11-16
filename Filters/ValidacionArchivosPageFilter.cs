@@ -26,7 +26,7 @@ namespace AtilsonCargoSpa.Filters
         private static readonly HashSet<string> ExtensionesPermitidas = new(StringComparer.OrdinalIgnoreCase)
         {
             ".pdf", ".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp",
-            ".doc", ".docx", ".xls", ".xlsx", ".msg", ".eml"
+            ".doc", ".docx", ".xls", ".xlsx", ".xlsm", ".msg", ".eml"
         };
 
         private const long TamanoMaximoBytes = 20L * 1024 * 1024; // 20 MB por archivo

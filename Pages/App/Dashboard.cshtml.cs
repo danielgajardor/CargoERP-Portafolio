@@ -106,24 +106,41 @@ namespace AtilsonCargoSpa.Pages.App
             try
             {
                 // Query base para ignorar los eliminados
-                var queryActivas = _context.Operaciones.Where(o => o.Activo == 1 || o.Activo == null);
+                var queryActivas = _context.Operaciones.AsNoTracking()
+                    .Where(o => !o.IsDeleted && !o.EsHistorica && (o.Activo == 1 || o.Activo == null));
 
-                TotalBookings = await queryActivas.CountAsync();
+                // Una sola agregación SQL para el total y las cuatro categorías de
+                // servicio. Antes se ejecutaban cinco COUNT separados por visita.
+                var resumenServicios = await queryActivas
+                    .GroupBy(o => 1)
+                    .Select(g => new
+                    {
+                        Total = g.Count(),
+                        Integral = g.Count(o => o.IdTipoServicio == 1 || o.IdTipoServicio == 8),
+                        Maritimo = g.Count(o => o.IdTipoServicio == 5 || o.IdTipoServicio == 12),
+                        Terrestre = g.Count(o => o.IdTipoServicio == 6 || o.IdTipoServicio == 13),
+                        Documental = g.Count(o => o.IdTipoServicio == 7 || o.IdTipoServicio == 14),
+                        PendienteNaviera = g.Count(o => o.EstadoWorkflow != null && o.EstadoWorkflow.Contains("Solicitado")),
+                        ConfirmadoCliente = g.Count(o => o.EstadoWorkflow != null && o.EstadoWorkflow.Contains("Confirmado"))
+                    })
+                    .FirstOrDefaultAsync();
+                TotalBookings = resumenServicios?.Total ?? 0;
+                CountIntegral = resumenServicios?.Integral ?? 0;
+                CountMaritimo = resumenServicios?.Maritimo ?? 0;
+                CountTerrestre = resumenServicios?.Terrestre ?? 0;
+                CountDocumental = resumenServicios?.Documental ?? 0;
+                CountPendienteNaviera = resumenServicios?.PendienteNaviera ?? 0;
+                CountConfirmadoCliente = resumenServicios?.ConfirmadoCliente ?? 0;
+
                 TotalClientes = await _context.Clientes.CountAsync();
-
-                DateTime limite = DateTime.Now.AddDays(2);
+                DateTime ahora = DateTime.Now;
+                DateTime limite = ahora.AddDays(2);
                 CantidadCriticos = await queryActivas
-                    .CountAsync(o => o.FechaStacking >= DateTime.Now && o.FechaStacking <= limite);
+                    .CountAsync(o => o.FechaStacking >= ahora && o.FechaStacking <= limite);
 
                 // ==========================================
                 // CÁLCULO DE MÉTRICAS PARA GRÁFICOS
                 // ==========================================
-
-                // 1. Tipos de Servicio (Mix Comercial)
-                CountIntegral = await queryActivas.CountAsync(o => o.IdTipoServicio == 1 || o.IdTipoServicio == 8);
-                CountMaritimo = await queryActivas.CountAsync(o => o.IdTipoServicio == 5 || o.IdTipoServicio == 12);
-                CountTerrestre = await queryActivas.CountAsync(o => o.IdTipoServicio == 6 || o.IdTipoServicio == 13);
-                CountDocumental = await queryActivas.CountAsync(o => o.IdTipoServicio == 7 || o.IdTipoServicio == 14);
 
                 // 2. Control LAR (Solo operaciones con tramo marítimo)
                 var queryMaritimas = queryActivas.Where(o => new[] { 1, 2, 3, 5, 8, 9, 10, 12 }.Contains(o.IdTipoServicio ?? 0));
@@ -137,9 +154,8 @@ namespace AtilsonCargoSpa.Pages.App
                 CountMatricesPendientes = await queryConMatriz.CountAsync() - CountMatricesConfirmadas;
 
                 // 4. Estatus de Bookings / Workflow
-                CountPendienteNaviera = await queryActivas.CountAsync(o => o.EstadoWorkflow != null && o.EstadoWorkflow.Contains("Solicitado"));
-                CountConfirmadoCliente = await queryActivas.CountAsync(o => o.EstadoWorkflow != null && o.EstadoWorkflow.Contains("Confirmado"));
-                CountCanceladas = await _context.Operaciones.CountAsync(o => o.EstadoWorkflow != null && o.EstadoWorkflow.Contains("Cancelado"));
+                CountCanceladas = await _context.Operaciones.AsNoTracking()
+                    .CountAsync(o => !o.IsDeleted && !o.EsHistorica && o.EstadoWorkflow != null && o.EstadoWorkflow.Contains("Cancelado"));
 
                 // ==========================================
                 // OBTENCIÓN DE ÚLTIMAS OPERACIONES (TABLA)
@@ -210,8 +226,12 @@ namespace AtilsonCargoSpa.Pages.App
             {
                 int reservas = await _context.Cotizaciones.AsNoTracking().CountAsync(c => c.Activo == true && c.Estado == "NUEVA SOLICITUD" && c.TipoSolicitud == Cotizacion.TipoReserva);
                 int cotizaciones = await _context.Cotizaciones.AsNoTracking().CountAsync(c => c.Activo == true && c.Estado == "NUEVA SOLICITUD" && c.TipoSolicitud != Cotizacion.TipoReserva);
-                Agregar("bi-calendar-plus", "Reservas del portal por crear", "Clientes que pidieron espacio en una nave", reservas, "/Operaciones/Cotizaciones?filtro=pendientes", "aviso");
-                Agregar("bi-calculator", "Cotizaciones del portal por responder", "Solicitudes nuevas de clientes", cotizaciones, "/Operaciones/Cotizaciones?filtro=pendientes", "aviso");
+                // 13-nov: Cotizaciones es de Comercial; sin ese acceso las reservas se atienden desde el Main Board.
+                bool verCotizaciones = AtilsonCargoSpa.Helpers.PermisosEquipo.PuedeCotizaciones(User);
+                Agregar("bi-calendar-plus", "Reservas del portal por crear", "Clientes que pidieron espacio en una nave", reservas,
+                    verCotizaciones ? "/Operaciones/Cotizaciones?filtro=pendientes" : "/Operaciones/Index", "aviso");
+                if (verCotizaciones)
+                    Agregar("bi-calculator", "Cotizaciones del portal por responder", "Solicitudes nuevas de clientes", cotizaciones, "/Operaciones/Cotizaciones?filtro=pendientes", "aviso");
             }
             catch (Exception ex) { Console.WriteLine(ex.Message); }
 

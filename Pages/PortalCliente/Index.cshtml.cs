@@ -62,11 +62,11 @@ namespace AtilsonCargoSpa.Pages.PortalCliente
             var idCliente = ObtenerIdClienteSesion();
             if (idCliente == null) return new JsonResult(new { success = false, message = "Sesión expirada." });
 
-            if (tipo != "ROLEO" && tipo != "CANCELACION_NOSHOW")
+            if (tipo != "ROLEO" && tipo != "CANCELACION" && tipo != "NO_SHOW")
                 return new JsonResult(new { success = false, message = "Tipo no reconocido." });
 
             // Aislamiento: la operación debe pertenecer al cliente en sesión.
-            var op = await _context.Operaciones.FirstOrDefaultAsync(o => o.Id == idOperacion && o.IdCliente == idCliente.Value && !o.IsDeleted);
+            var op = await _context.Operaciones.FirstOrDefaultAsync(o => o.Id == idOperacion && o.IdCliente == idCliente.Value && !o.IsDeleted && !o.EsHistorica);
             if (op == null) return new JsonResult(new { success = false, message = "Operación no encontrada." });
 
             bool yaExisteSolicitudPendiente = await _context.RoleosCancelaciones
@@ -75,6 +75,8 @@ namespace AtilsonCargoSpa.Pages.PortalCliente
                 return new JsonResult(new { success = false, message = "Ya tienes una solicitud pendiente de revisión para este booking. Nuestro equipo te contactará pronto." });
 
             string nombreCliente = User.Identity?.Name ?? "Cliente";
+            // ROLEO, CANCELACION y NO_SHOW deben mantenerse diferenciados
+            // desde la solicitud hasta los recargos de Operaciones y Finanzas.
 
             _context.RoleosCancelaciones.Add(new RoleoCancelacion
             {
@@ -129,7 +131,7 @@ namespace AtilsonCargoSpa.Pages.PortalCliente
 .Include(o => o.Unidadestecnicas)
 .Include(o => o.RoleosCancelaciones)
 .Include(o => o.GestionTransbordo)
-.Where(o => o.IdCliente == idClienteLogueado && o.IsDeleted == false); // AISLAMIENTO TOTAL
+.Where(o => o.IdCliente == idClienteLogueado && o.IsDeleted == false && !o.EsHistorica); // AISLAMIENTO TOTAL
 
             // --- LÓGICA DEL BUSCADOR ---
             if (!string.IsNullOrEmpty(SearchString))
@@ -151,10 +153,15 @@ namespace AtilsonCargoSpa.Pages.PortalCliente
             AccionesRequeridas = OperacionesCliente.Count(o =>
                 o.OperacionesDocumentales.Any(d => d.EstadoDocumental == "BORRADOR ENVIADO" || d.LogSanitario != null && d.LogSanitario.Contains("ENVÍO A CLIENTE") && !d.LogSanitario.Contains("RESPUESTA")));
 
-            // Calculamos Saldo Pendiente del Cliente (Solo facturas de INGRESO emitidas que no están pagadas)
-            SaldoPendienteTotal = OperacionesCliente.SelectMany(o => o.TransaccionesFinancieras)
-                .Where(t => t.TipoMovimiento == "INGRESO" && t.Moneda == "USD" && t.EstadoFila == "FACTURADO")
-                .Sum(t => t.MontoNeto);
+            // La cuenta corriente sí incluye historia pre-ERP. El tablero de Operaciones
+            // permanece limitado a operaciones vivas, pero el saldo del cliente debe ser real.
+            SaldoPendienteTotal = await _context.TransaccionesFinancieras.AsNoTracking()
+                .Where(t => !t.IdOperacionNavigation.IsDeleted &&
+                            t.IdOperacionNavigation.IdCliente == idClienteLogueado &&
+                            t.TipoMovimiento == "INGRESO" &&
+                            t.Moneda == "USD" &&
+                            t.EstadoFila == "FACTURADO")
+                .SumAsync(t => t.MontoNeto);
 
             return Page();
         }

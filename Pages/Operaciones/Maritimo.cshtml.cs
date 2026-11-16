@@ -23,18 +23,25 @@ namespace AtilsonCargoSpa.Pages.Operaciones
 
         [BindProperty(SupportsGet = true)]
         public string? SearchString { get; set; }
+        [BindProperty(SupportsGet = true)]
+        public int Pagina { get; set; } = 1;
+        public const int TamanoPagina = 20;
+        public int TotalOperaciones { get; set; }
+        public int TotalPaginas { get; set; }
 
         public async Task OnGetAsync()
         {
             int[] serviciosMaritimos = { 1, 2, 3, 5, 8, 9, 10, 12 };
 
             var query = _context.Operaciones
+                .AsNoTracking()
+                .AsSplitQuery()
                 .Include(o => o.IdClienteNavigation)
                 .Include(o => o.IdNavieraNavigation)
                 .Include(o => o.IdPuertoOrigenNavigation)
                 .Include(o => o.IdPuertoDestinoNavigation)
                 .Include(o => o.Unidadestecnicas)
-                .Where(o => !o.IsDeleted && o.IdTipoServicio.HasValue && serviciosMaritimos.Contains(o.IdTipoServicio.Value))
+                .Where(o => !o.IsDeleted && !o.EsHistorica && o.IdTipoServicio.HasValue && serviciosMaritimos.Contains(o.IdTipoServicio.Value))
                 .AsQueryable();
 
             if (!string.IsNullOrEmpty(SearchString))
@@ -47,11 +54,18 @@ namespace AtilsonCargoSpa.Pages.Operaciones
                 );
             }
 
-            Operaciones = await query.OrderByDescending(o => o.Id).ToListAsync();
+            TotalOperaciones = await query.CountAsync();
+            TotalPaginas = System.Math.Max(1, (int)System.Math.Ceiling(TotalOperaciones / (double)TamanoPagina));
+            Pagina = System.Math.Clamp(Pagina, 1, TotalPaginas);
+
+            Operaciones = await query.OrderByDescending(o => o.Id)
+                .Skip((Pagina - 1) * TamanoPagina)
+                .Take(TamanoPagina)
+                .ToListAsync();
 
             // Listas para los selectores del Modal Rápido
-            ViewData["IdNaviera"] = new SelectList(await _context.Navieras.Where(n => n.Activo == 1).ToListAsync(), "Id", "NombreNaviera");
-            ViewData["IdPuerto"] = new SelectList(await _context.Puertos.Where(p => p.Activo == 1).ToListAsync(), "Id", "NombrePuerto");
+            ViewData["IdNaviera"] = new SelectList(await _context.Navieras.AsNoTracking().Where(n => n.Activo == 1).ToListAsync(), "Id", "NombreNaviera");
+            ViewData["IdPuerto"] = new SelectList(await _context.Puertos.AsNoTracking().Where(p => p.Activo == 1).ToListAsync(), "Id", "NombrePuerto");
         }
 
         // HANDLER PARA GUARDAR LA EDICIÓN DESDE EL MODAL RÁPIDO
@@ -63,12 +77,23 @@ namespace AtilsonCargoSpa.Pages.Operaciones
 
             if (opDb != null)
             {
+                int? polAntesRuta = opDb.IdPuertoOrigen, podAntesRuta = opDb.IdPuertoDestino;
+                var fotoNave = AtilsonCargoSpa.Services.FechasNave.De(opDb);
                 if (int.TryParse(Request.Form["ModNaviera"], out int idNav)) opDb.IdNaviera = idNav;
                 if (int.TryParse(Request.Form["ModPol"], out int idPol)) opDb.IdPuertoOrigen = idPol;
                 if (int.TryParse(Request.Form["ModPod"], out int idPod)) opDb.IdPuertoDestino = idPod;
+                // nov-2026: si se cambian los puertos, origen y destino no pueden ser del mismo país.
+                if ((opDb.IdPuertoOrigen != polAntesRuta || opDb.IdPuertoDestino != podAntesRuta)
+                    && await AtilsonCargoSpa.Helpers.PuertosHelper.MismoPaisAsync(_context, opDb.IdPuertoOrigen, opDb.IdPuertoDestino) is string paisRuta)
+                {
+                    TempData["ToastError"] = AtilsonCargoSpa.Helpers.PuertosHelper.MensajeMismoPais(paisRuta);
+                    return RedirectToPage("./Maritimo");
+                }
 
                 opDb.TerminalPortuario = Request.Form["ModTerminal"];
                 opDb.Nave = Request.Form["ModNave"];
+                // La salida del maestro (nov-2026) se conserva solo si sigue siendo la misma nave y viaje.
+                await AtilsonCargoSpa.Helpers.ItinerariosHelper.AlinearConNaveAsync(_context, opDb);
                 opDb.Transbordo = Request.Form["ModTransbordo"];
                 opDb.EstadoLar = Request.Form["ModEstadoLar"];
 
@@ -78,8 +103,8 @@ namespace AtilsonCargoSpa.Pages.Operaciones
                 opDb.SelloNaviera = Request.Form["ModSello"];
                 if (string.IsNullOrWhiteSpace(opDb.SelloNaviera)) opDb.SelloNaviera = null;
 
-                if (DateTime.TryParse(Request.Form["ModEtd"], out DateTime etd)) opDb.EtdPol = etd; else opDb.EtdPol = null;
-                if (DateTime.TryParse(Request.Form["ModEta"], out DateTime eta)) opDb.EtaPod = eta; else opDb.EtaPod = null;
+                if (DateTime.TryParse(Request.Form["ModEtd"], out DateTime etd)) opDb.EtdPol = AtilsonCargoSpa.Services.FechasNave.ConservarHora(etd, opDb.EtdPol); else opDb.EtdPol = null;
+                if (DateTime.TryParse(Request.Form["ModEta"], out DateTime eta)) opDb.EtaPod = AtilsonCargoSpa.Services.FechasNave.ConservarHora(eta, opDb.EtaPod); else opDb.EtaPod = null;
                 if (DateTime.TryParse(Request.Form["ModStacking"], out DateTime stk)) opDb.FechaStacking = stk; else opDb.FechaStacking = null;
                 if (DateTime.TryParse(Request.Form["ModCutoff"], out DateTime cut)) opDb.CutOffMatriz = cut; else opDb.CutOffMatriz = null;
                 if (DateTime.TryParse(Request.Form["ModLateArrival"], out DateTime lar)) opDb.LateArrival = lar; else opDb.LateArrival = null;
@@ -103,6 +128,9 @@ namespace AtilsonCargoSpa.Pages.Operaciones
                 opDb.UsuarioModificador = User.Identity?.Name ?? "Sistema";
 
                 await _context.SaveChangesAsync();
+                // Fechas de la nave: lo que cambió aquí pasa a la salida y a todos sus bookings.
+                var fechasNave = await AtilsonCargoSpa.Services.FechasNave.DesdeBookingAsync(_context, opDb, fotoNave, User.Identity?.Name ?? "Sistema", "Marítimo");
+                if (fechasNave.Otros > 0 || fechasNave.CamposSalida.Count > 0) TempData["ToastOk"] = "Gestión guardada." + fechasNave.Mensaje();
             }
             return RedirectToPage("./Maritimo");
         }

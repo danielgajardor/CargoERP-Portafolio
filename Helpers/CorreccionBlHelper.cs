@@ -119,10 +119,12 @@ namespace AtilsonCargoSpa.Helpers
         // zarpe), se elige según las horas desde el ETD (EtdReal ?? EtdPol) al momento de
         // registrar la corrección. Si no hay un match claro, no se inventa: queda en 0 y
         // Finanzas lo valoriza (igual que Late Arrival).
+        public const string GrupoCorreccionBl = "CORRECCION_BL";
+
         public static bool EsConceptoCorreccionBl(string? concepto)
         {
             string c = (concepto ?? "").ToUpperInvariant();
-            if (!c.Contains("CORRECCI")) return false;
+            if (!c.Contains("CORRECCI") && !c.Contains("MODIFICACI") && !c.Contains("ENMIENDA") && !c.Contains("AMENDMENT")) return false;
             bool esBl = c.Contains("B/L") || c.Contains(" BL") || c.StartsWith("BL") || c.Contains("BL ");
             if (!esBl) return false;
             return !c.Contains("MANIFIESTO") && !c.Contains("MATRIZ") && !c.Contains("ARGENTIN");
@@ -187,15 +189,26 @@ namespace AtilsonCargoSpa.Helpers
         public static async Task<RecargoNavieraHelper.SugerenciaRecargo?> SugerirCostoAsync(AtilsonContext context, Operacione op, DateTime momento)
         {
             var hoy = DateOnly.FromDateTime(momento);
+            // nov-2026: primero lo marcado en Comercial con Tipo de recargo "Corrección de BL"
+            // (GrupoConcepto CORRECCION_BL); si la naviera no tiene nada marcado, por el nombre
+            // del concepto como antes. Primero la naviera de la operación; si no tiene, la tarifa
+            // general (Todas las navieras).
             var catalogo = await context.TarifasMaestras.AsNoTracking()
-                .Where(t => t.Categoria == "Marítimo" && t.EsActiva && t.IdNaviera == op.IdNaviera)
+                .Where(t => t.Categoria == "Marítimo" && t.EsActiva && (t.IdNaviera == op.IdNaviera || t.IdNaviera == null))
                 .ToListAsync();
-            var candidatos = catalogo
-                .Where(t => EsConceptoCorreccionBl(t.Concepto))
+            var vigentes = catalogo
                 .Where(t => (!t.FechaVigenciaDesde.HasValue || t.FechaVigenciaDesde.Value <= hoy)
                          && (!t.FechaVigenciaHasta.HasValue || t.FechaVigenciaHasta.Value >= hoy))
                 .OrderBy(t => t.Id)
                 .ToList();
+            List<TarifasMaestra> Candidatos(bool deLaNaviera)
+            {
+                var propias = vigentes.Where(t => deLaNaviera ? t.IdNaviera == op.IdNaviera : t.IdNaviera == null).ToList();
+                var marcadas = propias.Where(t => t.GrupoConcepto == GrupoCorreccionBl).ToList();
+                return marcadas.Any() ? marcadas : propias.Where(t => t.GrupoConcepto == null && EsConceptoCorreccionBl(t.Concepto)).ToList();
+            }
+            var candidatos = Candidatos(true);
+            if (candidatos.Count == 0) candidatos = Candidatos(false);
 
             DateTime? etd = op.EtdReal ?? op.EtdPol;
             double? horas = etd.HasValue ? (momento - etd.Value).TotalHours : null;
@@ -206,7 +219,7 @@ namespace AtilsonCargoSpa.Helpers
             string monto = moneda == "CLP"
                 ? match.ValorNeto.ToString("N0", CultureInfo.GetCultureInfo("es-CL"))
                 : match.ValorNeto.ToString("N2", CultureInfo.GetCultureInfo("es-CL"));
-            return new RecargoNavieraHelper.SugerenciaRecargo(match.ValorNeto, moneda, $"Catálogo naviera: {match.Concepto} ({moneda} {monto})");
+            return new RecargoNavieraHelper.SugerenciaRecargo(match.ValorNeto, moneda, $"Catálogo naviera: {match.Concepto} ({moneda} {monto})", match.AplicaIva);
         }
 
         public static string FormatearMonto(decimal monto, string? moneda)

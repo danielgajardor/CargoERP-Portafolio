@@ -108,7 +108,7 @@
                     <div class="af-grid af-grid--6">
                         <div class="af-field af-col-3">
                             <label class="af-label" for="selPol">Puerto de origen <span class="af-req">*</span></label>
-                            <select asp-for="NuevaCotizacion.IdPuertoOrigen" id="selPol" class="af-select select2-enable" data-placeholder="Busca un puerto">
+                            <select asp-for="NuevaCotizacion.IdPuertoOrigen" id="selPol" class="af-select select2-enable" data-ruta="pol" data-placeholder="Busca un puerto">
                                 <option value="">-- Selecciona un puerto --</option>
                                 @foreach (var grupo in puertosPorPais)
                                 {
@@ -123,7 +123,7 @@
                         </div>
                         <div class="af-field af-col-3">
                             <label class="af-label" for="selPod">Puerto de destino <span class="af-req">*</span></label>
-                            <select asp-for="NuevaCotizacion.IdPuertoDestino" id="selPod" class="af-select select2-enable" data-placeholder="Busca un puerto">
+                            <select asp-for="NuevaCotizacion.IdPuertoDestino" id="selPod" class="af-select select2-enable" data-ruta="pod" data-placeholder="Busca un puerto">
                                 <option value="">-- Selecciona un puerto --</option>
                                 @foreach (var grupo in puertosPorPais)
                                 {

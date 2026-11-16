@@ -32,11 +32,62 @@
     bool EsExentoIvaAcu(AtilsonCargoSpa.Pages.Comercial.AcuerdosOperativosModel.TxDTO tx)
 {
     string c = tx.Concepto ?? "";
+    // Marítimo: el IVA que define la tarifa de Comercial (igual que en Control Financiero).
     if (tx.GrupoCobro == "Marítimo")
-        return AtilsonCargoSpa.Pages.Finanzas.ControlFinancieroModel.EsMaritimoUsdSinIva(c)
-            || (c.StartsWith("Rebate Marítimo", StringComparison.OrdinalIgnoreCase) && tx.IvaExento != false);
+        return AtilsonCargoSpa.Pages.Finanzas.ControlFinancieroModel.EsMaritimoExento(c, tx.IvaExento);
     return tx.Moneda == "USD" || c.ToUpper().Contains("ISPS") || tx.IvaExento == true;
 }
+
+    // ---- Moneda y contenedor de los cobros marítimos (nov-2026) ----
+    static string NumAcu(decimal v) => v.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
+
+    static bool ConvertidoDesdeUsd(AtilsonCargoSpa.Pages.Comercial.AcuerdosOperativosModel.TxDTO tx)
+        => tx.Moneda == "CLP" && tx.MontoOriginalUsd.HasValue && tx.MontoOriginalUsd.Value > 0;
+
+    // Moneda y monto que se muestran para editar: si el cobro vino en USD y Finanzas lo pasó a
+    // CLP, se edita en USD (el valor que cobra la naviera); al guardar se vuelve a convertir.
+    static string MonedaEditAcu(AtilsonCargoSpa.Pages.Comercial.AcuerdosOperativosModel.TxDTO tx)
+        => AtilsonCargoSpa.Pages.Comercial.AcuerdosOperativosModel.MonedaElegible(tx) && ConvertidoDesdeUsd(tx) ? "USD" : (string.IsNullOrWhiteSpace(tx.Moneda) ? "CLP" : tx.Moneda);
+
+    static decimal ValorEditAcu(AtilsonCargoSpa.Pages.Comercial.AcuerdosOperativosModel.TxDTO tx)
+        => AtilsonCargoSpa.Pages.Comercial.AcuerdosOperativosModel.MonedaElegible(tx) && ConvertidoDesdeUsd(tx) ? tx.MontoOriginalUsd!.Value : tx.MontoNeto;
+
+    // Selector USD / CLP para los conceptos marítimos elegibles; el resto muestra su moneda fija.
+    Microsoft.AspNetCore.Html.IHtmlContent AddonMonedaAcu(AtilsonCargoSpa.Pages.Comercial.AcuerdosOperativosModel.TxDTO tx, string clasesSpan)
+    {
+        string m = MonedaEditAcu(tx);
+        if (!AtilsonCargoSpa.Pages.Comercial.AcuerdosOperativosModel.MonedaElegible(tx))
+            return new Microsoft.AspNetCore.Html.HtmlString($"<span class=\"input-group-text {clasesSpan} fw-bold border-0\">{System.Net.WebUtility.HtmlEncode(tx.Moneda)}</span>");
+        string titulo = AtilsonCargoSpa.Pages.Comercial.AcuerdosOperativosModel.SeReflejaEnClp(tx.GrupoCobro, tx.Concepto, ConvertidoDesdeUsd(tx))
+            ? "Moneda acordada para este booking. Finanzas lo refleja en CLP al dólar del día (el USD queda como referencia)."
+            : "Moneda acordada para este booking. Finanzas lo muestra en esta moneda.";
+        string opt(string v) => $"<option value=\"{v}\"{(v == m ? " selected" : "")}>{v}</option>";
+        return new Microsoft.AspNetCore.Html.HtmlString($"<select class=\"form-select form-select-sm border-0 fw-bold tx-moneda {clasesSpan}\" style=\"min-width:76px; max-width:86px;\" data-base=\"{m}\" title=\"{titulo}\" onchange=\"checkAgreement(this)\">{opt("USD")}{opt("CLP")}</select>");
+    }
+
+    int PosicionAcu(AtilsonCargoSpa.Pages.Comercial.AcuerdosOperativosModel.BookingPricingDTO b, string? concepto)
+    {
+        var m = System.Text.RegularExpressions.Regex.Match(concepto ?? "", @"\(U(\d+)\)");
+        if (!m.Success) return 1;
+        int idx = b.Unidades.FindIndex(u => u.Id == int.Parse(m.Groups[1].Value));
+        return idx < 0 ? 999 : idx + 2;
+    }
+
+    // Contenedor de un cobro por contenedor: "(Uxx)" en el concepto, o el Late Arrival /
+    // Extra Late Arrival del contenedor principal cuando el booking tiene más de uno.
+    string? EtiquetaContenedorAcu(AtilsonCargoSpa.Pages.Comercial.AcuerdosOperativosModel.BookingPricingDTO b, string? concepto)
+    {
+        string c = concepto ?? "";
+        var m = System.Text.RegularExpressions.Regex.Match(c, @"\(U(\d+)\)");
+        if (m.Success)
+        {
+            int idx = b.Unidades.FindIndex(u => u.Id == int.Parse(m.Groups[1].Value));
+            return idx < 0 ? $"Contenedor U{m.Groups[1].Value}" : AtilsonCargoSpa.Helpers.ContenedorEtiquetaHelper.EtiquetaCompleta(b.Unidades[idx].Nro, idx + 2);
+        }
+        if (b.Unidades.Any() && System.Text.RegularExpressions.Regex.IsMatch(c, @"^((Extra )?Late Arrival.*\(EXT-\d+\)|Flete Marítimo)"))
+            return AtilsonCargoSpa.Helpers.ContenedorEtiquetaHelper.EtiquetaCompleta(b.NumeroContenedor, 1);
+        return null;
+    }
 }
 
 <link rel="stylesheet" href="~/css/acuerdos-operativos-premium.css" asp-append-version="true" />
@@ -55,7 +106,7 @@
 
     body {
         background-color: var(--bg-light);
-        font-family: 'Inter', system-ui, sans-serif;
+        font-family: var(--font-sans);
         color: var(--txt-main);
     }
 
@@ -527,6 +578,8 @@
                                                         return 99;
                                                     }).ToList();
                                                 }
+                                                if (categoria == "Marítimo")
+                                                    grupo = grupo.OrderBy(t => AtilsonCargoSpa.Pages.Finanzas.ControlFinancieroModel.OrdenMaritimo(t.Concepto)).ThenBy(t => PosicionAcu(b, t.Concepto)).ThenBy(t => t.Id).ToList();
                                                 if (!grupo.Any()) continue;
 
                                                 var agrupablesProv = grupo.Where(t => EsConceptoAgrupableAcu(t.Concepto))
@@ -560,7 +613,8 @@
                                                             {
                                                                 <tr>
                                                                     <td style="padding-left: 20px;">
-                                                                        <span class="fw-bold text-dark d-block text-uppercase" style="font-size: 12px; letter-spacing: 0.3px;">@tx.Concepto</span>
+                                                                        @{ string? contAcu = EtiquetaContenedorAcu(b, tx.Concepto); }
+                                                                        <span class="fw-bold text-dark d-block text-uppercase" style="font-size: 12px; letter-spacing: 0.3px;">@(contAcu != null ? ObtenerConceptoBaseAcu(tx.Concepto) : tx.Concepto)@if (contAcu != null) {<span class="badge-contenedor-acu" title="Contenedor de este cobro">@contAcu</span>}</span>
                                                                         @if (categoria == "Gate-Out/In" && b.AplicaTarifaGatePlana)
                                                                         {
                                                                             string movGateAcu = tx.Concepto.ToUpper().Contains("GATE IN") ? "IN" : "OUT"; //
@@ -611,11 +665,11 @@
                                                                             <i class="bi bi-clock-history text-muted" style="font-size:11px; cursor:pointer;" title="Ver historial" onclick="abrirModalHistorial('TransaccionFinanciera', @tx.Id)"></i>
                                                                         </div>
                                                                         <div class="input-group input-group-sm shadow-sm" style="border-radius: 6px; overflow: hidden;">
-                                                                            <span class="input-group-text bg-success bg-opacity-10 text-success fw-bold border-0">@tx.Moneda</span>
+                                                                            @AddonMonedaAcu(tx, "bg-success bg-opacity-10 text-success")
                                                                             <input type="number" class="form-control input-calibrar border-0 text-success bg-success bg-opacity-10 tx-input"
-                                                                                   data-txid="@tx.Id"
-                                                                                   data-base="@tx.MontoNeto.ToString("0", System.Globalization.CultureInfo.InvariantCulture)"
-                                                                                   value="@tx.MontoNeto.ToString("0", System.Globalization.CultureInfo.InvariantCulture)"
+                                                                                   data-txid="@tx.Id" step="any"
+                                                                                   data-base="@NumAcu(ValorEditAcu(tx))"
+                                                                                   value="@NumAcu(ValorEditAcu(tx))"
                                                                                    onkeyup="checkAgreement(this)">
                                                                         </div>
                                                                         <input type="hidden" class="tx-justificacion" value="@tx.Justificacion">
@@ -642,7 +696,7 @@
                                                                         }
                                                                     </td>
                                                                     <td class="text-center align-middle">
-                                                                        @if (reprProv.GrupoCobro != "Marítimo" && (reprProv.Moneda == "USD" || reprProv.Concepto.ToUpper().Contains("ISPS") || reprProv.IvaExento == true))
+                                                                        @if (EsExentoIvaAcu(reprProv))
                                                                         {
                                                                             <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25" style="font-size:9px;">EXENTO</span>
                                                                         }
@@ -653,11 +707,11 @@
                                                                     </td>
                                                                     <td style="padding-right: 20px;">
                                                                         <div class="input-group input-group-sm shadow-sm" style="border-radius: 6px; overflow: hidden;">
-                                                                            <span class="input-group-text bg-light fw-bold text-dark border-0">@reprProv.Moneda</span>
+                                                                            @AddonMonedaAcu(reprProv, "bg-light text-dark")
                                                                             <input type="number" class="form-control input-calibrar border-0 tx-input"
-                                                                                   data-txids="@string.Join(",", txsGrpProv.Select(t => t.Id))"
-                                                                                   data-base="@reprProv.MontoNeto.ToString("0", System.Globalization.CultureInfo.InvariantCulture)"
-                                                                                   value="@reprProv.MontoNeto.ToString("0", System.Globalization.CultureInfo.InvariantCulture)"
+                                                                                   data-txids="@string.Join(",", txsGrpProv.Select(t => t.Id))" step="any"
+                                                                                   data-base="@NumAcu(ValorEditAcu(reprProv))"
+                                                                                   value="@NumAcu(ValorEditAcu(reprProv))"
                                                                                    onkeyup="checkAgreement(this)">
                                                                         </div>
                                                                     </td>
@@ -683,6 +737,8 @@
                                                 @foreach (var grupoRaw in ingresosPorGrupo)
                                                 {
                                                     var grupo = grupoRaw.ToList();
+                                                    if (grupoRaw.Key == "Marítimo")
+                                                        grupo = grupo.OrderBy(t => AtilsonCargoSpa.Pages.Finanzas.ControlFinancieroModel.OrdenMaritimo(t.Concepto)).ThenBy(t => PosicionAcu(b, t.Concepto)).ThenBy(t => t.Id).ToList();
 
                                                     var agrupablesCli = grupo.Where(t => EsConceptoAgrupableAcu(t.Concepto))
                                                         .GroupBy(t => ObtenerConceptoBaseAcu(t.Concepto))
@@ -704,6 +760,7 @@
                                                         foreach (var kv in dic) if (c.Contains(kv.Key)) return kv.Value;
                                                         return 99;
                                                     }).ToList();
+                                                    individualesCli = grupo.Where(t => !idsAgrupadosCli.Contains(t.Id)).ToList();
                                                 }
                                                 <div class="service-title mt-4 d-flex justify-content-between align-items-center">
                                                     <div>
@@ -726,7 +783,8 @@
                                                             {
                                                                 <tr>
                                                                     <td style="padding-left: 20px;">
-                                                                        <span class="fw-bold text-dark d-block text-uppercase" style="font-size: 12px; letter-spacing: 0.3px;">@tx.Concepto</span>
+                                                                        @{ string? contAcu = EtiquetaContenedorAcu(b, tx.Concepto); }
+                                                                        <span class="fw-bold text-dark d-block text-uppercase" style="font-size: 12px; letter-spacing: 0.3px;">@(contAcu != null ? ObtenerConceptoBaseAcu(tx.Concepto) : tx.Concepto)@if (contAcu != null) {<span class="badge-contenedor-acu" title="Contenedor de este cobro">@contAcu</span>}</span>
                                                                     </td>
                                                                     <td class="text-end align-middle">
                                                                         @if (tx.MontoNeto == 0m && !tx.TarifaManual)
@@ -759,12 +817,12 @@
                                                                         @if (tx.GrupoCobro == "Marítimo" && tx.Concepto.StartsWith("Flete Marítimo"))
                                                                         {
                                                                             <div class="d-flex align-items-center justify-content-end gap-1">
-                                                                                <div class="input-group input-group-sm shadow-sm" style="border-radius: 6px; overflow: hidden; max-width:135px;" title="Flete Venta Real">
-                                                                                    <span class="input-group-text bg-success bg-opacity-10 text-success fw-bold border-0">@tx.Moneda</span>
+                                                                                <div class="input-group input-group-sm shadow-sm" style="border-radius: 6px; overflow: hidden; max-width:190px;" title="Flete Venta Real">
+                                                                                    @AddonMonedaAcu(tx, "bg-success bg-opacity-10 text-success")
                                                                                     <input type="number" class="form-control input-calibrar border-0 text-success bg-success bg-opacity-10 tx-input"
-                                                                                           data-txid="@tx.Id"
-                                                                                           data-base="@tx.MontoNeto.ToString("0", System.Globalization.CultureInfo.InvariantCulture)"
-                                                                                           value="@tx.MontoNeto.ToString("0", System.Globalization.CultureInfo.InvariantCulture)"
+                                                                                           data-txid="@tx.Id" step="any"
+                                                                                           data-base="@NumAcu(ValorEditAcu(tx))"
+                                                                                           value="@NumAcu(ValorEditAcu(tx))"
                                                                                            onkeyup="checkAgreement(this)">
                                                                                 </div>
                                                                                 <span class="fw-bold text-muted">+</span>
@@ -781,11 +839,11 @@
                                                                         else
                                                                         {
                                                                             <div class="input-group input-group-sm shadow-sm" style="border-radius: 6px; overflow: hidden;">
-                                                                                <span class="input-group-text bg-success bg-opacity-10 text-success fw-bold border-0">@tx.Moneda</span>
+                                                                                @AddonMonedaAcu(tx, "bg-success bg-opacity-10 text-success")
                                                                                 <input type="number" class="form-control input-calibrar border-0 text-success bg-success bg-opacity-10 tx-input"
-                                                                                       data-txid="@tx.Id"
-                                                                                       data-base="@tx.MontoNeto.ToString("0", System.Globalization.CultureInfo.InvariantCulture)"
-                                                                                       value="@tx.MontoNeto.ToString("0", System.Globalization.CultureInfo.InvariantCulture)"
+                                                                                       data-txid="@tx.Id" step="any"
+                                                                                       data-base="@NumAcu(ValorEditAcu(tx))"
+                                                                                       value="@NumAcu(ValorEditAcu(tx))"
                                                                                        onkeyup="checkAgreement(this)">
                                                                             </div>
                                                                         }
@@ -813,7 +871,7 @@
                                                                         }
                                                                     </td>
                                                                     <td class="text-center align-middle">
-                                                                        @if (reprCli.GrupoCobro != "Marítimo" && (reprCli.Moneda == "USD" || reprCli.Concepto.ToUpper().Contains("ISPS") || reprCli.IvaExento == true))
+                                                                        @if (EsExentoIvaAcu(reprCli))
                                                                         {
                                                                             <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25" style="font-size:9px;">EXENTO</span>
                                                                         }
@@ -824,11 +882,11 @@
                                                                     </td>
                                                                     <td style="padding-right: 20px;">
                                                                         <div class="input-group input-group-sm shadow-sm" style="border-radius: 6px; overflow: hidden;">
-                                                                            <span class="input-group-text bg-success bg-opacity-10 text-success fw-bold border-0">@reprCli.Moneda</span>
+                                                                            @AddonMonedaAcu(reprCli, "bg-success bg-opacity-10 text-success")
                                                                             <input type="number" class="form-control input-calibrar border-0 text-success bg-success bg-opacity-10 tx-input"
-                                                                                   data-txids="@string.Join(",", txsGrpCli.Select(t => t.Id))"
-                                                                                   data-base="@reprCli.MontoNeto.ToString("0", System.Globalization.CultureInfo.InvariantCulture)"
-                                                                                   value="@reprCli.MontoNeto.ToString("0", System.Globalization.CultureInfo.InvariantCulture)"
+                                                                                   data-txids="@string.Join(",", txsGrpCli.Select(t => t.Id))" step="any"
+                                                                                   data-base="@NumAcu(ValorEditAcu(reprCli))"
+                                                                                   value="@NumAcu(ValorEditAcu(reprCli))"
                                                                                    onkeyup="checkAgreement(this)">
                                                                         </div>
                                                                     </td>
@@ -920,6 +978,10 @@
 @section Scripts {
     <script>
         function checkAgreement(input) {
+            if (input.tagName === 'SELECT') {
+                input.classList.toggle('is-modified', input.value !== input.getAttribute('data-base'));
+                return;
+            }
             const baseValue = parseFloat(input.getAttribute('data-base'));
             const currentValue = parseFloat(input.value);
             if (!isNaN(currentValue) && currentValue !== baseValue) {
@@ -954,17 +1016,22 @@
                         }
                     }
 
-                    if (!montoChanged && !profitChanged) return;
+                    // Moneda del acuerdo (conceptos marítimos, nov-2026).
+                    const monedaSel = input.closest('.input-group')?.querySelector('.tx-moneda');
+                    const moneda = monedaSel ? monedaSel.value : null;
+                    const monedaChanged = !!monedaSel && monedaSel.value !== monedaSel.getAttribute('data-base');
+
+                    if (!montoChanged && !profitChanged && !monedaChanged) return;
 
                     const montoFinal = montoChanged ? currentVal : baseVal;
                     const profitFinal = (profitVal !== null && !isNaN(profitVal)) ? profitVal : (profitBaseVal || 0);
 
                     if (idTxsRaw) {
                         idTxsRaw.split(',').forEach(id => {
-                            payload.push({ IdTx: parseInt(id), NuevoMonto: montoFinal, ProfitHandling: profitFinal, Justificacion: '' });
+                            payload.push({ IdTx: parseInt(id), NuevoMonto: montoFinal, ProfitHandling: profitFinal, Justificacion: '', Moneda: moneda });
                         });
                     } else {
-                        payload.push({ IdTx: parseInt(idTx), NuevoMonto: montoFinal, ProfitHandling: profitFinal, Justificacion: '' });
+                        payload.push({ IdTx: parseInt(idTx), NuevoMonto: montoFinal, ProfitHandling: profitFinal, Justificacion: '', Moneda: moneda });
                     }
                 });
 

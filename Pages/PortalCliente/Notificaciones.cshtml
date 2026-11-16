@@ -1,0 +1,128 @@
+@page
+@model AtilsonCargoSpa.Pages.PortalCliente.NotificacionesModel
+@using AtilsonCargoSpa.Services
+@{
+    ViewData["Title"] = "Avisos";
+    Layout = "_LayoutCliente";
+    var ahora = DateTime.Now;
+    string? UrlFiltro(string? tipo, bool noLeidas) => Url.Page("/PortalCliente/Notificaciones", new { Tipo = tipo, NoLeidas = noLeidas ? true : (bool?)null });
+}
+
+<link rel="stylesheet" href="~/css/portal-forms.css" asp-append-version="true" />
+<link rel="stylesheet" href="~/css/portal-avisos.css" asp-append-version="true" />
+
+<div class="container py-4">
+    <div class="af-wrap">
+        <a asp-page="/PortalCliente/Index" class="af-back"><i class="bi bi-arrow-left"></i> Inicio</a>
+
+        <div class="av-head">
+            <div class="af-head">
+                <h1>Avisos</h1>
+                <p>Lo nuevo de tus operaciones: documentos, cambios de stacking y fechas de la nave, seguimiento de tu carga y respuestas del equipo.</p>
+            </div>
+            @if (Model.TotalNoLeidas > 0)
+            {
+                <form method="post" asp-page-handler="LeerTodas">
+                    <input type="hidden" name="tipo" value="@Model.Tipo" />
+                    <button type="submit" class="av-btn-sec" id="avLeerTodas"><i class="bi bi-check2-all"></i> Marcar @(string.IsNullOrEmpty(Model.Tipo) ? "todos" : "estos") como leídos</button>
+                </form>
+            }
+        </div>
+
+        @if (Model.Mensaje != null)
+        {
+            <div class="av-ok" role="status"><i class="bi bi-check-circle-fill"></i> @Model.Mensaje</div>
+        }
+
+        <nav class="av-filtros" aria-label="Filtrar avisos">
+            <a href="@UrlFiltro(null, false)" class="av-filtro @(string.IsNullOrEmpty(Model.Tipo) && !Model.NoLeidas ? "is-active" : "")">Todos</a>
+            <a href="@UrlFiltro(null, true)" class="av-filtro @(string.IsNullOrEmpty(Model.Tipo) && Model.NoLeidas ? "is-active" : "")">No leídos @if (Model.TotalNoLeidas > 0) { <span>@Model.TotalNoLeidas</span> }</a>
+            @foreach (var t in NotificacionesClienteService.Tipos)
+            {
+                int n = Model.NoLeidasPorTipo.TryGetValue(t.Codigo, out var c) ? c : 0;
+                <a href="@UrlFiltro(t.Codigo, Model.NoLeidas)" class="av-filtro @(Model.Tipo == t.Codigo ? "is-active" : "")"><i class="bi @t.Icono" style="color:@t.Color"></i> @t.Nombre @if (n > 0) { <span>@n</span> }</a>
+            }
+        </nav>
+
+        @if (!Model.Avisos.Any())
+        {
+            <div class="av-vacio">
+                <div class="av-vacio__ico"><i class="bi bi-bell"></i></div>
+                <h2>@(Model.NoLeidas ? "Estás al día" : "Sin avisos por ahora")</h2>
+                <p>Te avisaremos aquí cuando haya un documento nuevo, cambie el stacking o una fecha de tu nave, avance tu carga o el equipo responda tus consultas.</p>
+            </div>
+        }
+        else
+        {
+            <ul class="av-lista" id="avLista">
+                @foreach (var n in Model.Avisos)
+                {
+                    var t = NotificacionesClienteService.Tipo(n.Tipo);
+                    <li class="av-item @(n.FechaLeida == null ? "is-nueva" : "")" data-id="@n.Id">
+                        <span class="av-ico" style="--c:@t.Color"><i class="bi @t.Icono"></i></span>
+                        <div class="av-cuerpo">
+                            <div class="av-meta"><span class="av-tipo" style="color:@t.Color">@t.Nombre</span> · <time datetime="@n.Fecha.ToString("s")" title="@n.Fecha.ToString("dd/MM/yyyy HH:mm")">@NotificacionesClienteService.Hace(n.Fecha, ahora)</time></div>
+                            <a class="av-titulo" asp-page-handler="Abrir" asp-route-id="@n.Id">@n.Titulo</a>
+                            @if (!string.IsNullOrWhiteSpace(n.Mensaje))
+                            {
+                                <div class="av-msg">@n.Mensaje</div>
+                            }
+                        </div>
+                        <div class="av-acciones">
+                            <a class="av-btn-ver" asp-page-handler="Abrir" asp-route-id="@n.Id">Ver <i class="bi bi-arrow-right"></i></a>
+                            @if (n.FechaLeida == null)
+                            {
+                                <button type="button" class="av-btn-leida" data-leer="@n.Id" title="Marcar como leído" aria-label="Marcar como leído"><i class="bi bi-check2"></i></button>
+                            }
+                        </div>
+                    </li>
+                }
+            </ul>
+            <div class="av-paginas">
+                @if (Model.Pagina > 1)
+                {
+                    <a class="av-btn-sec" href="@Url.Page("/PortalCliente/Notificaciones", new { Tipo = Model.Tipo, NoLeidas = Model.NoLeidas ? true : (bool?)null, Pagina = Model.Pagina - 1 })"><i class="bi bi-chevron-left"></i> Más recientes</a>
+                }
+                @if (Model.HayMas)
+                {
+                    <a class="av-btn-sec" href="@Url.Page("/PortalCliente/Notificaciones", new { Tipo = Model.Tipo, NoLeidas = Model.NoLeidas ? true : (bool?)null, Pagina = Model.Pagina + 1 })">Anteriores <i class="bi bi-chevron-right"></i></a>
+                }
+            </div>
+        }
+
+        <section class="av-pref" id="preferencias" aria-labelledby="avPrefTit">
+            <h2 id="avPrefTit"><i class="bi bi-envelope"></i> Avisos por correo</h2>
+            <p>Todos los avisos aparecen en la campana del portal. Elige cuáles quieres recibir además por correo (te enviamos un resumen, no un correo por cada cambio).</p>
+            <form method="post" asp-page-handler="Preferencias" class="av-pref-grid">
+                @foreach (var t in NotificacionesClienteService.Tipos)
+                {
+                    <label class="av-pref-op @(t.PorCorreo ? "" : "is-off")">
+                        <input type="checkbox" name="tipos" value="@t.Codigo" checked="@(t.PorCorreo && Model.TiposCorreo.Contains(t.Codigo))" disabled="@(!t.PorCorreo)" />
+                        <span class="av-ico av-ico--sm" style="--c:@t.Color"><i class="bi @t.Icono"></i></span>
+                        <span><b>@t.Nombre</b><small>@t.Descripcion</small></span>
+                    </label>
+                }
+                <div class="av-pref-pie"><button type="submit" class="af-btn-primary" id="avGuardarPref"><i class="bi bi-save me-1"></i> Guardar preferencias</button></div>
+            </form>
+        </section>
+    </div>
+</div>
+
+<form id="avToken">@Html.AntiForgeryToken()</form>
+
+@section Scripts {
+    <script>
+        (function () {
+            const token = document.querySelector('#avToken input[name="__RequestVerificationToken"]')?.value || '';
+            document.querySelectorAll('[data-leer]').forEach(btn => btn.addEventListener('click', async () => {
+                const id = btn.dataset.leer;
+                const fd = new FormData(); fd.append('id', id);
+                const r = await fetch('?handler=Leer', { method: 'POST', headers: { 'RequestVerificationToken': token, 'X-Requested-With': 'XMLHttpRequest' }, body: fd });
+                if (!r.ok) return;
+                const d = await r.json();
+                const li = btn.closest('.av-item'); li?.classList.remove('is-nueva'); btn.remove();
+                if (window.portalAvisos) window.portalAvisos.fijarContador(d.noLeidas);
+            }));
+        })();
+    </script>
+}

@@ -1,0 +1,129 @@
+@page
+@model AtilsonCargoSpa.Pages.App.Naves.IndexModel
+@using AtilsonCargoSpa.Services
+@{
+    ViewData["Title"] = "Maestro de Naves";
+}
+<link rel="stylesheet" href="~/css/maestros.css" asp-append-version="true" />
+
+<div class="container-fluid py-4 mx">
+    <header class="mx-cabecera">
+        <div>
+            <div class="mx-miga">Maestros</div>
+            <h1 class="mx-titulo">Naves</h1>
+            <p class="mx-subtitulo">Catálogo de naves que se eligen al agregar salidas en Itinerarios. El N° de viaje se escribe en cada salida.</p>
+        </div>
+        <div class="mx-acciones">
+            <a asp-page="/Operaciones/Itinerarios" class="mx-btn mx-btn-secundario"><i class="bi bi-calendar-week"></i> Itinerarios</a>
+            <a asp-page="./Edit" class="mx-btn mx-btn-primario"><i class="bi bi-plus-lg"></i> Nueva nave</a>
+        </div>
+    </header>
+
+    <div class="mx-barra">
+        <div class="mx-buscar">
+            <i class="bi bi-search" aria-hidden="true"></i>
+            <input type="search" data-mx-filtro value="@Model.Q" placeholder="Buscar nave o naviera…" aria-label="Buscar nave" autocomplete="off" />
+        </div>
+        <div class="mx-filtro-extra">
+            <select data-mx-filtro-extra data-buscador="no" aria-label="Filtrar por naviera">
+                <option value="">Todas las navieras</option>
+                @foreach (var n in Model.Navieras)
+                {
+                    <option value="@n.Id" selected="@(Model.F == n.Id.ToString())">@n.NombreNaviera</option>
+                }
+            </select>
+        </div>
+        <nav class="mx-segmentos" aria-label="Estado">
+            <a asp-route-estado="activos" class="@(Model.Estado == "activos" ? "activo" : "")">Activas<span class="mx-cuenta">@Model.TotalActivos</span></a>
+            <a asp-route-estado="inactivos" class="@(Model.Estado == "inactivos" ? "activo" : "")">Inactivas<span class="mx-cuenta">@Model.TotalInactivos</span></a>
+            <a asp-route-estado="todos" class="@(Model.Estado == "todos" ? "activo" : "")">Todas</a>
+        </nav>
+        <span class="mx-total" data-mx-total>@Model.Filas.Count registros</span>
+    </div>
+
+    <div class="mx-tabla-wrap">
+        <table class="mx-tabla" data-mx-tabla>
+            <thead>
+                <tr>
+                    <th>Nave</th>
+                    <th>Naviera</th>
+                    <th>Salidas en Itinerarios</th>
+                    <th>Última modificación</th>
+                    <th>Estado</th>
+                    <th class="mx-col-acciones"><span class="visually-hidden">Acciones</span></th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var f in Model.Filas)
+                {
+                    var n = f.Nave;
+                    bool activa = !n.IsDeleted;
+                    <tr data-mx-texto="@n.Nombre @f.Naviera" data-mx-extra="@(n.IdNaviera?.ToString() ?? "")" class="@(activa ? "" : "mx-inactivo") @(Model.Resaltar == n.Id ? "mx-resaltado" : "")">
+                        <td>
+                            <a asp-page="./Edit" asp-route-id="@n.Id" class="mx-nombre text-decoration-none">@n.Nombre</a>
+                        </td>
+                        <td>
+                            @if (string.IsNullOrEmpty(f.Naviera))
+                            {
+                                <span class="text-muted">Sin naviera</span>
+                            }
+                            else
+                            {
+                                <span class="mx-color" style="background:@f.Color"></span>
+                                <span style="color:@f.Color; font-weight:700;">@f.Naviera</span>
+                            }
+                        </td>
+                        <td>
+                            @if (f.Salidas == 0)
+                            {
+                                <span class="text-muted">—</span>
+                            }
+                            else
+                            {
+                                <span>@f.Salidas salida@(f.Salidas == 1 ? "" : "s")</span>
+                                <span class="mx-sec">@(f.Proxima.HasValue ? "Próxima: " + f.Proxima.Value.ToString("dd-MM-yyyy") : "Sin salidas próximas")</span>
+                            }
+                        </td>
+                        <td class="mx-mod">
+                            @(string.IsNullOrWhiteSpace(n.UsuarioModificador) ? "—" : n.UsuarioModificador)
+                            <small>@MaestrosAuditoria.FormatoFecha(n.FechaModificacion)</small>
+                        </td>
+                        <td>
+                            @if (activa)
+                            {
+                                <span class="mx-pill mx-pill-ok">Activa</span>
+                            }
+                            else
+                            {
+                                <span class="mx-pill mx-pill-off">Inactiva</span>
+                            }
+                        </td>
+                        <td class="mx-col-acciones">
+                            <a asp-page="./Edit" asp-route-id="@n.Id" class="mx-btn mx-btn-secundario mx-btn-sm"><i class="bi bi-pencil"></i> Editar</a>
+                            <form method="post" asp-page-handler="CambiarEstado" asp-route-id="@n.Id" asp-route-activar="@(!activa)" asp-route-estado="@Model.Estado"
+                                  data-mx-confirmar="@(activa ? $"¿Desactivar la nave «{n.Nombre}»? Dejará de aparecer al agregar salidas; las salidas y bookings guardados no cambian." : $"¿Reactivar la nave «{n.Nombre}»?")">
+                                @if (activa)
+                                {
+                                    <button type="submit" class="mx-btn mx-btn-peligro mx-btn-sm" title="Desactivar" aria-label="Desactivar"><i class="bi bi-slash-circle"></i></button>
+                                }
+                                else
+                                {
+                                    <button type="submit" class="mx-btn mx-btn-ok mx-btn-sm"><i class="bi bi-arrow-counterclockwise"></i> Reactivar</button>
+                                }
+                            </form>
+                        </td>
+                    </tr>
+                }
+                <tr data-mx-sin-coincidencias hidden><td colspan="6" class="mx-vacio"><i class="bi bi-search"></i>Ninguna nave coincide con la búsqueda.</td></tr>
+                @if (!Model.Filas.Any())
+                {
+                    <tr><td colspan="6" class="mx-vacio"><i class="bi bi-life-preserver"></i>No hay naves @(Model.Estado == "inactivos" ? "inactivas" : "registradas"). Se agregan al crear salidas en Itinerarios o con «Nueva nave».</td></tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+@section Scripts {
+    <script src="~/js/maestros.js" asp-append-version="true"></script>
+}

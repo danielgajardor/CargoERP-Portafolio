@@ -30,6 +30,9 @@ public partial class AtilsonContext : DbContext
     public virtual DbSet<Finanzasoperacion> Finanzasoperacions { get; set; }
 
     public virtual DbSet<RoleoCancelacion> RoleosCancelaciones { get; set; } = null!;
+    public virtual DbSet<NotificacionDescartada> NotificacionesDescartadas { get; set; } = null!;
+    public virtual DbSet<NotificacionCliente> NotificacionesCliente { get; set; } = null!; // avisos del portal (15-nov-2026)
+    public virtual DbSet<PreferenciaAvisoCliente> PreferenciasAvisoCliente { get; set; } = null!;
     public virtual DbSet<Nafe> Naves { get; set; }
 
     public virtual DbSet<Naviera> Navieras { get; set; }
@@ -67,6 +70,9 @@ public partial class AtilsonContext : DbContext
 
     public virtual DbSet<Usuario> Usuarios { get; set; }
 
+    // Vistas por usuario (13-nov-2026, Sql/2026-11_vistas_por_usuario.sql).
+    public virtual DbSet<UsuarioVista> UsuariosVistas { get; set; } = null!;
+
     public virtual DbSet<Cotizacion> Cotizaciones { get; set; }
     public virtual DbSet<ItinerarioNave> ItinerariosNaves { get; set; } = null!;
     public virtual DbSet<ReglasTlc> ReglasTlc { get; set; } = null!;
@@ -84,7 +90,11 @@ public partial class AtilsonContext : DbContext
 
     public virtual DbSet<SolicitudRegistroEquipo> SolicitudesRegistroEquipo { get; set; }
     public virtual DbSet<PerfilUsuario> PerfilesUsuario { get; set; } // perfil de usuario (oct-2026)
+    public virtual DbSet<ChatConversacion> ChatConversaciones { get; set; } // chat del equipo (nov-2026)
+    public virtual DbSet<ChatParticipante> ChatParticipantes { get; set; }
+    public virtual DbSet<ChatMensaje> ChatMensajes { get; set; }
     public virtual DbSet<TicketSoporte> TicketsSoporte { get; set; } // soporte del portal (oct-2026)
+    public virtual DbSet<ArchivoOperacion> ArchivosOperacion { get; set; } = null!; // Gestor Documental (nov-2026)
     public virtual DbSet<MensajeSoporte> MensajesSoporte { get; set; } // conversación de cada consulta (oct-2026)
     public virtual DbSet<AgenciasAduana> AgenciasAduanas { get; set; } = null!;
     public virtual DbSet<TarifaBl> TarifasBl { get; set; } = null!;
@@ -93,10 +103,6 @@ public partial class AtilsonContext : DbContext
 
     public virtual DbSet<RecordatorioCobranza> RecordatoriosCobranza { get; set; } = null!;
 
-
-    protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
-#warning To protect potentially sensitive information in your connection string, you should move it out of source code. You can avoid scaffolding the connection string by using the Name= syntax to read it from configuration - see https://go.microsoft.com/fwlink/?linkid=2131148. For more guidance on storing connection strings, see https://go.microsoft.com/fwlink/?LinkId=723263.
-        => optionsBuilder.UseSqlServer("Server=(localdb)\\MSSQLLocalDB;Database=CargoPortafolio;Trusted_Connection=True;MultipleActiveResultSets=true;TrustServerCertificate=True");
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -414,6 +420,9 @@ public partial class AtilsonContext : DbContext
 
             entity.HasIndex(e => e.NumeroBooking, "UQ__operacio__3A320A4FA9C754E2").IsUnique();
 
+            entity.Property(e => e.EsHistorica).HasDefaultValue(false);
+            entity.Property(e => e.OrigenHistorico).HasMaxLength(260);
+            entity.Property(e => e.FechaImportacionHistorica).HasColumnType("datetime");
             entity.Property(e => e.Activo).HasDefaultValue((byte)1);
             entity.Property(e => e.Atmosfera)
                 .HasMaxLength(50)
@@ -954,6 +963,8 @@ public partial class AtilsonContext : DbContext
             entity.HasIndex(e => e.Correo, "UQ__Usuarios__60695A19B71CAD64").IsUnique();
 
             entity.Property(e => e.Activo).HasDefaultValue((byte)1);
+            // 13-nov-2026: permiso por persona; la columna tiene DEFAULT 0 (Sql/2026-11_ciclo_naves_pagos_permisos.sql).
+            entity.Property(e => e.PermisoTarifasTransporte).HasDefaultValue(false);
             entity.Property(e => e.Correo)
                 .HasMaxLength(100)
                 .IsUnicode(false);
@@ -995,6 +1006,23 @@ public partial class AtilsonContext : DbContext
             entity.HasOne(d => d.IdNaveNavigation).WithMany(p => p.Viajes)
                 .HasForeignKey(d => d.IdNave)
                 .HasConstraintName("FK_Viajes_Naves");
+        });
+
+        modelBuilder.Entity<TransaccionesFinanciera>(entity =>
+        {
+            entity.Property(e => e.ContraparteHistorica).HasMaxLength(200);
+        });
+
+        // Gestor Documental (nov-2026). Sin colección inversa en Operacione.
+        modelBuilder.Entity<ArchivoOperacion>(entity =>
+        {
+            entity.Property(e => e.NombreArchivo).HasMaxLength(260);
+            entity.Property(e => e.RutaArchivo).HasMaxLength(500);
+            entity.Property(e => e.TipoDocumento).HasMaxLength(100);
+            entity.Property(e => e.UsuarioSubida).HasMaxLength(150);
+            entity.HasOne(d => d.IdOperacionNavigation).WithMany()
+                .HasForeignKey(d => d.IdOperacion)
+                .HasConstraintName("FK_ArchivosOperaciones_Operaciones");
         });
 
         OnModelCreatingPartial(modelBuilder);

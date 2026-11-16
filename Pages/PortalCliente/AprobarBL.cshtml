@@ -16,7 +16,7 @@
         --bg-light: #f8fafc;
         --atilson-purple: #6d2d9e;
     }
-    body { background-color: var(--bg-light); font-family: 'Inter', system-ui, sans-serif; color: var(--text-main); }
+    body { background-color: var(--bg-light); font-family: 'Plus Jakarta Sans', system-ui, -apple-system, 'Segoe UI', sans-serif; color: var(--text-main); }
 
     .review-card {
         background: #ffffff;
@@ -66,7 +66,7 @@
             </div>
             @if (!string.IsNullOrEmpty(Model.Doc?.RutaBL))
             {
-                <a href="@Model.Doc.RutaBL" target="_blank" class="btn btn-sm btn-dark fw-bold px-3" style="font-size: 11px;"><i class="bi bi-eye me-1"></i> Ver PDF</a>
+                <a href="@Url.Page("/PortalCliente/Documentos", "Archivo", new { idOperacion = Model.Operacion.Id, idDocumento = Model.Doc.Id, tipo = "bl" })" target="_blank" rel="noopener" class="btn btn-sm btn-dark fw-bold px-3" style="font-size: 11px;"><i class="bi bi-eye me-1"></i> Ver PDF</a>
             }
         </div>
 

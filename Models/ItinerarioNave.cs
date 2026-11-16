@@ -19,7 +19,24 @@ namespace AtilsonCargoSpa.Models
         public int IdPuertoDestino { get; set; }
         public DateOnly Etd { get; set; }
         public DateOnly Eta { get; set; }
+        // Hora estimada de zarpe y de arribo (nov-2026, maestro de itinerarios). Las salidas
+        // cargadas antes quedan sin hora. Ver Sql/2026-11_itinerarios_respaldo_conceptos.sql.
+        public TimeOnly? HoraEtd { get; set; }
+        public TimeOnly? HoraEta { get; set; }
+        // Fecha y hora en que la nave zarpó de verdad (independiente de la ETD). Se registra
+        // después del zarpe y se copia al "ETD Real (Zarpe)" de los bookings de esta salida.
+        public DateTime? ZarpeEfectivo { get; set; }
+        // Fecha y hora en que la nave arribó a destino (nov-2026, ciclo de la nave). Se copia al
+        // "Arribo Efectivo" (EtaReal) de los bookings de esta salida.
+        public DateTime? ArriboEfectivo { get; set; }
         public DateTime? CorteDocumental { get; set; }
+        // Stacking de la salida (13-nov-2026), opcional: apertura y cierre, distinto para Dry y Reefer.
+        // Se copia a los bookings de la salida según su tipo de carga (Services/FechasNaveServicio.cs).
+        // Ver Sql/2026-11_stacking_salidas.sql.
+        public DateTime? StackingInicioDry { get; set; }
+        public DateTime? StackingFinDry { get; set; }
+        public DateTime? StackingInicioReefer { get; set; }
+        public DateTime? StackingFinReefer { get; set; }
         public string? Transbordo { get; set; }
         public string? Observaciones { get; set; }
         public bool Activo { get; set; } = true;
@@ -39,6 +56,12 @@ namespace AtilsonCargoSpa.Models
 
         [NotMapped]
         public int DiasTransito => Eta.DayNumber - Etd.DayNumber;
+
+        [NotMapped]
+        public DateTime EtdFechaHora => Etd.ToDateTime(HoraEtd ?? TimeOnly.MinValue);
+
+        [NotMapped]
+        public DateTime EtaFechaHora => Eta.ToDateTime(HoraEta ?? TimeOnly.MinValue);
 
         [NotMapped]
         public string NaveViaje => string.IsNullOrWhiteSpace(NumeroViaje) ? Nave : $"{Nave} / {NumeroViaje}";

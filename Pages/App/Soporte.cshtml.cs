@@ -51,6 +51,22 @@ namespace AtilsonCargoSpa.Pages.App
             Empresas = await _context.Clientes.AsNoTracking().Where(c => ids.Contains(c.Id)).ToDictionaryAsync(c => c.Id, c => c.RazonSocial);
         }
 
+        // Estado liviano para el contador azul y el aviso inferior derecho.
+        // Solo se expone en el ERP interno (carpeta /App autorizada).
+        public async Task<IActionResult> OnGetEstadoAvisosAsync()
+        {
+            var resumen = await _soporte.AvisosPendientesEquipoAsync();
+            Response.Headers["Cache-Control"] = "no-store";
+            return new JsonResult(new
+            {
+                total = resumen.Total,
+                ultimoTicketId = resumen.UltimoTicketId,
+                ultimaFecha = resumen.UltimaFecha?.ToString("O"),
+                titulo = resumen.Titulo,
+                texto = resumen.Texto
+            });
+        }
+
         public async Task<IActionResult> OnGetMensajesAsync(int t, int desde)
         {
             var ticket = await _soporte.ObtenerAsync(t);

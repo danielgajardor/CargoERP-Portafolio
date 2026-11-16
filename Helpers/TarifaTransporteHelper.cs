@@ -64,7 +64,7 @@ namespace AtilsonCargoSpa.Helpers
             return n.Trim();
         }
 
-        private static string NormRut(string? rut) => (rut ?? "").Replace(".", "").Replace(" ", "").Replace("-", "").Trim().ToUpperInvariant();
+        public static string NormRut(string? rut) => (rut ?? "").Replace(".", "").Replace(" ", "").Replace("-", "").Trim().ToUpperInvariant();
 
         // Igualdad estricta de ciudad: mismo Id del maestro, o mismo nombre (sin tildes ni
         // mayúsculas). Sin "contiene" ni adivinar por el texto del depósito o la planta.
@@ -75,6 +75,34 @@ namespace AtilsonCargoSpa.Helpers
             return c != "" && nombreCiudadReal != "" && c == nombreCiudadReal;
         }
 
+        // Rendimiento (nov-2026): los maestros de proveedores, depósitos, plantas y puertos
+        // se leían completos en CADA búsqueda (una vez por contenedor y otra vez para la
+        // venta). Ahora se leen una sola vez por DbContext, es decir, por petición HTTP:
+        // un booking de 5 contenedores pasa de ~25 consultas a 4. El caché muere con el
+        // contexto, así que nunca se ve un maestro desactualizado entre peticiones.
+        private sealed class MaestrosTramo
+        {
+            public List<Proveedore> Proveedores = new();
+            public List<Deposito> Depositos = new();
+            public List<Planta> Plantas = new();
+            public List<Puerto> Puertos = new();
+        }
+        private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<AtilsonContext, MaestrosTramo> _maestrosPorContexto = new();
+
+        private static async Task<MaestrosTramo> MaestrosAsync(AtilsonContext context)
+        {
+            if (_maestrosPorContexto.TryGetValue(context, out var cache)) return cache;
+            var m = new MaestrosTramo
+            {
+                Proveedores = await context.Proveedores.AsNoTracking().Where(p => p.IdTipoProveedor != TransportistaHelper.TipoDeposito).ToListAsync(),
+                Depositos = await context.Depositos.AsNoTracking().Include(d => d.IdCiudadNavigation).ToListAsync(),
+                Plantas = await context.Plantas.AsNoTracking().Include(p => p.Ciudad).ToListAsync(),
+                Puertos = await context.Puertos.AsNoTracking().Include(p => p.IdCiudadNavigation).ToListAsync()
+            };
+            _maestrosPorContexto.AddOrUpdate(context, m);
+            return m;
+        }
+
         /// <summary>
         /// Ciudad del depósito de retiro, de la planta (o su zona de carga) y del puerto de
         /// entrega, desde sus maestros. La usa la venta terrestre al cliente (Comercial guarda
@@ -83,12 +111,10 @@ namespace AtilsonCargoSpa.Helpers
         public static async Task<(string Retiro, string Planta, string Puerto)> CiudadesTramoAsync(AtilsonContext context, OperacionesTerrestre? terr, string? retiro, string? planta, string? entrega)
         {
             string retNorm = Norm(retiro), plaNorm = Norm(planta), entNorm = Norm(entrega);
-            var depositos = await context.Depositos.AsNoTracking().Include(d => d.IdCiudadNavigation).ToListAsync();
-            var deposito = depositos.Where(d => Norm(d.NombreDeposito) == retNorm).OrderByDescending(d => d.IdCiudad.HasValue).FirstOrDefault();
-            var plantas = await context.Plantas.AsNoTracking().Include(p => p.Ciudad).ToListAsync();
-            var plantaDb = plantas.Where(p => Norm(p.Nombre) == plaNorm).OrderByDescending(p => p.Activo).FirstOrDefault();
-            var puertos = await context.Puertos.AsNoTracking().Include(p => p.IdCiudadNavigation).ToListAsync();
-            var puertoDb = puertos.Where(p => Norm(p.NombrePuerto) == entNorm).OrderByDescending(p => p.Activo == 1).ThenByDescending(p => p.IdCiudad.HasValue).FirstOrDefault();
+            var maestros = await MaestrosAsync(context);
+            var deposito = maestros.Depositos.Where(d => Norm(d.NombreDeposito) == retNorm).OrderByDescending(d => d.IdCiudad.HasValue).FirstOrDefault();
+            var plantaDb = maestros.Plantas.Where(p => Norm(p.Nombre) == plaNorm).OrderByDescending(p => p.Activo).FirstOrDefault();
+            var puertoDb = maestros.Puertos.Where(p => Norm(p.NombrePuerto) == entNorm).OrderByDescending(p => p.Activo == 1).ThenByDescending(p => p.IdCiudad.HasValue).FirstOrDefault();
             string ciudadPuerto = Norm(puertoDb?.IdCiudadNavigation?.Nombre);
             return (Norm(deposito?.IdCiudadNavigation?.Nombre), Norm(plantaDb?.Ciudad?.Nombre ?? terr?.ZonaCarga), ciudadPuerto == "" ? entNorm : ciudadPuerto);
         }
@@ -109,7 +135,8 @@ namespace AtilsonCargoSpa.Helpers
             string empresaNorm = Norm(terr.EmpresaTransporte);
             string empresaCorta = NormEmpresa(terr.EmpresaTransporte);
             string rut = NormRut(terr.RutTransporte);
-            var proveedores = await context.Proveedores.AsNoTracking().Where(p => p.IdTipoProveedor != TransportistaHelper.TipoDeposito).ToListAsync();
+            var maestros = await MaestrosAsync(context);
+            var proveedores = maestros.Proveedores;
             var coincidentes = proveedores.Where(p => Norm(p.NombreProveedor) == empresaNorm
                 || (empresaCorta.Length >= 3 && NormEmpresa(p.NombreProveedor) == empresaCorta)
                 || (rut != "" && NormRut(p.Rut) == rut)).ToList();
@@ -126,12 +153,9 @@ namespace AtilsonCargoSpa.Helpers
             // 2) Ciudad real de cada punto, desde sus maestros.
             string retNorm = Norm(retiro), plaNorm = Norm(planta), entNorm = Norm(entrega);
 
-            var depositos = await context.Depositos.AsNoTracking().Include(d => d.IdCiudadNavigation).ToListAsync();
-            var deposito = depositos.Where(d => Norm(d.NombreDeposito) == retNorm).OrderByDescending(d => d.IdCiudad.HasValue).FirstOrDefault();
-            var plantas = await context.Plantas.AsNoTracking().Include(p => p.Ciudad).ToListAsync();
-            var plantaDb = plantas.Where(p => Norm(p.Nombre) == plaNorm).OrderByDescending(p => p.Activo).FirstOrDefault();
-            var puertos = await context.Puertos.AsNoTracking().Include(p => p.IdCiudadNavigation).ToListAsync();
-            var puertoDb = puertos.Where(p => Norm(p.NombrePuerto) == entNorm).OrderByDescending(p => p.Activo == 1).ThenByDescending(p => p.IdCiudad.HasValue).FirstOrDefault();
+            var deposito = maestros.Depositos.Where(d => Norm(d.NombreDeposito) == retNorm).OrderByDescending(d => d.IdCiudad.HasValue).FirstOrDefault();
+            var plantaDb = maestros.Plantas.Where(p => Norm(p.Nombre) == plaNorm).OrderByDescending(p => p.Activo).FirstOrDefault();
+            var puertoDb = maestros.Puertos.Where(p => Norm(p.NombrePuerto) == entNorm).OrderByDescending(p => p.Activo == 1).ThenByDescending(p => p.IdCiudad.HasValue).FirstOrDefault();
 
             string ciudadRetiro = Norm(deposito?.IdCiudadNavigation?.Nombre);
             // Planta: la ciudad del maestro; si la planta no está en el maestro, la Zona de carga

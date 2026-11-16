@@ -5,6 +5,38 @@
     DateOnly hoyDateOnly = DateOnly.FromDateTime(DateTime.Now);
 }
 @functions {
+    // 13-nov: línea "Real" bajo la ETD (Zarpe Real) y bajo la ETA (Arribo Efectivo). Un clic abre el
+    // registro de la fecha (ciclo-nave.js); en las operaciones históricas solo se muestra.
+    public Microsoft.AspNetCore.Html.IHtmlContent FechaRealHtml(AtilsonCargoSpa.Models.Operacione op, string tipo, DateTime? valor)
+    {
+        // 13-nov: solo operaciones con servicio marítimo tienen ciclo de la nave.
+        if (!AtilsonCargoSpa.Services.CicloNave.TieneMaritimo(op)) return Microsoft.AspNetCore.Html.HtmlString.Empty;
+        // Misma forma que la ETD / ETA (dd/MM/yyyy) para que las fechas queden alineadas; la hora va aparte.
+        string texto = valor == null ? "Registrar" : valor.Value.ToString("dd/MM/yyyy");
+        string horaHtml = valor == null || valor.Value.TimeOfDay == TimeSpan.Zero ? "" : " <span class='mb-fecha-hora'>" + valor.Value.ToString("HH:mm") + "</span>";
+        string titulo = tipo == "zarpe" ? "Zarpe Real" : "Arribo Efectivo";
+        string clase = valor == null ? "pend" : "ok";
+        string iso = valor == null ? "" : valor.Value.ToString("yyyy-MM-ddTHH:mm");
+        string icono = valor == null ? "bi-plus-circle" : "bi-check-circle-fill";
+        string ayuda = valor == null ? "sin registrar · clic para registrar" : "clic para cambiar";
+        string booking = System.Net.WebUtility.HtmlEncode(op.NumeroBooking ?? "");
+        string correo = System.Net.WebUtility.HtmlEncode(op.IdClienteNavigation?.Correo ?? "");
+        string textoHtml = System.Net.WebUtility.HtmlEncode(texto);
+        string html;
+        if (op.EsHistorica)
+        {
+            html = "<div class='mb-fecha mb-fecha-real " + clase + "' title='" + titulo + "'><span class='data-label'>Real:</span> <span class='data-val'>"
+                + (valor == null ? "-" : textoHtml) + "</span>" + horaHtml + "</div>";
+        }
+        else
+        {
+            html = "<button type='button' class='mb-fecha mb-fecha-real " + clase + "' data-tipo='" + tipo + "' data-op='" + op.Id + "' data-valor='" + iso + "'"
+                + " data-booking='" + booking + "' data-correo='" + correo + "' title='" + titulo + ": " + ayuda + "' onclick='cicloNaveEditar(event, this)'>"
+                + "<span class='data-label'>Real:</span> <span class='data-val'>" + textoHtml + "</span>" + horaHtml + " <i class='bi " + icono + " mb-fecha-ico'></i></button>";
+        }
+        return new Microsoft.AspNetCore.Html.HtmlString(html);
+    }
+
     // 1. Declaramos las funciones UNA SOLA VEZ para todo el documento
     public string FormatearTipoPuro(string tipoConte, int? tipoCarga) {
         int tcNum = tipoCarga.GetValueOrDefault(1);
@@ -112,7 +144,7 @@
             <p class="text-muted small m-0 fw-medium mt-1">Control unitario de contenedores y tracking de bookings.</p>
         </div>
         <div class="d-flex align-items-center gap-3">
-            @if (Model.NotificacionesPendientes != null && Model.NotificacionesPendientes.Any())
+            @if (true)
             {
                 <style>
                     @@keyframes pulse-yellow {
@@ -130,13 +162,18 @@
                         border-radius: 8px;
                         transition: all 0.3s;
                     }
+                    .btn-alerta-cotizacion[hidden] { display: none !important; }
                     .btn-alerta-cotizacion:hover {
                         background-color: #fef08a;
                         transform: translateY(-2px);
                     }
                 </style>
-                                <button type="button" class="btn btn-alerta-cotizacion px-4 py-2" data-bs-toggle="modal" data-bs-target="#modalNotificacionesUnificadas">
-                    <i class="bi bi-bell-fill me-2 text-warning"></i> HAY @Model.NotificacionesPendientes.Count() NOTIFICACIÓN(ES) NUEVA(S)
+                <button type="button" id="btnNotificacionesPortal" class="btn btn-alerta-cotizacion px-4 py-2"
+                        data-cantidad="@Model.NotificacionesPendientes.Count" data-desactualizado="0"
+                        data-bs-toggle="modal" data-bs-target="#modalNotificacionesUnificadas"
+                        hidden="@(Model.NotificacionesPendientes.Count == 0)">
+                    <i class="bi bi-bell-fill me-2 text-warning"></i>
+                    <span class="cantidad-avisos-portal">HAY @Model.NotificacionesPendientes.Count NOTIFICACIÓN(ES) PENDIENTE(S)</span>
                 </button>
             }
             
@@ -152,29 +189,33 @@
     <a asp-page="./Maritimo" class="ws-btn"><i class="bi bi-water"></i> Marítimo</a>
     <a asp-page="./Transporte" class="ws-btn"><i class="bi bi-truck"></i> Transporte</a>
     <a asp-page="./Documental" class="ws-btn"><i class="bi bi-file-earmark-check"></i> Documental</a>
+    <a asp-page="./Historicos" class="ws-btn"><i class="bi bi-clock-history"></i> Históricos</a>
 </div>
 
     <div class="filter-panel opidx-premium">
-        <div class="search-wrapper">
+        <form method="get" class="search-wrapper" id="opsSearchForm">
+            <input type="hidden" name="Historial" value="@Model.Historial.ToString().ToLowerInvariant()" />
+            <input type="hidden" name="FiltroMatriz" value="@Model.FiltroMatriz" />
+            <input type="hidden" name="FiltroStacking" value="@Model.FiltroStacking" />
             <i class="bi bi-search"></i>
-            <input type="text" id="liveSearchInput" class="search-input" placeholder="Buscar Booking, Cliente, Contenedor, Nave..." autocomplete="off">
-        </div>
+            <input asp-for="Buscar" type="text" id="liveSearchInput" class="search-input" placeholder="Buscar Booking, Cliente, Contenedor, Nave..." autocomplete="off" title="Escribe para filtrar esta página o presiona Enter para buscar en todo el historial visible">
+        </form>
         <div class="quick-filters">
             <div class="filter-group shadow-sm">
                 <span class="filter-group-icon"><i class="bi bi-file-earmark-text"></i></span>
-                <select id="filterMatriz">
-                    <option value="all">Matriz: Todas</option>
-                    <option value="pend">Matriz: Pendientes</option>
-                    <option value="today" class="text-danger fw-bold">Matriz: Vencen Hoy</option>
+                <select id="filterMatriz" aria-label="Filtro Matriz">
+                    <option value="all" selected="@(Model.FiltroMatriz == "all" ? "selected" : null)">Matriz: Todas</option>
+                    <option value="pend" selected="@(Model.FiltroMatriz == "pend" ? "selected" : null)">Matriz: Pendientes</option>
+                    <option value="today" selected="@(Model.FiltroMatriz == "today" ? "selected" : null)" class="text-danger fw-bold">Matriz: Vencen Hoy</option>
                 </select>
             </div>
 
             <div class="filter-group shadow-sm">
                 <span class="filter-group-icon"><i class="bi bi-truck"></i></span>
-                <select id="filterStacking">
-                    <option value="all">Stacking: Todos</option>
-                    <option value="pend">Stacking: Pendiente Ingreso</option>
-                    <option value="today" class="text-danger fw-bold">Stacking: Cierra Hoy (OUT)</option>
+                <select id="filterStacking" aria-label="Filtro Stacking">
+                    <option value="all" selected="@(Model.FiltroStacking == "all" ? "selected" : null)">Stacking: Todos</option>
+                    <option value="pend" selected="@(Model.FiltroStacking == "pend" ? "selected" : null)">Stacking: Pendiente Ingreso</option>
+                    <option value="today" selected="@(Model.FiltroStacking == "today" ? "selected" : null)" class="text-danger fw-bold">Stacking: Cierra Hoy (OUT)</option>
                 </select>
             </div>
 
@@ -201,7 +242,17 @@
         </div>
     }
 
-    <div class="table-container opidx-premium">
+    <div class="ops-scroll-tools opidx-premium">
+        <div class="ops-scroll-hint"><i class="bi bi-arrows"></i><span>Desplazar columnas</span></div>
+        <div class="ops-scroll-actions">
+            <button type="button" id="opsScrollLeft" class="ops-scroll-btn" title="Mover tabla a la izquierda"><i class="bi bi-chevron-left"></i></button>
+            <button type="button" id="opsScrollRight" class="ops-scroll-btn" title="Mover tabla a la derecha"><i class="bi bi-chevron-right"></i></button>
+        </div>
+    </div>
+    <div id="opsTopScroll" class="ops-top-scroll opidx-premium" aria-label="Desplazamiento horizontal de la tabla">
+        <div id="opsTopScrollInner"></div>
+    </div>
+    <div class="table-container opidx-premium" id="opsTableScroll">
         <table class="table table-exec" id="opsTable">
             <thead>
                 <tr>
@@ -293,19 +344,21 @@ var d = docsPorUnidad.TryGetValue(0, out var dMainUnit) ? dMainUnit : null;
                         else if (estadoUpper.Contains("CANCELADO"))
                         { estBg = "#fef2f2"; estTxt = "#dc2626"; estBorder = "#fecaca"; }
 
-                                                string alertMatrizHtml = ""; string alertStackingHtml = ""; string alertTransporteHtml = ""; string alertTransbordoHtml = ""; string alertArriboHtml = ""; string alertDevolucionHtml = "";
-                        Model.GenerarAlertasProactivas(op, t, d, reqMaritimo, reqDocumental, reqMatriz, reqTerrestre, out alertMatrizHtml, out alertStackingHtml, out alertTransporteHtml, out alertTransbordoHtml, out alertArriboHtml, out alertDevolucionHtml);
+                                                string alertMatrizHtml = ""; string alertStackingHtml = ""; string alertTransporteHtml = ""; string alertDhlHtml = ""; string alertTransbordoHtml = ""; string alertArriboHtml = ""; string alertDevolucionHtml = "";
+                        Model.GenerarAlertasProactivas(op, t, d, reqMaritimo, reqDocumental, reqMatriz, reqTerrestre, out alertMatrizHtml, out alertStackingHtml, out alertTransporteHtml, out alertDhlHtml, out alertTransbordoHtml, out alertArriboHtml, out alertDevolucionHtml);
+                        var alertasNave = AtilsonCargoSpa.Services.CicloNave.Alertas(op, DateTime.Now);
 
                         bool isIngresado = op.ContenedorIngresado;
                         bool contenedorCerrado = Model.OperacionCerradaPorRetiro(op);
                         bool hasAlertMatriz = !string.IsNullOrEmpty(alertMatrizHtml);
                         bool hasAlertStacking = !string.IsNullOrEmpty(alertStackingHtml);
                         bool hasAlertTransporte = !string.IsNullOrEmpty(alertTransporteHtml);
+                        bool hasAlertDhl = !string.IsNullOrEmpty(alertDhlHtml);
                         bool hasAlertTransbordo = !string.IsNullOrEmpty(alertTransbordoHtml);
                         bool hasAlertArribo = !string.IsNullOrEmpty(alertArriboHtml);
                         bool hasAlertDevolucion = !string.IsNullOrEmpty(alertDevolucionHtml);
 
-                        bool isRowAlert = !contenedorCerrado && (hasAlertMatriz || (hasAlertStacking && !isIngresado) || hasAlertTransporte || hasAlertTransbordo || hasAlertArribo || hasAlertDevolucion);
+                        bool isRowAlert = !contenedorCerrado && (hasAlertMatriz || (hasAlertStacking && !isIngresado) || hasAlertTransporte || hasAlertDhl || hasAlertTransbordo || hasAlertArribo || hasAlertDevolucion || alertasNave.Any());
                         string filaAlertaClass = isRowAlert ? "row-alert" : (contenedorCerrado ? "row-closed-exito" : "");
 
                         bool matrizOk = d?.MatrizPresentada == true;
@@ -385,6 +438,10 @@ var d = docsPorUnidad.TryGetValue(0, out var dMainUnit) ? dMainUnit : null;
                             {
                                 <div class="alert-item hover-transporte">@Html.Raw(alertTransporteHtml)</div>
                             }
+                            @if (!string.IsNullOrEmpty(alertDhlHtml))
+                            {
+                                <div class="alert-item hover-dhl">@Html.Raw(alertDhlHtml)</div>
+                            }
                                                                                                 @if (!string.IsNullOrEmpty(alertTransbordoHtml))
                             {
                                 <div class="alert-item hover-transbordo">@Html.Raw(alertTransbordoHtml)</div>
@@ -397,14 +454,20 @@ var d = docsPorUnidad.TryGetValue(0, out var dMainUnit) ? dMainUnit : null;
                             {
                                 <div class="alert-item hover-devolucion">@Html.Raw(alertDevolucionHtml)</div>
                             }
-                            <div class="alert-item dynamic-matriz-alert"></div>
+                            @foreach (var an in alertasNave)
+                            {
+                                <div class="alert-item hover-nave-@an.Clave">@Html.Raw(an.Html)</div>
+                            }
                                         </div>
                                     </div>
 
                                     @{
                                         bool correoEnviado = op.CorreoClienteEnviado ?? false;
                                         int versionCorreo = op.VersionCorreo ?? 1;
-                                        bool fueEnviadoAlgunaVez = op.VersionCorreo.HasValue;
+                                        bool fueEnviadoAlgunaVez = op.FechaUltimoEnvioCorreo.HasValue ||
+                                            op.CorreoClienteEnviado == true ||
+                                            (op.HistorialCorreos?.Contains("Correo reserva V", StringComparison.OrdinalIgnoreCase) == true) ||
+                                            (op.HistorialCorreos?.Contains("Confirmación V", StringComparison.OrdinalIgnoreCase) == true);
                                     }
                                     <div class="ms-2 flex-shrink-0">
                                         @if (!correoEnviado && !fueEnviadoAlgunaVez)
@@ -508,7 +571,16 @@ var d = docsPorUnidad.TryGetValue(0, out var dMainUnit) ? dMainUnit : null;
                             <td class="align-middle text-center" onclick="abrirModal(this)"><span class="servicio-bw text-nowrap">@nombreServicio</span></td>
                             <td onclick="abrirModal(this)"><div class="d-flex flex-column gap-1 mt-1 text-nowrap"><span class="data-val">@(op.IdNavieraNavigation?.NombreNaviera ?? "-")</span><span class="data-secondary text-uppercase text-muted" style="font-size:11px;">@(op.Nave ?? "Nave TBA")</span>@if (!string.IsNullOrWhiteSpace(op.PropietarioContrato)) {<span class="text-uppercase" style="font-size:10px; font-weight:700; color:#6d2d9e;" title="Propietario de Contrato"><i class="bi bi-file-earmark-person me-1"></i>@op.PropietarioContratoTexto</span>} else {<span style="font-size:10px; color:#94a3b8;" title="Propietario de Contrato"><i class="bi bi-file-earmark-person me-1"></i>Sin contrato</span>}</div></td>
                             <td onclick="abrirModal(this)"><div class="d-flex flex-column gap-1 mt-1 text-nowrap"><div><span class="data-label">POL:</span> <span class="data-val text-muted">@(op.IdPuertoOrigenNavigation?.NombrePuerto ?? "-")</span></div><div><span class="data-label">POD:</span> <span class="data-val text-muted">@(op.IdPuertoDestinoNavigation?.NombrePuerto ?? "-")</span></div></div></td>
-                            <td onclick="abrirModal(this)"><div class="d-flex flex-column gap-1 mt-1 text-nowrap"><div><span class="data-label">ETD:</span> <span class="data-val text-muted">@(op.EtdPol?.ToString("dd/MM/yyyy") ?? "-")</span></div><div><span class="data-label">ETA:</span> <span class="data-val text-muted">@(op.EtaPod?.ToString("dd/MM/yyyy") ?? "-")</span></div></div></td>
+                            @* 13-nov: ciclo de la nave. Bajo la ETD va el Zarpe Real y bajo la ETA el Arribo Efectivo;
+                               se registran aquí (por booking) o en Itinerarios (por salida). Ver Services/CicloNaveServicio.cs. *@
+                            <td onclick="abrirModal(this)">
+                                <div class="mb-fechas text-nowrap">
+                                    <div class="mb-fecha"><span class="data-label">ETD:</span> <span class="data-val text-muted">@(op.EtdPol?.ToString("dd/MM/yyyy") ?? "-")</span></div>
+                                    @FechaRealHtml(op, "zarpe", op.EtdReal)
+                                    <div class="mb-fecha"><span class="data-label">ETA:</span> <span class="data-val text-muted">@(op.EtaPod?.ToString("dd/MM/yyyy") ?? "-")</span></div>
+                                    @FechaRealHtml(op, "arribo", op.EtaReal)
+                                </div>
+                            </td>
                                                         <td onclick="abrirModal(this)">
                                 <div class="d-flex flex-column gap-1 mt-1 text-nowrap">
                                     <div class="d-flex align-items-center w-100">
@@ -633,16 +705,104 @@ var d = docsPorUnidad.TryGetValue(0, out var dMainUnit) ? dMainUnit : null;
         </tbody>
     </table>
 </div>
+
+@if (Model.TotalPaginas > 1)
+{
+    <div class="d-flex justify-content-between align-items-center mt-3 px-1 flex-wrap gap-2">
+        <span class="text-muted" style="font-size:10.5px; font-weight:700;">
+            Mostrando hasta @AtilsonCargoSpa.Pages.Operaciones.IndexModel.TamanoPagina operaciones · @Model.TotalOperaciones en total
+        </span>
+        <nav aria-label="Paginación Operaciones">
+            <ul class="pagination pagination-sm mb-0">
+                <li class="page-item @(Model.Pagina <= 1 ? "disabled" : "")">
+                    <a class="page-link" asp-page="./Index" asp-route-Pagina="@(Model.Pagina - 1)" asp-route-Historial="@Model.Historial" asp-route-Buscar="@Model.Buscar" asp-route-FiltroMatriz="@Model.FiltroMatriz" asp-route-FiltroStacking="@Model.FiltroStacking"><i class="bi bi-chevron-left"></i></a>
+                </li>
+                <li class="page-item disabled"><span class="page-link">Página @Model.Pagina de @Model.TotalPaginas</span></li>
+                <li class="page-item @(Model.Pagina >= Model.TotalPaginas ? "disabled" : "")">
+                    <a class="page-link" asp-page="./Index" asp-route-Pagina="@(Model.Pagina + 1)" asp-route-Historial="@Model.Historial" asp-route-Buscar="@Model.Buscar" asp-route-FiltroMatriz="@Model.FiltroMatriz" asp-route-FiltroStacking="@Model.FiltroStacking"><i class="bi bi-chevron-right"></i></a>
+                </li>
+            </ul>
+        </nav>
+    </div>
+}
+</div>
+
+@* 13-nov: ciclo de la nave — registro de Zarpe Real / Arribo Efectivo y aviso de llegada (ciclo-nave.js). *@
+<div class="modal fade modal-minimal" id="modalCicloNave" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg cn-modal">
+            <div class="modal-header">
+                <div>
+                    <span class="mod-label mb-1" id="cnKicker">Ciclo de la nave</span>
+                    <h4 class="modal-title fw-bold m-0 text-dark" style="font-size:16px;" id="cnTitulo">Zarpe Real</h4>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <label class="form-label fw-bold small mb-1" for="cnFecha" id="cnEtiqueta">Fecha y hora</label>
+                <input type="datetime-local" class="form-control" id="cnFecha" />
+                <div class="form-text" id="cnAyuda"></div>
+                <div class="form-check mt-3">
+                    <input class="form-check-input" type="checkbox" id="cnNotificar" checked />
+                    <label class="form-check-label small" for="cnNotificar" id="cnNotificarTxt">Enviar la confirmación al cliente</label>
+                </div>
+                <div class="small text-muted ms-4" id="cnCorreo"></div>
+            </div>
+            <div class="modal-footer d-flex justify-content-between">
+                <button type="button" class="btn btn-link btn-sm text-danger d-none" id="cnBorrar"><i class="bi bi-trash me-1"></i>Borrar fecha</button>
+                <div class="d-flex gap-2 ms-auto">
+                    <button type="button" class="btn btn-link btn-sm text-muted" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="button" class="btn btn-dark btn-sm fw-bold px-3" id="cnGuardar"><i class="bi bi-check2 me-1"></i>Guardar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade modal-minimal" id="modalAvisoLlegada" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content border-0 shadow-lg cn-modal">
+            <div class="modal-header">
+                <div>
+                    <span class="mod-label mb-1">Ciclo de la nave</span>
+                    <h4 class="modal-title fw-bold m-0 text-dark" style="font-size:16px;" id="alTitulo">Aviso de llegada</h4>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="row g-3">
+                    <div class="col-md-5">
+                        <label class="form-label fw-bold small mb-1" for="alCorreo">Correo del cliente</label>
+                        <input type="email" class="form-control form-control-sm" id="alCorreo" maxlength="300" />
+                        <label class="form-label fw-bold small mb-1 mt-3" for="alMensaje">Mensaje</label>
+                        <textarea class="form-control form-control-sm" id="alMensaje" rows="6" maxlength="1500"></textarea>
+                        <div class="form-text" id="alSmtp"></div>
+                    </div>
+                    <div class="col-md-7">
+                        <div class="form-label fw-bold small mb-1">Vista previa</div>
+                        <iframe id="alPrevia" class="cn-previa" title="Vista previa del aviso de llegada"></iframe>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-link btn-sm text-muted" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-dark btn-sm fw-bold px-3" id="alEnviar"><i class="bi bi-send me-1"></i>Enviar aviso de llegada</button>
+            </div>
+        </div>
+    </div>
 </div>
 
 <div class="modal fade modal-minimal" id="modalAlertas" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content border-danger border-2">
-            <div class="modal-header" style="background-color: #fffbfa;">
-                <div><span class="mod-label text-danger mb-1">Monitoreo Proactivo</span><h4 class="modal-title fw-bold m-0 text-dark" style="font-size: 16px;">ALERTAS</h4></div>
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content border-0 shadow-lg ops-alert-modal">
+            <div class="modal-header ops-alert-modal-head">
+                <div>
+                    <span class="mod-label mb-1">Monitoreo proactivo</span>
+                    <h4 class="modal-title fw-bold m-0 text-dark" style="font-size:16px;"><i class="bi bi-bell-fill me-2 text-warning"></i>Alertas de la operación</h4>
+                </div>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
-            <div class="modal-body" id="alertDynamicBody"></div>
+            <div class="modal-body ops-alert-modal-body" id="alertDynamicBody"></div>
         </div>
     </div>
 </div>
@@ -655,7 +815,16 @@ var d = docsPorUnidad.TryGetValue(0, out var dMainUnit) ? dMainUnit : null;
                     <span class="mod-label text-warning mb-1" style="color: #d97706 !important;">Centro de Notificaciones</span>
                     <h4 class="modal-title fw-bold m-0 text-dark" style="font-size: 16px;"><i class="bi bi-bell-fill text-warning me-2"></i> Solicitudes desde el Portal</h4>
                 </div>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                <div class="d-flex align-items-center gap-2">
+                    @if (Model.NotificacionesPendientes.Any())
+                    {
+                        <button type="button" class="btn btn-sm btn-outline-secondary fw-bold" style="font-size:11px;"
+                                onclick="descartarTodasNotificacionesPortal()">
+                            <i class="bi bi-archive me-1"></i>Descartar todos los avisos
+                        </button>
+                    }
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
             </div>
             <div class="modal-body p-4" style="background-color: #f8fafc; max-height:70vh; overflow-y:auto;">
                 @if (Model.NotificacionesPendientes == null || !Model.NotificacionesPendientes.Any())
@@ -713,9 +882,22 @@ var d = docsPorUnidad.TryGetValue(0, out var dMainUnit) ? dMainUnit : null;
                                         </div>
                                     </div>
                                     <div class="d-flex flex-column gap-1 flex-shrink-0">
+                                        <button type="button" class="btn btn-sm btn-outline-secondary px-2"
+                                                style="font-size:10px;" title="Ocultar este aviso sin alterar la solicitud"
+                                                data-tipo="@n.Tipo" data-id="@n.IdReferencia"
+                                                onclick="descartarAvisoPortal(this)">
+                                            <i class="bi bi-x-lg me-1"></i>Descartar aviso
+                                        </button>
                                         @if (n.Tipo == "COTIZACION" && n.CotEsCotizacionReal)
                                         {
-                                            <a class="btn btn-sm fw-bold px-3 text-white" style="font-size:10px; background:#6d2d9e;" asp-page="/Operaciones/Cotizaciones" asp-route-id="@n.IdReferencia">Responder</a>
+                                            @if (AtilsonCargoSpa.Helpers.PermisosEquipo.PuedeCotizaciones(User))
+                                            {
+                                                <a class="btn btn-sm fw-bold px-3 text-white" style="font-size:10px; background:#6d2d9e;" asp-page="/Operaciones/Cotizaciones" asp-route-id="@n.IdReferencia">Responder</a>
+                                            }
+                                            else
+                                            {
+                                                <span class="text-muted fw-bold" style="font-size:10px;">La responde Comercial</span>
+                                            }
                                         }
                                         else if (n.Tipo == "COTIZACION")
                                         {
@@ -740,6 +922,14 @@ var d = docsPorUnidad.TryGetValue(0, out var dMainUnit) ? dMainUnit : null;
                                                 cotizacionOrigen = n.CotIdCotizacionOrigen
                                             };
                                             <button type="button" class="btn btn-sm btn-dark fw-bold px-3" style="font-size:10px;" data-cot="@System.Text.Json.JsonSerializer.Serialize(cotData)" onclick="verDetalleCotizacionPortal(this)">Revisar</button>
+                                        }
+                                        else if (n.Tipo == "REGISTRO_CLIENTE")
+                                        {
+                                            <a href="/App/Clientes/Solicitudes" class="btn btn-sm btn-dark fw-bold px-3" style="font-size:10px;">Revisar registro</a>
+                                        }
+                                        else if (n.Tipo == "REGISTRO_EQUIPO")
+                                        {
+                                            <a href="/App/Equipo/Index?vista=solicitudes" class="btn btn-sm btn-dark fw-bold px-3" style="font-size:10px;">Revisar registro</a>
                                         }
                                         else
                                         {
@@ -873,7 +1063,8 @@ var d = docsPorUnidad.TryGetValue(0, out var dMainUnit) ? dMainUnit : null;
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
             </div>
             <form method="post" action="/Operaciones/Index?handler=FinalizarServicio" enctype="multipart/form-data">
-                <input type="hidden" name="__RequestVerificationToken" class="anti-forgery-token-input" value="" />
+                @* Token real (antes quedaba vacío y el POST era rechazado con 400). *@
+                @Html.AntiForgeryToken()
                 <input type="hidden" name="id" id="finOpId" value="" />
                 <input type="hidden" name="cutOffDate" id="finCutOff" value="" />
                 <input type="hidden" name="idUnidadTecnica" id="finIdUnidadTecnica" value="" />
@@ -981,7 +1172,8 @@ var d = docsPorUnidad.TryGetValue(0, out var dMainUnit) ? dMainUnit : null;
     </div>
 </div>
 <div class="modal fade" id="modalPdfPreviewIndex" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
-    <div class="modal-dialog modal-xl modal-dialog-centered" style="max-width: 1100px;">
+    @* nov-2026: más ancha (antes 1100 px) para que el PDF y el correo no se vean apretados. *@
+    <div class="modal-dialog modal-xl modal-dialog-centered modal-correo-booking" style="width: 96vw; max-width: 1680px;">
         <div class="modal-content" style="border-radius: 16px; border: none; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.3); overflow: hidden;">
             <div class="modal-header" style="background: #ffffff; border-bottom: 1px solid #e2e8f0; padding: 20px 30px;">
                 <div>
@@ -994,11 +1186,48 @@ var d = docsPorUnidad.TryGetValue(0, out var dMainUnit) ? dMainUnit : null;
                     <span id="indicadorEnvioIndex" class="badge" style="font-size: 12px; padding: 8px 14px; border-radius: 20px; display:none;"></span>
                 </div>
             </div>
-            <div class="modal-body p-0" style="background: #f1f5f9;">
-                <iframe id="iframePdfIndex" src="" style="width: 100%; height: 60vh; border: none; display: none;"></iframe>
-                <div id="pdfLoadingSpinnerIndex" style="height: 60vh; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 16px;">
-                    <div class="spinner-border text-primary" style="width: 3rem; height: 3rem;"></div>
-                    <p class="text-muted fw-semibold" style="font-size: 14px;">Cargando documento...</p>
+            <div class="modal-body p-3" style="background:#f1f5f9;">
+                <div class="row g-3">
+                    <div class="col-12 col-lg-6">
+                        <div class="bg-white border rounded-3 overflow-hidden h-100">
+                            <div class="px-3 py-2 border-bottom fw-bold small"><i class="bi bi-file-pdf text-danger me-1"></i> Documento booking (vista previa)</div>
+                            <iframe id="iframePdfIndex" title="Documento de reserva" src="about:blank"
+                                    style="width:100%;height:70vh;min-height:460px;border:0;display:none;"></iframe>
+                            <div id="pdfLoadingSpinnerIndex" style="height:70vh;min-height:460px;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:12px;">
+                                <div class="spinner-border text-primary"></div><p class="text-muted small">Cargando documento...</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-12 col-lg-6">
+                        <div class="bg-white border rounded-3 p-3 h-100">
+                            <div class="d-flex align-items-center justify-content-between mb-2 gap-2">
+                                <strong class="small"><i class="bi bi-envelope-paper text-primary me-1"></i> Correo que recibirá el cliente</strong>
+                                <button id="btnActualizarCorreoBookingPreview" type="button" class="btn btn-outline-primary btn-sm">Actualizar vista previa</button>
+                            </div>
+                            <label for="emailAsuntoBookingPreview" class="form-label small fw-semibold mb-1">Asunto (editable)</label>
+                            <input id="emailAsuntoBookingPreview" type="text" maxlength="200" class="form-control form-control-sm mb-2" autocomplete="off" />
+                            <label for="emailIntroBookingPreview" class="form-label small fw-semibold mb-1">Introducción del correo (editable)</label>
+                            <textarea id="emailIntroBookingPreview" class="form-control form-control-sm mb-2" rows="3"
+                                      maxlength="1500" placeholder="Texto de presentación de la confirmación de reserva..."></textarea>
+                            <label for="emailMensajeBookingPreview" class="form-label small fw-semibold mb-1">Mensaje adicional (opcional, editable)</label>
+                            <textarea id="emailMensajeBookingPreview" class="form-control form-control-sm mb-2" rows="2"
+                                      maxlength="1200" placeholder="Instrucciones o información adicional para el cliente..."></textarea>
+                            <div class="text-muted mb-2" style="font-size:11px;">Puedes modificar asunto, introducción y observaciones. Los datos logísticos se toman de la operación y no se editan desde este correo. Toda modificación exige actualizar la vista previa antes de enviar.</div>
+                            <div id="emailEstadoSmtpBooking" class="small mb-2" role="status" aria-live="polite"></div>
+                            @if (AtilsonCargoSpa.Helpers.PermisosEquipo.EsAdmin(User))
+                            {
+                                <div class="d-flex align-items-center flex-wrap gap-2 mb-2">
+                                    <button id="btnPruebaSmtpBooking" type="button" class="btn btn-outline-secondary btn-sm">
+                                        <i class="bi bi-envelope-check me-1"></i> Enviar prueba SMTP a mi correo
+                                    </button>
+                                    <small class="text-muted">No modifica el booking ni su estado.</small>
+                                </div>
+                            }
+                            <iframe id="iframeCorreoBookingPreview" title="Vista previa del correo"
+                                    sandbox="" referrerpolicy="no-referrer"
+                                    style="width:100%;height:42vh;min-height:300px;border:1px solid #e2e8f0;border-radius:8px;background:white;"></iframe>
+                        </div>
+                    </div>
                 </div>
             </div>
             <div class="modal-footer d-flex justify-content-between align-items-center" style="background-color: #f8fafc; border-top: 1px solid #e2e8f0; padding: 18px 30px;">
@@ -1062,6 +1291,7 @@ var d = docsPorUnidad.TryGetValue(0, out var dMainUnit) ? dMainUnit : null;
     }
 
     <script src="~/js/operaciones-index.js" asp-append-version="true"></script>
+    <script src="~/js/ciclo-nave.js" asp-append-version="true"></script>
 }
 }
     

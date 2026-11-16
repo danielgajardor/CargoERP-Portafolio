@@ -36,7 +36,13 @@ namespace AtilsonCargoSpa.Pages.App.Proveedores
         public List<Fila> Filas { get; set; } = new();
         public int TotalActivos { get; set; }
         public int TotalInactivos { get; set; }
-        public List<(string Valor, string Texto)> OpcionesTipo { get; set; } = new();
+        public int TotalTransportistas { get; set; }
+        public int TotalDepositos { get; set; }
+        public bool EsDeposito => Tipo == "deposito";
+        public string NombreSeccion => EsDeposito ? "Depósitos de almacenamiento" : "Transportistas";
+
+        [BindProperty(SupportsGet = true, Name = "tipo")]
+        public string Tipo { get; set; } = "transporte";
 
         [BindProperty(SupportsGet = true)]
         public string Estado { get; set; } = "activos";
@@ -52,34 +58,42 @@ namespace AtilsonCargoSpa.Pages.App.Proveedores
 
         public async Task OnGetAsync()
         {
+            Tipo = Tipo == "deposito" ? "deposito" : "transporte";
             Estado = Estado is "inactivos" or "todos" ? Estado : "activos";
             var ciudades = await _context.Ciudades.AsNoTracking().ToDictionaryAsync(c => c.Id, c => c.Nombre);
             var tarifas = (await _context.Tarifasterrestres.AsNoTracking().Where(t => t.EsActiva && t.IdProveedor != null).Select(t => t.IdProveedor!.Value).ToListAsync())
                 .GroupBy(x => x).ToDictionary(g => g.Key, g => g.Count());
+            var tarifasAlmacenamiento = (await _context.TarifasAlmacenamientos.AsNoTracking().Where(t => t.EsActiva).Select(t => t.IdProveedor).ToListAsync())
+                .Concat(await _context.TarifasAlmacenamientoDetalles.AsNoTracking().Where(t => t.EsActiva).Select(t => t.IdProveedor).ToListAsync())
+                .GroupBy(x => x).ToDictionary(g => g.Key, g => g.Count());
             var ultimos = await MaestrosAuditoria.UltimosCambiosAsync(_context, MaestrosAuditoria.EntProveedor);
             var todos = await _context.Proveedores.AsNoTracking().ToListAsync();
-            TotalActivos = todos.Count(p => p.Activo == 1);
-            TotalInactivos = todos.Count - TotalActivos;
+            TotalTransportistas = todos.Count(p => p.IdTipoProveedor != TransportistaHelper.TipoDeposito);
+            TotalDepositos = todos.Count(p => p.IdTipoProveedor == TransportistaHelper.TipoDeposito);
+            var seccion = todos.Where(p => EsDeposito
+                ? p.IdTipoProveedor == TransportistaHelper.TipoDeposito
+                : p.IdTipoProveedor != TransportistaHelper.TipoDeposito).ToList();
+            TotalActivos = seccion.Count(p => p.Activo == 1);
+            TotalInactivos = seccion.Count - TotalActivos;
 
             Filas = (Estado switch
             {
-                "inactivos" => todos.Where(p => p.Activo != 1),
-                "todos" => todos,
-                _ => todos.Where(p => p.Activo == 1)
+                "inactivos" => seccion.Where(p => p.Activo != 1),
+                "todos" => seccion,
+                _ => seccion.Where(p => p.Activo == 1)
             })
             .Select(p => new Fila
             {
                 Proveedor = p,
                 Ciudad = p.IdCiudad.HasValue ? ciudades.GetValueOrDefault(p.IdCiudad.Value) : null,
-                Tarifas = tarifas.GetValueOrDefault(p.Id),
+                Tarifas = EsDeposito ? tarifasAlmacenamiento.GetValueOrDefault(p.Id) : tarifas.GetValueOrDefault(p.Id),
                 ModificadoPor = ultimos.TryGetValue(p.Id, out var u) ? u.Usuario : null,
                 ModificadoEl = ultimos.TryGetValue(p.Id, out var u2) ? u2.Fecha : null
             })
             .OrderBy(f => f.Proveedor.NombreProveedor)
             .ToList();
 
-            OpcionesTipo = new List<(string, string)> { ("transporte", "Transporte"), ("deposito", "Depósito") };
-        }
+         }
 
         public async Task<IActionResult> OnPostCambiarEstadoAsync(int id, bool activar)
         {
@@ -87,7 +101,7 @@ namespace AtilsonCargoSpa.Pages.App.Proveedores
             if (proveedor == null)
             {
                 TempData["ToastError"] = "El proveedor ya no existe.";
-                return RedirectToPage("./Index", new { Estado });
+                return RedirectToPage("./Index", new { Estado, tipo = Tipo });
             }
 
             string usuario = MaestrosAuditoria.Usuario(User);
@@ -104,7 +118,7 @@ namespace AtilsonCargoSpa.Pages.App.Proveedores
             TempData["ToastOk"] = activar
                 ? $"Proveedor «{proveedor.NombreProveedor}» reactivado."
                 : $"Proveedor «{proveedor.NombreProveedor}» desactivado. Puedes reactivarlo desde «Inactivos».";
-            return RedirectToPage("./Index", new { Estado, resaltar = proveedor.Id });
+            return RedirectToPage("./Index", new { Estado, tipo = Tipo, resaltar = proveedor.Id });
         }
     }
 }

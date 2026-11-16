@@ -3,7 +3,7 @@
 @using AtilsonCargoSpa.Services
 @using AtilsonCargoSpa.Pages.App.Proveedores
 @{
-    ViewData["Title"] = "Maestro de Proveedores";
+    ViewData["Title"] = Model.NombreSeccion + " · Maestros";
 }
 <link rel="stylesheet" href="~/css/maestros.css" asp-append-version="true" />
 
@@ -11,32 +11,37 @@
     <header class="mx-cabecera">
         <div>
             <div class="mx-miga">Maestros</div>
-            <h1 class="mx-titulo">Proveedores</h1>
-            <p class="mx-subtitulo">Empresas de transporte y depósitos. El nombre y el RUT se usan para encontrar la tarifa de transporte de cada operación.</p>
+            <h1 class="mx-titulo">@Model.NombreSeccion</h1>
+            <p class="mx-subtitulo">@(Model.EsDeposito
+                ? "Empresas de almacenamiento, patios y depósitos registradas como proveedores de tipo 12. Sus tarifas se gestionan en Comercial → Almacenamiento."
+                : "Empresas de transporte registradas como proveedores. Sus tarifas se gestionan en Comercial → Transporte.")</p>
         </div>
         <div class="mx-acciones">
-            <a asp-page="./Edit" class="mx-btn mx-btn-primario"><i class="bi bi-plus-lg"></i> Nuevo proveedor</a>
+            <a asp-page="./Edit" asp-route-tipo="@Model.Tipo" class="mx-btn mx-btn-primario"><i class="bi bi-plus-lg"></i> @(Model.EsDeposito ? "Nuevo depósito" : "Nuevo transportista")</a>
         </div>
     </header>
+
+    <div class="d-flex flex-wrap gap-2 mb-3" role="navigation" aria-label="Categorías de proveedores">
+        <a asp-page="./Index" asp-route-tipo="transporte" asp-route-estado="@Model.Estado"
+           class="mx-btn @(Model.EsDeposito ? "mx-btn-secundario" : "mx-btn-primario")">
+            <i class="bi bi-truck"></i> Transportistas (@Model.TotalTransportistas)
+        </a>
+        <a asp-page="./Index" asp-route-tipo="deposito" asp-route-estado="@Model.Estado"
+           class="mx-btn @(Model.EsDeposito ? "mx-btn-primario" : "mx-btn-secundario")">
+            <i class="bi bi-building"></i> Depósitos de almacenamiento (@Model.TotalDepositos)
+        </a>
+    </div>
 
     <div class="mx-barra">
         <div class="mx-buscar">
             <i class="bi bi-search" aria-hidden="true"></i>
             <input type="search" data-mx-filtro value="@Model.Q" placeholder="Buscar por nombre, RUT, contacto o correo…" aria-label="Buscar proveedor" autocomplete="off" />
         </div>
-        <div class="mx-filtro-extra">
-            <select data-mx-filtro-extra aria-label="Filtrar por tipo">
-                <option value="">Todos los tipos</option>
-                @foreach (var t in Model.OpcionesTipo)
-                {
-                    <option value="@t.Valor" selected="@(Model.F == t.Valor)">@t.Texto</option>
-                }
-            </select>
-        </div>
+        <span class="mx-total">@(Model.EsDeposito ? "Almacenamiento (tipo 12)" : "Transporte (tipos existentes)")</span>
         <nav class="mx-segmentos" aria-label="Estado">
-            <a asp-route-estado="activos" class="@(Model.Estado == "activos" ? "activo" : "")">Activos<span class="mx-cuenta">@Model.TotalActivos</span></a>
-            <a asp-route-estado="inactivos" class="@(Model.Estado == "inactivos" ? "activo" : "")">Inactivos<span class="mx-cuenta">@Model.TotalInactivos</span></a>
-            <a asp-route-estado="todos" class="@(Model.Estado == "todos" ? "activo" : "")">Todos</a>
+            <a asp-route-tipo="@Model.Tipo" asp-route-estado="activos" class="@(Model.Estado == "activos" ? "activo" : "")">Activos<span class="mx-cuenta">@Model.TotalActivos</span></a>
+            <a asp-route-tipo="@Model.Tipo" asp-route-estado="inactivos" class="@(Model.Estado == "inactivos" ? "activo" : "")">Inactivos<span class="mx-cuenta">@Model.TotalInactivos</span></a>
+            <a asp-route-tipo="@Model.Tipo" asp-route-estado="todos" class="@(Model.Estado == "todos" ? "activo" : "")">Todos</a>
         </nav>
         <span class="mx-total" data-mx-total>@Model.Filas.Count registros</span>
     </div>
@@ -45,11 +50,11 @@
         <table class="mx-tabla" data-mx-tabla>
             <thead>
                 <tr>
-                    <th>Proveedor</th>
+                    <th>@(Model.EsDeposito ? "Depósito" : "Transportista")</th>
                     <th>Tipo</th>
                     <th>RUT</th>
                     <th>Contacto</th>
-                    <th class="text-end">Tarifas transporte</th>
+                    <th class="text-end">@(Model.EsDeposito ? "Tarifas almacenamiento" : "Tarifas transporte")</th>
                     <th>Última modificación</th>
                     <th>Estado</th>
                     <th class="mx-col-acciones"><span class="visually-hidden">Acciones</span></th>
@@ -63,7 +68,7 @@
                     <tr data-mx-texto="@p.NombreProveedor @p.Rut @p.Contacto @p.CorreoOperativo @f.Ciudad" data-mx-extra="@(esDeposito ? "deposito" : "transporte")"
                         class="@(f.Activo ? "" : "mx-inactivo") @(Model.Resaltar == p.Id ? "mx-resaltado" : "")">
                         <td>
-                            <a asp-page="./Edit" asp-route-id="@p.Id" class="mx-nombre text-decoration-none">@p.NombreProveedor</a>
+                            <a asp-page="./Edit" asp-route-id="@p.Id" asp-route-tipo="@Model.Tipo" class="mx-nombre text-decoration-none">@p.NombreProveedor</a>
                             @if (f.Ciudad != null)
                             {
                                 <span class="mx-sec">@f.Ciudad</span>
@@ -94,8 +99,8 @@
                             }
                         </td>
                         <td class="mx-col-acciones">
-                            <a asp-page="./Edit" asp-route-id="@p.Id" class="mx-btn mx-btn-secundario mx-btn-sm"><i class="bi bi-pencil"></i> Editar</a>
-                            <form method="post" asp-page-handler="CambiarEstado" asp-route-id="@p.Id" asp-route-activar="@(!f.Activo)" asp-route-estado="@Model.Estado"
+                            <a asp-page="./Edit" asp-route-id="@p.Id" asp-route-tipo="@Model.Tipo" class="mx-btn mx-btn-secundario mx-btn-sm"><i class="bi bi-pencil"></i> Editar</a>
+                            <form method="post" asp-page-handler="CambiarEstado" asp-route-id="@p.Id" asp-route-activar="@(!f.Activo)" asp-route-estado="@Model.Estado" asp-route-tipo="@Model.Tipo"
                                   data-mx-confirmar="@(f.Activo ? $"¿Desactivar al proveedor «{p.NombreProveedor}»? Dejará de aparecer en Operaciones y Comercial." : $"¿Reactivar al proveedor «{p.NombreProveedor}»?")">
                                 @if (f.Activo)
                                 {
@@ -112,7 +117,7 @@
                 <tr data-mx-sin-coincidencias hidden><td colspan="8" class="mx-vacio"><i class="bi bi-search"></i>Ningún proveedor coincide con la búsqueda.</td></tr>
                 @if (!Model.Filas.Any())
                 {
-                    <tr><td colspan="8" class="mx-vacio"><i class="bi bi-truck"></i>No hay proveedores @(Model.Estado == "inactivos" ? "inactivos" : "registrados").</td></tr>
+                    <tr><td colspan="8" class="mx-vacio"><i class="bi @(Model.EsDeposito ? "bi-building" : "bi-truck")"></i>No hay @(Model.EsDeposito ? "depósitos de almacenamiento" : "transportistas") @(Model.Estado == "inactivos" ? "inactivos" : "registrados").</td></tr>
                 }
             </tbody>
         </table>

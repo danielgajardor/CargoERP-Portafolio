@@ -161,6 +161,9 @@ namespace AtilsonCargoSpa.Pages.PortalCliente
                 if (c.IdPuertoDestino == null) ModelState.AddModelError(string.Empty, "Selecciona el puerto de destino.");
                 if (c.IdPuertoOrigen != null && c.IdPuertoOrigen == c.IdPuertoDestino)
                     ModelState.AddModelError(string.Empty, "El puerto de origen y el de destino no pueden ser el mismo.");
+                else if (Puertos.FirstOrDefault(p => p.Id == c.IdPuertoOrigen) is Puerto polC && Puertos.FirstOrDefault(p => p.Id == c.IdPuertoDestino) is Puerto podC
+                    && AtilsonCargoSpa.Helpers.PuertosHelper.MismoPais(polC.Pais, podC.Pais))
+                    ModelState.AddModelError(string.Empty, AtilsonCargoSpa.Helpers.PuertosHelper.MensajeMismoPais(polC.Pais));
                 if (string.IsNullOrWhiteSpace(c.TipoContenedor) || !TiposContenedor.Contains(c.TipoContenedor))
                     ModelState.AddModelError(string.Empty, "Selecciona el tipo de contenedor.");
                 if (c.IdPuertoOrigen != null && Puertos.All(p => p.Id != c.IdPuertoOrigen))

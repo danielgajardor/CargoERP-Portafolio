@@ -147,9 +147,9 @@ namespace AtilsonCargoSpa.Pages.App.Puertos
                     UsuarioModificador = usuario
                 };
                 _context.Puertos.Add(p);
-                await _context.SaveChangesAsync();
+                await _context.SaveChangesAsync(); AtilsonCargoSpa.Helpers.PuertosHelper.OlvidarMapaPaises();
                 MaestrosAuditoria.RegistrarEvento(_context, MaestrosAuditoria.EntPuerto, p.Id, "Registro creado", usuario, $"{p.NombrePuerto} · {p.Pais}");
-                await _context.SaveChangesAsync();
+                await _context.SaveChangesAsync(); AtilsonCargoSpa.Helpers.PuertosHelper.OlvidarMapaPaises();
                 TempData["ToastOk"] = $"Puerto «{p.NombrePuerto}» creado por {usuario}.";
                 return RedirectToPage("./Index", new { resaltar = p.Id });
             }
@@ -175,7 +175,7 @@ namespace AtilsonCargoSpa.Pages.App.Puertos
             p.FechaModificacion = ahora;
             p.UsuarioModificador = usuario;
             MaestrosAuditoria.Registrar(_context, MaestrosAuditoria.EntPuerto, p.Id, cambios, usuario, "Edición desde Maestros", ahora);
-            await _context.SaveChangesAsync();
+            await _context.SaveChangesAsync(); AtilsonCargoSpa.Helpers.PuertosHelper.OlvidarMapaPaises();
 
             TempData["ToastOk"] = $"Puerto «{p.NombrePuerto}» actualizado ({cambios.Lista.Count} cambio{(cambios.Lista.Count == 1 ? "" : "s")}). Queda registrado a nombre de {usuario}, {MaestrosAuditoria.FormatoFecha(ahora)}.";
             return RedirectToPage("./Index", new { resaltar = p.Id, estado = Form.Activo ? "activos" : "inactivos" });

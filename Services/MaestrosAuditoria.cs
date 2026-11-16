@@ -28,6 +28,9 @@ namespace AtilsonCargoSpa.Services
         public const string EntCiudad = "Ciudad";
         public const string EntProveedor = "Proveedor";
         public const string EntAgencia = "AgenciaAduana";
+        public const string EntNave = "Nave";
+        public const string EntItinerario = "Itinerario"; // salidas del maestro de itinerarios (13-nov-2026)
+        public const string EntPermisos = "PermisosUsuario"; // vistas por usuario (13-nov-2026)
 
         public static string Usuario(ClaimsPrincipal? user)
         {

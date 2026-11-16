@@ -65,20 +65,25 @@ namespace AtilsonCargoSpa.Pages.Finanzas
         // Trae TODOS los clientes con al menos un INGRESO registrado (pagado o
         // pendiente) — no solo los que deben, para que Finanzas también vea el
         // saldo a favor cuando corresponda (pagado > facturado).
-        private async Task<List<CobranzaClienteDto>> ArmarListaCobranzaAsync()
+        private async Task<List<CobranzaClienteDto>> ArmarListaCobranzaAsync(int? soloClienteId = null)
         {
-            var todosIngresos = await _context.TransaccionesFinancieras
-    .Include(t => t.IdOperacionNavigation)
-    .Where(t => t.TipoMovimiento == "INGRESO" && t.MontoNeto > 0 &&
-                t.IdOperacionNavigation.IdCliente > 0)
-    .ToListAsync();
+            var ingresosQuery = _context.TransaccionesFinancieras
+                .AsNoTracking()
+                .Include(t => t.IdOperacionNavigation)
+                .Where(t => t.TipoMovimiento == "INGRESO" && t.MontoNeto > 0 &&
+                            t.IdOperacionNavigation.IdCliente > 0 && !t.IdOperacionNavigation.IsDeleted);
+
+            if (soloClienteId.HasValue)
+                ingresosQuery = ingresosQuery.Where(t => t.IdOperacionNavigation.IdCliente == soloClienteId.Value);
+
+            var todosIngresos = await ingresosQuery.ToListAsync();
 
             if (!todosIngresos.Any()) return new List<CobranzaClienteDto>();
 
             var idsClientes = todosIngresos.Select(t => t.IdOperacionNavigation.IdCliente).Distinct().ToList();
-            var clientes = await _context.Clientes.Where(c => idsClientes.Contains(c.Id)).ToListAsync();
+            var clientes = await _context.Clientes.AsNoTracking().Where(c => idsClientes.Contains(c.Id)).ToListAsync();
 
-            var ultimosRecordatorios = await _context.RecordatoriosCobranza
+            var ultimosRecordatorios = await _context.RecordatoriosCobranza.AsNoTracking()
                 .Where(r => idsClientes.Contains(r.IdCliente))
                 .GroupBy(r => r.IdCliente)
                 .Select(g => new { IdCliente = g.Key, Ultimo = g.Max(x => x.FechaEnvio) })
@@ -160,8 +165,8 @@ namespace AtilsonCargoSpa.Pages.Finanzas
         // para que ambos generen exactamente el mismo correo y adjuntos.
         public async Task<(bool Success, string Mensaje)> EnviarRecordatorioClienteAsync(Cliente cliente, string tipoEnvio, string? usuario)
         {
-            var lista = await ArmarListaCobranzaAsync();
-            var dto = lista.FirstOrDefault(d => d.IdCliente == cliente.Id);
+            var lista = await ArmarListaCobranzaAsync(cliente.Id);
+            var dto = lista.FirstOrDefault();
             if (dto == null || (dto.SaldoUsd <= 0 && dto.SaldoClp <= 0))
                 return (false, "Este cliente no tiene saldo pendiente.");
 

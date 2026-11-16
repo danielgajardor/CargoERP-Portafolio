@@ -30,6 +30,22 @@ namespace AtilsonCargoSpa.Models
         // Aquí se guarda la Factura del Proveedor o la Factura/NC al Cliente
         public string? NumeroDocumento { get; set; }
 
+        // N° del documento de las filas Documentales (nov-2026): certificado de origen,
+        // fitosanitario, sanitario o de captura, y N° de DUS/DIN. Lo escribe FinanzasSyncService
+        // desde Operaciones. Antes iba en NumeroDocumento y pisaba el N° de factura en cada
+        // sincronización; ahora NumeroDocumento queda solo para la factura (como en el resto).
+        // Ver Sql/2026-11_penalidades_factura_documental.sql.
+        public string? NumeroDocumentoDocumental { get; set; }
+
+        // Documento de respaldo (nov-2026, Egresos documentales/terminal): la agencia
+        // intermediaria (ej. Stembex) cobra con su Nota de Cobro (NumeroDocumento) y adjunta la
+        // factura original del terminal (ej. TPS, STI). Aquí van ese proveedor y ese N°, para
+        // detectar cobros duplicados. Ver Sql/2026-11_itinerarios_respaldo_conceptos.sql.
+        public string? ProveedorOrigen { get; set; }
+        public string? NumeroDocumentoOrigen { get; set; }
+        // Archivo de la factura de respaldo (nov-2026), como RutaFactura para el documento directo.
+        public string? RutaFacturaOrigen { get; set; }
+
         // --- NUEVO: CONTROL DUAL PARA EGRESOS ---
         public string? NumeroOrdenCompra { get; set; }
 
@@ -40,6 +56,9 @@ namespace AtilsonCargoSpa.Models
         public DateTime? FechaModificacion { get; set; }
         public string? UsuarioModificador { get; set; }
         public string? Responsable { get; set; }
+        // Nombre textual de proveedor/contraparte proveniente de archivos históricos.
+        // Se conserva aunque no exista un maestro equivalente en el sistema.
+        public string? ContraparteHistorica { get; set; }
         public string? RutaFactura { get; set; }
 
         public bool TarifaManual { get; set; } = false;
@@ -50,10 +69,10 @@ namespace AtilsonCargoSpa.Models
         // --- ESCUDO DE SEGURIDAD ---
         public string? RutaComprobante { get; set; }
 
-        // --- CONTROL DE VERIFICACIÓN GATE-OUT/IN (Valor AGA vs Valor Original) ---
-        // ConfirmadoAga: Finanzas activó la verificación al recibir la factura de la Agencia.
-        // ValorAga: monto exacto digitado desde esa factura física, para contrastar contra
-        // MontoNeto (el valor que Atilson ya tiene pactado en TarifaGate).
+        // --- CONFIRMACIÓN DE VALOR FINANCIERO (NOMBRES DB LEGADOS) ---
+        // ConfirmadoAga: checkbox de confirmación de valor, sin requerir factura AGA.
+        // ValorAga: valor confirmado/informado, comparado contra el valor esperado.
+        // Se mantienen los nombres de columnas existentes para no romper SQL Server.
         public bool ConfirmadoAga { get; set; } = false;
         public decimal? ValorAga { get; set; }
 

@@ -7,7 +7,9 @@
 
     <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
     <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
 
@@ -24,7 +26,7 @@
             }
 
             body {
-                font-family: 'Inter', sans-serif;
+                font-family: 'Plus Jakarta Sans', 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
                 background-color: var(--bg-light);
                 color: var(--dark-text);
                 overflow-x: hidden;
@@ -327,6 +329,7 @@
                 }
     </style>
     <link rel="stylesheet" href="~/css/erp-comun.css" asp-append-version="true" />
+    <link rel="stylesheet" href="~/css/portal-avisos.css" asp-append-version="true" />
 </head>
 <body>
 
@@ -347,6 +350,10 @@
         if (int.TryParse(User.FindFirst("IdCliente")?.Value, out int idClienteMenu) && idClienteMenu > 0
             && Context.RequestServices.GetService(typeof(AtilsonCargoSpa.Services.SoporteClientesService)) is AtilsonCargoSpa.Services.SoporteClientesService soporteMenu)
             respuestasSinVer = await soporteMenu.ContarNoLeidasClienteAsync(idClienteMenu);
+        // Avisos del portal (15-nov-2026): campana con los avisos sin leer.
+        int avisosSinLeer = 0;
+        if (idClienteMenu > 0 && Context.RequestServices.GetService(typeof(AtilsonCargoSpa.Services.NotificacionesClienteService)) is AtilsonCargoSpa.Services.NotificacionesClienteService avisosMenu)
+            avisosSinLeer = await avisosMenu.ContarNoLeidasAsync(idClienteMenu);
     }
 
     <aside class="sidebar">
@@ -417,6 +424,11 @@
                 </a>
             </li>
             <li class="nav-item">
+                <a class="nav-link @Activo("/PortalCliente/Notificaciones")" asp-page="/PortalCliente/Notificaciones" title="Avisos">
+                    <i class="bi bi-bell-fill icon-main"></i> <span class="nav-text">Avisos <span class="nav-badge-soporte" data-pa-n data-n="@avisosSinLeer" title="Avisos sin leer" @(avisosSinLeer == 0 ? "hidden" : "")>@(avisosSinLeer > 0 ? avisosSinLeer.ToString() : "")</span></span>
+                </a>
+            </li>
+            <li class="nav-item">
                 <a class="nav-link @Activo("/PortalCliente/Soporte")" asp-page="/PortalCliente/Soporte" title="Soporte">
                     <i class="bi bi-headset icon-main"></i> <span class="nav-text">Soporte @if (respuestasSinVer > 0) { <span class="nav-badge-soporte" title="Respuestas nuevas del equipo">@respuestasSinVer</span> }</span>
                 </a>
@@ -454,7 +466,24 @@
             <button type="button" id="menuMovilAbrir" aria-label="Abrir menú" aria-expanded="false" aria-controls="sidebarMenu"><i class="bi bi-list"></i></button>
             <a asp-page="/PortalCliente/Index" aria-label="Ir al inicio"><img src="~/img/marca/atilson-logo-blanco.svg" alt="Atilson" asp-append-version="true" /></a>
             <span class="titulo-movil">@ViewData["Title"]</span>
+            <button type="button" class="pa-campana @(avisosSinLeer > 0 ? "tiene" : "")" data-pa-campana data-inicial="@avisosSinLeer" aria-haspopup="true" aria-expanded="false" aria-controls="paPanel" aria-label="Avisos"><i class="bi bi-bell"></i><i class="bi bi-bell-fill"></i><span class="pa-campana__n" data-pa-n data-n="@avisosSinLeer">@(avisosSinLeer > 0 ? avisosSinLeer.ToString() : "")</span></button>
         </div>
+        <div class="pa-topbar">
+            <span class="pa-topbar__titulo">@ViewData["Title"]</span>
+            <div class="pa-topbar__der">
+                <a class="pa-topbar__link" asp-page="/PortalCliente/Soporte"><i class="bi bi-headset me-1"></i>Soporte</a>
+                <button type="button" class="pa-campana @(avisosSinLeer > 0 ? "tiene" : "")" data-pa-campana data-inicial="@avisosSinLeer" aria-haspopup="true" aria-expanded="false" aria-controls="paPanel" aria-label="Avisos" title="Avisos"><i class="bi bi-bell"></i><i class="bi bi-bell-fill"></i><span class="pa-campana__n" data-pa-n data-n="@avisosSinLeer">@(avisosSinLeer > 0 ? avisosSinLeer.ToString() : "")</span></button>
+            </div>
+        </div>
+        <div class="pa-panel" id="paPanel" role="dialog" aria-label="Avisos" hidden>
+            <div class="pa-panel__cab">
+                <h2><i class="bi bi-bell me-1"></i> Avisos</h2>
+                <button type="button" data-pa-todas @(avisosSinLeer == 0 ? "disabled" : "")><i class="bi bi-check2-all"></i> Marcar todo leído</button>
+            </div>
+            <ul class="pa-panel__lista"><li class="pa-panel__vacio"><i class="bi bi-hourglass-split"></i>Cargando…</li></ul>
+            <div class="pa-panel__pie"><a asp-page="/PortalCliente/Notificaciones">Ver todos los avisos <i class="bi bi-arrow-right"></i></a></div>
+        </div>
+        <form id="paToken" hidden>@Html.AntiForgeryToken()</form>
         <div class="contenido-pagina" style="flex-grow: 1; padding: 25px;">
             @RenderBody()
         </div>
@@ -528,8 +557,10 @@
     </script>
 
     <partial name="_AvisosFlash" />
+    <script src="~/js/portal-avisos.js" asp-append-version="true"></script>
     @await RenderSectionAsync("Scripts", required: false)
     <script src="~/js/buscador-selects.js" asp-append-version="true"></script>
+    <script src="~/js/ruta-paises.js" asp-append-version="true"></script>
     <script src="~/js/menu-movil.js" asp-append-version="true"></script>
 </body>
 </html>

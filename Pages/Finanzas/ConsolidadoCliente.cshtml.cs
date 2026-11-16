@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using AtilsonCargoSpa.Models;
 using AtilsonCargoSpa.Services;
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 
@@ -24,6 +25,9 @@ namespace AtilsonCargoSpa.Pages.Finanzas
         [BindProperty(SupportsGet = true)] public int? IdCliente { get; set; }
         [BindProperty(SupportsGet = true)] public DateTime? Desde { get; set; }
         [BindProperty(SupportsGet = true)] public DateTime? Hasta { get; set; }
+        [BindProperty(SupportsGet = true)] public string? Buscar { get; set; }
+        [BindProperty(SupportsGet = true)] public string Origen { get; set; } = "TODOS";
+        [BindProperty(SupportsGet = true)] public string Estado { get; set; } = "TODOS";
 
         public SelectList ListaClientes { get; set; } = default!;
         public ConsolidadoClienteDto? Resultado { get; set; }
@@ -33,15 +37,22 @@ namespace AtilsonCargoSpa.Pages.Finanzas
             var clientes = await _context.Clientes.AsNoTracking().Where(c => c.Activo == 1).OrderBy(c => c.RazonSocial).ToListAsync();
             ListaClientes = new SelectList(clientes, "Id", "RazonSocial", IdCliente);
 
-            if (IdCliente.HasValue && Desde.HasValue && Hasta.HasValue)
+            Origen = (Origen ?? "TODOS").Trim().ToUpperInvariant();
+            if (Origen != "SISTEMA" && Origen != "HISTORICO") Origen = "TODOS";
+            Estado = (Estado ?? "TODOS").Trim().ToUpperInvariant();
+            if (!new[] { "TODOS", "PENDIENTE", "FACTURADO", "PAGADO" }.Contains(Estado)) Estado = "TODOS";
+
+            if (IdCliente.HasValue)
             {
-                Resultado = await ConstruirAsync(IdCliente.Value, Desde.Value, Hasta.Value.Date.AddDays(1).AddSeconds(-1));
+                DateTime desde = Desde?.Date ?? new DateTime(1900, 1, 1);
+                DateTime hasta = Hasta?.Date.AddDays(1).AddTicks(-1) ?? DateTime.Today.AddDays(1).AddTicks(-1);
+                Resultado = await ConstruirAsync(IdCliente.Value, desde, hasta, Buscar, Origen, Estado);
             }
         }
 
         public async Task<IActionResult> OnGetExportarPdfAsync(int idCliente, DateTime desde, DateTime hasta)
         {
-            var dto = await ConstruirAsync(idCliente, desde, hasta.Date.AddDays(1).AddSeconds(-1));
+            var dto = await ConstruirAsync(idCliente, desde, hasta.Date.AddDays(1).AddTicks(-1), Buscar, Origen, Estado);
             if (dto == null) return NotFound();
             var pdf = _exportService.GenerarPdfConsolidado(dto);
             return File(pdf, "application/pdf", $"Consolidado_{dto.ClienteNombre}_{desde:yyyyMM}.pdf");
@@ -59,19 +70,35 @@ namespace AtilsonCargoSpa.Pages.Finanzas
         // el criterio más simple y transparente: "las operaciones abiertas para
         // este cliente en este período", sin depender de si cada transacción
         // individual ya fue pagada o facturada.
-        private async Task<ConsolidadoClienteDto?> ConstruirAsync(int idCliente, DateTime desde, DateTime hasta)
+        private async Task<ConsolidadoClienteDto?> ConstruirAsync(int idCliente, DateTime desde, DateTime hasta, string? buscar = null, string origen = "TODOS", string estado = "TODOS")
         {
             // Solo lectura (esto solo arma un reporte/export): AsNoTracking evita que EF Core
             // arme el change-tracker para estas entidades.
             var cliente = await _context.Clientes.AsNoTracking().FirstOrDefaultAsync(c => c.Id == idCliente);
             if (cliente == null) return null;
 
-            var operaciones = await _context.Operaciones
+            var query = _context.Operaciones
                 .AsNoTracking()
                 .Where(o => o.IdCliente == idCliente && !o.IsDeleted &&
-                            o.FechaCreacion.HasValue && o.FechaCreacion.Value >= desde && o.FechaCreacion.Value <= hasta)
+                            o.FechaCreacion.HasValue && o.FechaCreacion.Value >= desde && o.FechaCreacion.Value <= hasta);
+
+            if (origen == "HISTORICO") query = query.Where(o => o.EsHistorica);
+            else if (origen == "SISTEMA") query = query.Where(o => !o.EsHistorica);
+
+            if (!string.IsNullOrWhiteSpace(buscar))
+            {
+                string s = buscar.Trim();
+                query = query.Where(o =>
+                    o.NumeroBooking.Contains(s) ||
+                    o.TransaccionesFinancieras.Any(t =>
+                        (t.NumeroDocumento != null && t.NumeroDocumento.Contains(s)) ||
+                        (t.Concepto != null && t.Concepto.Contains(s))));
+            }
+
+            var operaciones = await query
                 .Include(o => o.TransaccionesFinancieras)
                 .OrderBy(o => o.FechaCreacion)
+                .ThenBy(o => o.Id)
                 .ToListAsync();
 
             var dto = new ConsolidadoClienteDto
@@ -83,12 +110,23 @@ namespace AtilsonCargoSpa.Pages.Finanzas
 
             foreach (var op in operaciones)
             {
-                var ingresos = op.TransaccionesFinancieras.Where(t => t.TipoMovimiento == "INGRESO" && t.MontoNeto > 0);
-                var egresos = op.TransaccionesFinancieras.Where(t => t.TipoMovimiento == "EGRESO" && t.MontoNeto > 0);
+                IEnumerable<TransaccionesFinanciera> txs = op.TransaccionesFinancieras.Where(t => t.MontoNeto > 0);
+                if (estado == "PAGADO")
+                    txs = txs.Where(t => t.EstadoFila == "PAGADO" || t.EstadoFila == "CONCILIADO");
+                else if (estado == "FACTURADO")
+                    txs = txs.Where(t => t.EstadoFila == "FACTURADO");
+                else if (estado == "PENDIENTE")
+                    txs = txs.Where(t => t.EstadoFila != "PAGADO" && t.EstadoFila != "CONCILIADO" && t.EstadoFila != "NO FACTURABLE");
+
+                if (!txs.Any()) continue;
+
+                var ingresos = txs.Where(t => t.TipoMovimiento == "INGRESO");
+                var egresos = txs.Where(t => t.TipoMovimiento == "EGRESO");
 
                 dto.Operaciones.Add(new ConsolidadoOperacionDto
                 {
                     NumeroBooking = string.IsNullOrWhiteSpace(op.NumeroBooking) ? $"OP-{op.Id}" : op.NumeroBooking,
+                    EsHistorica = op.EsHistorica,
                     Fecha = op.FechaCreacion,
                     IngresoUsd = ingresos.Where(t => t.Moneda == "USD").Sum(t => t.MontoNeto),
                     IngresoClp = ingresos.Where(t => t.Moneda == "CLP").Sum(t => t.MontoNeto),

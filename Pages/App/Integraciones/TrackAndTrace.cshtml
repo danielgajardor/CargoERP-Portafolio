@@ -1,0 +1,85 @@
+@page
+@model AtilsonCargoSpa.Pages.App.Integraciones.TrackAndTraceModel
+@{
+    ViewData["Title"] = "Seguimiento marítimo | ATILSON";
+}
+<div class="container py-4" style="max-width:1100px">
+    <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-3">
+        <div>
+            <h1 class="h3 mb-1">Seguimiento marítimo</h1>
+            <p class="text-muted">Consulta de hitos y movimientos · Hapag-Lloyd Track &amp; Trace</p>
+        </div>
+        <span class="badge bg-light text-dark border">API Beta · Solo lectura</span>
+    </div>
+    <div class="alert alert-info small">Los datos son informativos y pueden diferir del portal de Hapag-Lloyd.
+        Esta consulta no modifica los estados internos de Operaciones.</div>
+    <div class="card mb-4">
+        <div class="card-body">
+            <form method="get" class="row g-3 align-items-end">
+                <div class="col-md-4">
+                    <label class="form-label fw-semibold" for="tipo">Buscar por</label>
+                    <select id="tipo" asp-for="Tipo" class="form-select">
+                        <option value="Container">Número de contenedor</option>
+                        <option value="Booking">Número de Booking</option>
+                        <option value="BillOfLading">Número de BL / documento</option>
+                    </select>
+                </div>
+                <div class="col-md-5">
+                    <label class="form-label fw-semibold" for="referencia">Referencia</label>
+                    <input id="referencia" asp-for="Referencia" class="form-control text-uppercase"
+                           maxlength="35" placeholder="Referencia real del embarque" required />
+                </div>
+                <div class="col-md-3">
+                    <button type="submit" class="btn btn-primary w-100">Consultar seguimiento</button>
+                </div>
+            </form>
+            <p class="text-muted small mb-0 mt-3">Tryout: máximo 100 solicitudes por día y 1 por minuto.
+                Se reutilizan resultados durante 15 minutos para evitar consumo innecesario.</p>
+        </div>
+    </div>
+    @if (Model.Resultado is not null)
+    {
+        <div class="alert @(Model.Resultado.Success ? "alert-success" : "alert-warning")" role="status">
+            @Model.Resultado.Message
+        </div>
+        @if (Model.Resultado.Success)
+        {
+            <div class="d-flex flex-wrap align-items-center justify-content-between mb-3">
+                <h2 class="h5 mb-0">Eventos encontrados: @Model.Resultado.Events.Count</h2>
+                <span class="text-muted small">Consulta: @(Model.Resultado.RetrievedAt?.ToString("dd/MM/yyyy HH:mm 'UTC'") ?? "—")</span>
+            </div>
+            @if (Model.Resultado.Events.Count == 0)
+            {
+                <p class="text-muted">No hay eventos disponibles para esta referencia.</p>
+            }
+            else
+            {
+                <div class="table-responsive border rounded">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th scope="col">Fecha / hora</th>
+                                <th scope="col">Evento</th>
+                                <th scope="col">Lugar</th>
+                                <th scope="col">Clasificación</th>
+                                <th scope="col">Código</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                        @foreach (var evento in Model.Resultado.Events)
+                        {
+                            <tr>
+                                <td class="text-nowrap">@(evento.EventDateTime?.ToString("dd/MM/yyyy HH:mm zzz") ?? "No informada")</td>
+                                <td>@evento.Description</td>
+                                <td>@(string.IsNullOrWhiteSpace(evento.LocationName) ? evento.LocationCode ?? "No informado" : evento.LocationName + (string.IsNullOrWhiteSpace(evento.LocationCode) ? "" : $" ({evento.LocationCode})"))</td>
+                                <td>@(evento.Classifier switch { "ACT" => "Real", "EST" => "Estimado", "PLN" => "Planificado", _ => evento.Classifier ?? "No informado" })</td>
+                                <td><code>@evento.EventCode</code></td>
+                            </tr>
+                        }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        }
+    }
+</div>

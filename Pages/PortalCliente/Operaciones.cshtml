@@ -140,7 +140,7 @@
                 @foreach (var op in ops)
                 {
                     var t = op.OperacionesTerrestres?.FirstOrDefault();
-                    var d = op.OperacionesDocumentales?.FirstOrDefault();
+                    var d = op.OperacionesDocumentales?.OrderBy(x => x.IdUnidadTecnica.HasValue).ThenBy(x => x.Id).FirstOrDefault();
                     bool cerradaPorRetiro = Model.OperacionCerradaPorRetiro(op);
                     bool pendienteRetiro = Model.PendienteGestionRetiro(op);
                     string tk = tokens[op.Id];
@@ -162,11 +162,13 @@
                         ? AtilsonCargoSpa.Helpers.TransbordoHelpers.EstadoTransbordo(op.GestionTransbordo)
                         : "";
 
-                    // Hitos de trazabilidad (monótonos: si un hito posterior ocurrió, los anteriores también)
+                    // Hitos de trazabilidad (monótonos: si un hito posterior ocurrió, los anteriores también).
+                    // 15-nov: zarpe y arribo según lo confirmado (real o estado del workflow), no por la fecha estimada.
+                    int posEstado = AtilsonCargoSpa.Services.CicloNave.PosicionEstado(op.EstadoWorkflow);
                     bool h1 = !string.IsNullOrWhiteSpace(op.NumeroBooking);
-                    bool h2 = t?.FechaCarga <= ahora;
-                    bool h3 = etd <= ahora;
-                    bool h4 = eta <= ahora || op.EstadoWorkflow == "Arribado" || pendienteRetiro;
+                    bool h2 = t?.FechaCarga <= ahora || posEstado >= AtilsonCargoSpa.Services.CicloNave.PosicionEstado("SALIDA DE PLANTA");
+                    bool h3 = op.EtdReal != null || posEstado >= AtilsonCargoSpa.Services.CicloNave.PosicionEstado("ZARPE");
+                    bool h4 = op.EtaReal != null || posEstado >= AtilsonCargoSpa.Services.CicloNave.PosicionEstado("ARRIBADO") || pendienteRetiro;
                     bool h5 = cerradaPorRetiro;
                     if (h5) h4 = true;
                     if (h4) h3 = true;
@@ -176,9 +178,9 @@
                     {
                         (Done: h1, Lbl: "Reserva", Sub: h1 ? "Confirmada" : "En gestión", Ico: "bi-journal-check"),
                         (Done: h2, Lbl: "Carga en planta", Sub: t?.FechaCarga?.ToString("dd MMM, HH:mm", es) ?? "Por programar", Ico: "bi-truck"),
-                        (Done: h3, Lbl: "Zarpe", Sub: etd?.ToString("dd MMM yyyy", es) ?? "Por confirmar", Ico: "bi-water"),
-                        (Done: h4, Lbl: "Arribo", Sub: eta?.ToString("dd MMM yyyy", es) ?? "Por confirmar", Ico: "bi-geo-alt"),
-                        (Done: h5, Lbl: "Vacío devuelto", Sub: AFecha(op.FechaRetiroDestino)?.ToString("dd MMM yyyy", es) ?? "Pendiente", Ico: "bi-box-seam")
+                        (Done: h3, Lbl: "Zarpe", Sub: op.EtdReal?.ToString("dd MMM yyyy", es) ?? (etd != null ? "Estimado " + etd.Value.ToString("dd MMM", es) : "Por confirmar"), Ico: "bi-water"),
+                        (Done: h4, Lbl: "Arribo", Sub: op.EtaReal?.ToString("dd MMM yyyy", es) ?? (eta != null ? "Estimado " + eta.Value.ToString("dd MMM", es) : "Por confirmar"), Ico: "bi-geo-alt"),
+                        (Done: h5, Lbl: "Vacío devuelto", Sub: AFecha(op.FechaDevolucionVacio)?.ToString("dd MMM yyyy", es) ?? "Pendiente", Ico: "bi-box-seam")
                     };
                     int hitoActual = Array.FindIndex(hitos, x => !x.Done);
 
@@ -303,6 +305,81 @@
                                         </div>
                                     }
 
+                                    @{
+                                        // 15-nov: fechas de la nave y contenedores, con el estado de cada uno.
+                                        bool larAut = (op.EstadoLar ?? "").ToUpperInvariant().Contains("AUTORIZADO");
+                                        string FechaHora(DateTime? f) => f == null ? "" : f.Value.ToString(f.Value.TimeOfDay == TimeSpan.Zero ? "ddd dd MMM" : "ddd dd MMM, HH:mm", es);
+                                        var contenedores = new List<(string Numero, string? Tipo, string? Estado, DateTime? Retiro, DateTime? Devuelto)>();
+                                        contenedores.Add((op.NumeroContenedor ?? "Por asignar", op.TipoContenedor, op.EstadoWorkflow, op.FechaRetiroDestino, op.FechaDevolucionVacio));
+                                        foreach (var u in (op.Unidadestecnicas ?? new List<Unidadestecnica>()).OrderBy(u => u.Id))
+                                        {
+                                            contenedores.Add((u.NroContenedor ?? "Por asignar", u.TipoContenedor, u.Estado ?? op.EstadoWorkflow, u.FechaRetiroDestino, u.FechaDevolucionVacio));
+                                        }
+                                    }
+                                    <div class="pc-dgrid pc-dgrid--2 mb-3">
+                                        <!-- Fechas de la nave -->
+                                        <div class="pc-dcard">
+                                            <h6 class="pc-dcard-title"><i class="bi bi-calendar-event" style="background:#f5f0fd; color:#6d2d9e;"></i> Fechas de la nave <span class="pc-nota-avisos ms-auto" title="Si cambia alguna de estas fechas te llega un aviso"><i class="bi bi-bell"></i> Te avisamos si cambian</span></h6>
+                                            <div class="pc-fechas">
+                                                <div class="pc-fecha">
+                                                    <span class="pc-lbl">Stacking (entrega en puerto)</span>
+                                                    @if (op.FechaStacking != null || op.LateArrival != null)
+                                                    {
+                                                        <span class="pc-fecha-val">@(op.FechaStacking != null ? FechaHora(op.FechaStacking) : "Por informar") <i class="bi bi-arrow-right"></i> @(op.LateArrival != null ? FechaHora(op.LateArrival) : "Por informar")</span>
+                                                        @if (larAut) { <span class="pc-tag ok mt-1"><i class="bi bi-clock-history"></i> Late arrival autorizado</span> }
+                                                    }
+                                                    else
+                                                    {
+                                                        <span class="pc-fecha-val is-pend">La naviera aún no lo informa</span>
+                                                    }
+                                                </div>
+                                                <div class="pc-fecha">
+                                                    <span class="pc-lbl">Corte documental</span>
+                                                    <span class="pc-fecha-val @(op.CutOffMatriz == null ? "is-pend" : "")">@(op.CutOffMatriz != null ? FechaHora(op.CutOffMatriz) : "Por informar")</span>
+                                                </div>
+                                                <div class="pc-fecha">
+                                                    <span class="pc-lbl">Zarpe</span>
+                                                    @if (op.EtdReal != null)
+                                                    {
+                                                        <span class="pc-fecha-val is-ok"><i class="bi bi-check-circle-fill"></i> @FechaHora(op.EtdReal)</span>
+                                                    }
+                                                    else
+                                                    {
+                                                        <span class="pc-fecha-val @(etd == null ? "is-pend" : "")">@(etd != null ? "Estimado " + FechaHora(etd) : "Por confirmar")</span>
+                                                    }
+                                                </div>
+                                                <div class="pc-fecha">
+                                                    <span class="pc-lbl">Arribo</span>
+                                                    @if (op.EtaReal != null)
+                                                    {
+                                                        <span class="pc-fecha-val is-ok"><i class="bi bi-check-circle-fill"></i> @FechaHora(op.EtaReal)</span>
+                                                    }
+                                                    else
+                                                    {
+                                                        <span class="pc-fecha-val @(eta == null ? "is-pend" : "")">@(eta != null ? "Estimado " + FechaHora(eta) : "Por confirmar")</span>
+                                                    }
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <!-- Contenedores -->
+                                        <div class="pc-dcard">
+                                            <h6 class="pc-dcard-title"><i class="bi bi-boxes" style="background:#ecfdf5; color:#059669;"></i> @(contenedores.Count == 1 ? "Tu contenedor" : $"Tus {contenedores.Count} contenedores")</h6>
+                                            <ul class="pc-conts">
+                                                @foreach (var c in contenedores)
+                                                {
+                                                    string estadoC = AtilsonCargoSpa.Services.NotificacionesClienteInterceptor.EstadoCliente(c.Estado) ?? (string.IsNullOrWhiteSpace(c.Estado) ? "En gestión" : c.Estado);
+                                                    bool listo = c.Devuelto != null;
+                                                    <li class="pc-cont-fila">
+                                                        <span class="pc-cont-num mono">@c.Numero</span>
+                                                        <span class="pc-cont-tipo">@(c.Tipo ?? "")</span>
+                                                        <span class="pc-tag @(listo ? "ok" : "info")">@(listo ? "Vacío devuelto " + c.Devuelto!.Value.ToString("dd'/'MM", es) : (c.Retiro != null ? "Retirado " + c.Retiro.Value.ToString("dd'/'MM", es) : estadoC))</span>
+                                                    </li>
+                                                }
+                                            </ul>
+                                        </div>
+                                    </div>
+
                                     <div class="pc-dgrid">
                                         <!-- Logística terrestre -->
                                         <div class="pc-dcard">
@@ -355,7 +432,22 @@
                                                 {
                                                     <a href="/PortalCliente/AprobarBL/@op.Id" class="pc-mini-btn primary">Revisar <i class="bi bi-arrow-right"></i></a>
                                                 }
+                                                else if (!string.IsNullOrWhiteSpace(d?.RutaBL))
+                                                {
+                                                    <a href="@Url.Page("/PortalCliente/Documentos", "Archivo", new { idOperacion = op.Id, idDocumento = d!.Id, tipo = "bl" })" target="_blank" rel="noopener" class="pc-mini-btn ghost">Ver BL <i class="bi bi-eye"></i></a>
+                                                }
                                             </div>
+                                            @if (!string.IsNullOrWhiteSpace(d?.EvidenciaMatriz))
+                                            {
+                                                <div class="pc-doc" style="background:#fff;">
+                                                    <div class="pc-doc-ico" style="background:#eff6ff; color:#2563eb;"><i class="bi bi-file-earmark-text"></i></div>
+                                                    <div class="pc-doc-body">
+                                                        <span class="pc-doc-name">Matriz documental</span>
+                                                        <span class="pc-irow-sub">Archivo cargado por Operaciones</span>
+                                                    </div>
+                                                    <a href="@Url.Page("/PortalCliente/Documentos", "Archivo", new { idOperacion = op.Id, idDocumento = d!.Id, tipo = "matriz" })" target="_blank" rel="noopener" class="pc-mini-btn ghost">Ver <i class="bi bi-eye"></i></a>
+                                                </div>
+                                            }
                                             @if (!string.IsNullOrEmpty(d?.RutaFullSet))
                                             {
                                                 <div class="pc-doc" style="background:#fff;">
@@ -364,7 +456,7 @@
                                                         <span class="pc-doc-name">Full Set documental</span>
                                                         <span class="pc-irow-sub">Listo para descarga</span>
                                                     </div>
-                                                    <a href="@d.RutaFullSet" target="_blank" rel="noopener" class="pc-mini-btn ghost"><i class="bi bi-download"></i></a>
+                                                    <a href="@Url.Page("/PortalCliente/Documentos", "Archivo", new { idOperacion = op.Id, idDocumento = d.Id, tipo = "fullset", descargar = true })" target="_blank" rel="noopener" class="pc-mini-btn ghost"><i class="bi bi-download"></i></a>
                                                 </div>
                                             }
                                         </div>
@@ -429,17 +521,18 @@
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 
     <script>
-        // ===== Roleo / Cancelación =====
+        // ===== Roleo / Cancelación / No Show: solicitudes diferentes =====
         function solicitarRoleoCliente(idOp, booking) {
             Swal.fire({
-                title: 'Solicitar roleo / cancelación',
+                title: 'Solicitar roleo, cancelación o No Show',
                 html: `
                     <div style="text-align:left; font-size:13px;">
                         <p style="font-size:12px; color:#6b6880; margin-bottom:14px;">Booking: <strong style="font-family:'JetBrains Mono',monospace; color:#6d2d9e;">${booking}</strong></p>
                         <label style="font-size:10px; font-weight:800; color:#a19eb3; text-transform:uppercase; display:block; margin-bottom:6px; letter-spacing:1px;">Tipo de solicitud</label>
                         <select id="swal-cli-tipo" class="swal2-select" style="margin:0 0 14px; width:100%; font-weight:700; border-radius:10px;">
                             <option value="ROLEO">Roleo (postergar embarque)</option>
-                            <option value="CANCELACION_NOSHOW">Cancelación / No Show</option>
+                            <option value="CANCELACION">Cancelación de reserva</option>
+                            <option value="NO_SHOW">No Show (no presentación de carga)</option>
                         </select>
                         <label style="font-size:10px; font-weight:800; color:#a19eb3; text-transform:uppercase; display:block; margin-bottom:6px; letter-spacing:1px;">Motivo</label>
                         <textarea id="swal-cli-comentario" class="swal2-textarea" style="margin:0; width:100%; font-size:13px; height:90px; border-radius:10px;" placeholder="Cuéntanos el motivo..."></textarea>
@@ -462,7 +555,7 @@
                 formData.append('tipo', result.value.tipo);
                 formData.append('comentario', result.value.comentario);
 
-                fetch('?handler=SolicitarRoleo', { method: 'POST', headers: { 'RequestVerificationToken': token }, body: formData })
+                fetch('/PortalCliente/Index?handler=SolicitarRoleo', { method: 'POST', headers: { 'RequestVerificationToken': token }, body: formData })
                     .then(res => res.json()).then(data => {
                         if (data.success) {
                             Swal.fire({ icon: 'success', title: 'Solicitud enviada', text: 'Nuestro equipo de Operaciones fue notificado y te contactará a la brevedad.', confirmButtonColor: '#2c1b4d' })

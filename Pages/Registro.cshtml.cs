@@ -34,15 +34,12 @@ namespace AtilsonCargoSpa.Pages
 
         public sealed class Formulario
         {
-            [Required(ErrorMessage = "Escribe la razón social.")]
             [StringLength(100, ErrorMessage = "La razón social admite hasta 100 caracteres.")]
             public string? RazonSocial { get; set; }
 
-            [Required(ErrorMessage = "Escribe el RUT de la empresa.")]
             [StringLength(12, ErrorMessage = "Revisa el RUT (ej: 76.123.456-7).")]
             public string? Rut { get; set; }
 
-            [Required(ErrorMessage = "Escribe la dirección de la oficina.")]
             [StringLength(255, ErrorMessage = "La dirección admite hasta 255 caracteres.")]
             public string? DireccionOficina { get; set; }
 
@@ -60,11 +57,9 @@ namespace AtilsonCargoSpa.Pages
             public string? Correo { get; set; }
 
 
-            [Required(ErrorMessage = "Elige una contraseña.")]
-            [StringLength(100, MinimumLength = 8, ErrorMessage = "La contraseña debe tener al menos 8 caracteres.")]
+            [StringLength(100, MinimumLength = 8, ErrorMessage = "Si defines una contraseña, debe tener al menos 8 caracteres.")]
             public string? Password { get; set; }
 
-            [Required(ErrorMessage = "Repite la contraseña.")]
             [Compare(nameof(Password), ErrorMessage = "Las contraseñas no coinciden.")]
             public string? ConfirmarPassword { get; set; }
 
@@ -128,15 +123,24 @@ namespace AtilsonCargoSpa.Pages
             Form.Telefono = Limpio(Form.Telefono);
             Form.Correo = Limpio(Form.Correo);
 
-            if (Form.Rut != null && !RutHelper.EsValido(Form.Rut))
+            if (!string.IsNullOrWhiteSpace(Form.Rut) && !RutHelper.EsValido(Form.Rut))
                 ModelState.AddModelError("Form.Rut", "El RUT no es válido. Revisa los números y el dígito verificador.");
           
-            if (Form.Password != null && Form.Password.Length >= 8 && (!Form.Password.Any(char.IsLetter) || !Form.Password.Any(char.IsDigit)))
-                ModelState.AddModelError("Form.Password", "La contraseña debe tener letras y números.");
+            if (!string.IsNullOrWhiteSpace(Form.Password))
+            {
+                if (Form.Password.Length >= 8 && (!Form.Password.Any(char.IsLetter) || !Form.Password.Any(char.IsDigit)))
+                    ModelState.AddModelError("Form.Password", "La contraseña debe tener letras y números.");
+                if (string.IsNullOrWhiteSpace(Form.ConfirmarPassword))
+                    ModelState.AddModelError("Form.ConfirmarPassword", "Repite la contraseña que elegiste.");
+            }
+            else if (!string.IsNullOrWhiteSpace(Form.ConfirmarPassword))
+            {
+                ModelState.AddModelError("Form.Password", "Escribe la contraseña antes de confirmarla.");
+            }
 
             if (ModelState.IsValid)
             {
-                var bloqueo = await _registro.MotivoBloqueoAsync(Form.Rut!, Form.Correo!);
+                var bloqueo = await _registro.MotivoBloqueoAsync(Form.Rut, Form.Correo!);
                 if (bloqueo != null) ModelState.AddModelError(string.Empty, bloqueo);
             }
 
@@ -145,13 +149,13 @@ namespace AtilsonCargoSpa.Pages
 
             var solicitud = new SolicitudRegistroCliente
             {
-                RazonSocial = Form.RazonSocial!,
-                Rut = RutHelper.Formatear(Form.Rut),
+                RazonSocial = Form.RazonSocial ?? "",
+                Rut = string.IsNullOrWhiteSpace(Form.Rut) ? "" : RutHelper.Formatear(Form.Rut),
                 NombreContacto = Form.NombreContacto!,
                 Telefono = Form.Telefono!,
                 Correo = Form.Correo!.ToLowerInvariant(),
-                DireccionOficina = Form.DireccionOficina!,
-                PasswordHash = BCrypt.Net.BCrypt.HashPassword(Form.Password),
+                DireccionOficina = Form.DireccionOficina ?? "",
+                PasswordHash = string.IsNullOrWhiteSpace(Form.Password) ? "" : BCrypt.Net.BCrypt.HashPassword(Form.Password),
                 Estado = SolicitudRegistroCliente.EstadoPendiente,
                 FechaSolicitud = DateTime.Now,
                 IpOrigen = ip.Length > 64 ? ip.Substring(0, 64) : ip

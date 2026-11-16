@@ -35,15 +35,27 @@
 
     var data = ops.Select(op =>
     {
-        var d = op.OperacionesDocumentales?.FirstOrDefault();
-        var archivos = d != null ? Model.ArchivosDisponibles(d) : new List<DocumentoArchivoDto>();
+        var d = op.OperacionesDocumentales?.OrderBy(x => x.IdUnidadTecnica.HasValue).ThenBy(x => x.Id).FirstOrDefault();
+        var archivos = op.OperacionesDocumentales?.OrderBy(x => x.IdUnidadTecnica.HasValue).ThenBy(x => x.Id)
+            .SelectMany(doc => Model.ArchivosDisponibles(doc,
+                doc.IdUnidadTecnica.HasValue
+                    ? (op.Unidadestecnicas?.FirstOrDefault(u => u.Id == doc.IdUnidadTecnica.Value)?.NroContenedor
+                        ?? "Contenedor " + doc.IdUnidadTecnica.Value)
+                    : null)).ToList() ?? new List<DocumentoArchivoDto>();
+        var fullSet = archivos.LastOrDefault(a => a.Codigo == "fullset" && !string.IsNullOrWhiteSpace(a.Ruta));
         return new
         {
             Op = op,
             D = d,
-            Disponibles = archivos.Where(a => !string.IsNullOrEmpty(a.Ruta) && a.Nombre != "Full Set Documental").ToList(),
-            Pendientes = archivos.Where(a => string.IsNullOrEmpty(a.Ruta) && a.Nombre != "Full Set Documental").ToList(),
-            FullSet = d?.RutaFullSet,
+            Disponibles = archivos.Where(a => !string.IsNullOrEmpty(a.Ruta) && a.Codigo != "fullset").ToList(),
+            Pendientes = d == null ? new List<DocumentoArchivoDto>() : Model.ArchivosDisponibles(d)
+                .Where(a => string.IsNullOrWhiteSpace(a.Ruta) &&
+                    (a.Codigo is "matriz" or "bl" ||
+                     (a.Codigo == "origen" && d.CertificadoOrigen == true) ||
+                     (a.Codigo == "fitosanitario" && d.AplicaSag) ||
+                     (a.Codigo == "sanitario" && d.AplicaSernapesca))).ToList(),
+            FullSet = fullSet?.Ruta,
+            FullSetIdDocumento = fullSet?.IdDocumento,
             BlPorRevisar = d?.EstadoDocumental == "BORRADOR ENVIADO"
         };
     }).ToList();
@@ -455,7 +467,7 @@
                             <div class="pc-c-act">
                                 @if (tieneFull)
                                 {
-                                    <a href="@x.FullSet" target="_blank" rel="noopener" class="pc-full-chip" onclick="event.stopPropagation();" title="Descargar Full Set">
+                                    <a href="@Url.Page("/PortalCliente/Documentos", "Archivo", new { idOperacion = op.Id, idDocumento = x.FullSetIdDocumento, tipo = "fullset", descargar = true })" target="_blank" rel="noopener" class="pc-full-chip" onclick="event.stopPropagation();" title="Descargar Full Set">
                                         <i class="bi bi-download"></i> <span>Full Set</span>
                                     </a>
                                 }
@@ -485,7 +497,7 @@
                                             <b>Full Set documental</b>
                                             <span>El paquete oficial completo del embarque en un solo archivo.</span>
                                         </div>
-                                        <a href="@x.FullSet" target="_blank" rel="noopener" class="pc-btn pc-btn-light"><i class="bi bi-cloud-download"></i> Descargar set</a>
+                                        <a href="@Url.Page("/PortalCliente/Documentos", "Archivo", new { idOperacion = op.Id, idDocumento = x.FullSetIdDocumento, tipo = "fullset", descargar = true })" target="_blank" rel="noopener" class="pc-btn pc-btn-light"><i class="bi bi-cloud-download"></i> Descargar set</a>
                                     </div>
                                 }
 
@@ -505,8 +517,8 @@
                                                     </div>
                                                 </div>
                                                 <div class="pc-file-actions">
-                                                    <a href="@a.Ruta" target="_blank" rel="noopener" class="pc-btn pc-btn-ghost"><i class="bi bi-eye"></i> Ver</a>
-                                                    <a href="@a.Ruta" download class="pc-btn pc-btn-dark"><i class="bi bi-download"></i> Descargar</a>
+                                                    <a href="@Url.Page("/PortalCliente/Documentos", "Archivo", new { idOperacion = op.Id, idDocumento = a.IdDocumento, tipo = a.Codigo })" target="_blank" rel="noopener" class="pc-btn pc-btn-ghost"><i class="bi bi-eye"></i> Ver</a>
+                                                    <a href="@Url.Page("/PortalCliente/Documentos", "Archivo", new { idOperacion = op.Id, idDocumento = a.IdDocumento, tipo = a.Codigo, descargar = true })" class="pc-btn pc-btn-dark"><i class="bi bi-download"></i> Descargar</a>
                                                 </div>
                                             </div>
                                         }
@@ -523,14 +535,14 @@
                                 @if (x.Pendientes.Any())
                                 {
                                     <div class="pc-pending">
-                                        <span class="pc-lbl">Aún no emitidos</span>
+                                        <span class="pc-lbl">Documentos aún no disponibles</span>
                                         <div class="pc-pending-list">
                                             @foreach (var p in x.Pendientes)
                                             {
                                                 <span class="pc-pending-item"><i class="bi @p.IconBi"></i> @p.Nombre</span>
                                             }
                                         </div>
-                                        <div class="pc-pending-note">Algunos documentos pueden no aplicar a tu tipo de carga o destino.</div>
+                                        <div class="pc-pending-note">Si un documento ya fue emitido, el equipo Atilson debe adjuntarlo a la operación para que puedas verlo aquí.</div>
                                     </div>
                                 }
                             </div>

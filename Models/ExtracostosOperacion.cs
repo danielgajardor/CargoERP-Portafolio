@@ -22,6 +22,11 @@ public partial class ExtracostosOperacion
     public string? GrupoOperativo { get; set; }
     // Proveedor del costo (oct-2026, ventana "Reportar extracosto"). Ver Sql/2026-10_reapertura_extracostos.sql.
     public int? IdProveedor { get; set; }
+
+    // Contenedor al que corresponde el cobro (nov-2026): Late Arrival y Extra Late Arrival se
+    // cobran por contenedor. Null = contenedor principal del booking (o cobro del booking).
+    // Ver Sql/2026-11_late_arrival_por_contenedor.sql.
+    public int? IdUnidadTecnica { get; set; }
     public string Evidencia { get; set; } = null!;
 
     public DateTime FechaCreacion { get; set; }

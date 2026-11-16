@@ -20,14 +20,13 @@ namespace AtilsonCargoSpa.Services
         public string? Telefono => Conf("SitioWeb:Telefono");
         public string? TelefonoEnlace => Telefono == null ? null : "tel:" + Regex.Replace(Telefono, @"[^\d+]", "");
         public string? WhatsApp => Conf("SitioWeb:WhatsApp") is string w ? Regex.Replace(w, @"\D", "") : null;
-        public string LinkedIn => Conf("SitioWeb:LinkedIn") ?? "https://www.linkedin.com/";
+        public string? LinkedIn => Conf("SitioWeb:LinkedIn");
         public string? Instagram => Conf("SitioWeb:Instagram");
         public string? Facebook => Conf("SitioWeb:Facebook");
-        // Redes del sitio (nov-2026): siempre se muestran. Mientras no estén las cuentas, apuntan
-        // a la portada de cada red; basta con poner el enlace real en appsettings › SitioWeb.
-        public string InstagramUrl => Instagram ?? "https://www.instagram.com/";
-        public string FacebookUrl => Facebook ?? "https://www.facebook.com/";
-        public string WhatsAppUrl => WhatsApp != null ? "https://wa.me/" + WhatsApp : "https://www.whatsapp.com/";
+        // En producción una red solo se muestra cuando existe una URL/cuenta real configurada.
+        public string? InstagramUrl => Instagram;
+        public string? FacebookUrl => Facebook;
+        public string? WhatsAppUrl => WhatsApp != null ? "https://wa.me/" + WhatsApp : null;
         public bool AsistenteConIa => Conf("AsistenteIA:ApiKey") != null;
 
         // Video de la empresa en la landing (nov-2026), "SitioWeb:Video": un enlace de YouTube

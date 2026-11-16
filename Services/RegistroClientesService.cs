@@ -31,14 +31,17 @@ namespace AtilsonCargoSpa.Services
         public static string NormalizarCorreo(string? correo) => (correo ?? "").Trim().ToLowerInvariant();
 
         /// <summary>Motivo por el que no se puede registrar (o aprobar) esta empresa/correo; null si está libre.</summary>
-        public async Task<string?> MotivoBloqueoAsync(string rut, string correo, int? excluirSolicitud = null)
+        public async Task<string?> MotivoBloqueoAsync(string? rut, string correo, int? excluirSolicitud = null)
         {
-            string rutLimpio = RutHelper.Limpiar(rut);
+            string rutLimpio = RutHelper.Limpiar(rut ?? "");
             string correoNorm = NormalizarCorreo(correo);
 
-            var ruts = await _context.Clientes.AsNoTracking().Where(c => c.Rut != null && !c.IsDeleted).Select(c => c.Rut!).ToListAsync();
-            if (ruts.Any(r => RutHelper.Limpiar(r) == rutLimpio))
-                return "Esta empresa ya es cliente de Atilson. Pide a tu ejecutivo(a) que te cree el acceso al portal.";
+            if (!string.IsNullOrWhiteSpace(rutLimpio))
+            {
+                var ruts = await _context.Clientes.AsNoTracking().Where(c => c.Rut != null && !c.IsDeleted).Select(c => c.Rut!).ToListAsync();
+                if (ruts.Any(r => RutHelper.Limpiar(r) == rutLimpio))
+                    return "Esta empresa ya es cliente de Atilson. Pide a tu ejecutivo(a) que te cree el acceso al portal.";
+            }
 
             var correos = await _context.Usuarios.AsNoTracking().Select(u => u.Correo).ToListAsync();
             if (correos.Any(c => NormalizarCorreo(c) == correoNorm))
@@ -48,7 +51,7 @@ namespace AtilsonCargoSpa.Services
                 .Where(s => s.Estado == SolicitudRegistroCliente.EstadoPendiente && (excluirSolicitud == null || s.Id != excluirSolicitud))
                 .Select(s => new { s.Rut, s.Correo })
                 .ToListAsync();
-            if (pendientes.Any(s => RutHelper.Limpiar(s.Rut) == rutLimpio))
+            if (!string.IsNullOrWhiteSpace(rutLimpio) && pendientes.Any(s => !string.IsNullOrWhiteSpace(s.Rut) && RutHelper.Limpiar(s.Rut) == rutLimpio))
                 return "Ya hay una solicitud de registro en revisión para esta empresa. Te avisaremos por correo cuando esté aprobada.";
             if (pendientes.Any(s => NormalizarCorreo(s.Correo) == correoNorm))
                 return "Ya hay una solicitud de registro en revisión con este correo.";
@@ -94,6 +97,10 @@ namespace AtilsonCargoSpa.Services
 
             var bloqueo = await MotivoBloqueoAsync(s.Rut, s.Correo, s.Id);
             if (bloqueo != null) return (false, "No se puede aprobar: " + bloqueo);
+            if (string.IsNullOrWhiteSpace(s.RazonSocial))
+                return (false, "Antes de aprobar, completa la razón social desde esta solicitud. El registro público puede enviarse solo con Nombre, Teléfono y Email.");
+            if (string.IsNullOrWhiteSpace(s.PasswordHash))
+                return (false, "Antes de aprobar, define una contraseña temporal desde esta solicitud. La contraseña es opcional para quien se registra, pero se necesita para crear su usuario del portal.");
             bool traePlanta = !string.IsNullOrWhiteSpace(s.NombrePlanta) && s.IdCiudadPlanta.HasValue;
             if (traePlanta && !await _context.Ciudades.AnyAsync(c => c.Id == s.IdCiudadPlanta!.Value)) return (false, "No se puede aprobar: la comuna de la planta ya no existe en Maestros › Ciudades.");
 
@@ -102,12 +109,12 @@ namespace AtilsonCargoSpa.Services
 
             var cliente = new Cliente
             {
-                RazonSocial = s.RazonSocial,
-                Rut = RutHelper.Formatear(s.Rut),
+                RazonSocial = s.RazonSocial.Trim(),
+                Rut = string.IsNullOrWhiteSpace(s.Rut) ? null : RutHelper.Formatear(s.Rut),
                 Contacto = s.NombreContacto,
                 Telefono = s.Telefono,
                 Correo = s.Correo,
-                Direccion = s.DireccionOficina,
+                Direccion = string.IsNullOrWhiteSpace(s.DireccionOficina) ? null : s.DireccionOficina,
                 Activo = 1,
                 FechaCreacion = ahora,
                 UsuarioCreador = usuario,
@@ -117,16 +124,20 @@ namespace AtilsonCargoSpa.Services
             _context.Clientes.Add(cliente);
             await _context.SaveChangesAsync();
 
-            var usuarioPortal = new Usuario
+            Usuario? usuarioPortal = null;
+            if (!string.IsNullOrWhiteSpace(s.PasswordHash))
             {
-                NombreCompleto = s.NombreContacto,
-                Correo = s.Correo,
-                Password = s.PasswordHash,
-                Rol = "Cliente",
-                Activo = 1,
-                IdCliente = cliente.Id
-            };
-            _context.Usuarios.Add(usuarioPortal);
+                usuarioPortal = new Usuario
+                {
+                    NombreCompleto = s.NombreContacto,
+                    Correo = s.Correo,
+                    Password = s.PasswordHash,
+                    Rol = "Cliente",
+                    Activo = 1,
+                    IdCliente = cliente.Id
+                };
+                _context.Usuarios.Add(usuarioPortal);
+            }
 
             Planta? planta = null;
             if (traePlanta)
@@ -156,19 +167,30 @@ namespace AtilsonCargoSpa.Services
             s.FechaRevision = ahora;
             s.UsuarioRevision = usuario;
             s.IdClienteCreado = cliente.Id;
-            s.IdUsuarioCreado = usuarioPortal.Id;
+            s.IdUsuarioCreado = usuarioPortal?.Id;
             MaestrosAuditoria.RegistrarEvento(_context, MaestrosAuditoria.EntCliente, cliente.Id, "Registro creado", usuario, $"Registro desde el portal (solicitud #{s.Id}), aprobado");
             if (planta != null)
                 MaestrosAuditoria.RegistrarEvento(_context, MaestrosAuditoria.EntPlanta, planta.Id, "Registro creado", usuario, $"Registrada por {cliente.RazonSocial} en el portal, validada al aprobar el registro");
             await _context.SaveChangesAsync();
             await tx.CommitAsync();
 
-            EncolarCorreo(s.Correo, "Tu cuenta en el portal de Atilson Cargo fue aprobada", Plantilla("¡Tu cuenta está activa!",
-                $"<p>Hola {WebUtility.HtmlEncode(s.NombreContacto)},</p>" +
-                $"<p>Aprobamos el registro de <b>{WebUtility.HtmlEncode(s.RazonSocial)}</b>. Ya puedes ingresar al portal con tu correo <b>{WebUtility.HtmlEncode(s.Correo)}</b> y la contraseña que elegiste.</p>",
-                "Ingresar al portal", urlLogin));
+            if (usuarioPortal != null)
+            {
+                EncolarCorreo(s.Correo, "Tu cuenta en el portal de Atilson Cargo fue aprobada", Plantilla("¡Tu cuenta está activa!",
+                    $"<p>Hola {WebUtility.HtmlEncode(s.NombreContacto)},</p>" +
+                    $"<p>Aprobamos el registro de <b>{WebUtility.HtmlEncode(s.RazonSocial)}</b>. Ya puedes ingresar al portal con tu correo <b>{WebUtility.HtmlEncode(s.Correo)}</b> y tu contraseña: la que definiste en la solicitud o, si no la definiste, la contraseña temporal que te entregará el equipo de Atilson. Puedes cambiarla después desde Mi Perfil.</p>",
+                    "Ingresar al portal", urlLogin));
+            }
+            else
+            {
+                EncolarCorreo(s.Correo, "Tu registro en Atilson Cargo fue aprobado", Plantilla("Registro aprobado",
+                    $"<p>Hola {WebUtility.HtmlEncode(s.NombreContacto)},</p>" +
+                    $"<p>Aprobamos el registro de <b>{WebUtility.HtmlEncode(s.RazonSocial)}</b>. Como no definiste contraseña en la solicitud, el equipo de Atilson coordinará contigo la habilitación del acceso al portal.</p>"));
+            }
 
-            return (true, $"Registro de «{cliente.RazonSocial}» aprobado. Se creó el cliente y su usuario ({s.Correo})" + (planta != null ? $" y la planta «{planta.Nombre}»." : "."));
+            return (true, $"Registro de «{cliente.RazonSocial}» aprobado. Se creó el cliente" +
+                (usuarioPortal != null ? $" y su usuario ({s.Correo})" : "; el acceso al portal queda por habilitar") +
+                (planta != null ? $" y la planta «{planta.Nombre}»." : "."));
         }
 
         public async Task<(bool Ok, string Mensaje)> RechazarAsync(int idSolicitud, string motivo, string usuario)
@@ -237,17 +259,21 @@ namespace AtilsonCargoSpa.Services
         /// </summary>
         public async Task AvisarNuevaSolicitudAsync(SolicitudRegistroCliente s, string urlRevision)
         {
+            string empresa = string.IsNullOrWhiteSpace(s.RazonSocial) ? "tu empresa" : s.RazonSocial;
             EncolarCorreo(s.Correo, "Recibimos tu solicitud de registro en Atilson Cargo", Plantilla("Recibimos tu solicitud",
                 $"<p>Hola {WebUtility.HtmlEncode(s.NombreContacto)},</p>" +
-                $"<p>Recibimos la solicitud de registro de <b>{WebUtility.HtmlEncode(s.RazonSocial)}</b> en el portal de clientes. Nuestro equipo revisará los datos y te avisaremos a este correo cuando tu cuenta esté activa.</p>" +
+                $"<p>Recibimos tu solicitud para registrar <b>{WebUtility.HtmlEncode(empresa)}</b>. Nuestro equipo la revisará y te avisará a este correo con los siguientes pasos para acceder al portal.</p>" +
                 "<p>Si no hiciste esta solicitud, puedes ignorar este mensaje.</p>"));
 
+            string empresaInterna = string.IsNullOrWhiteSpace(s.RazonSocial) ? "(empresa por completar)" : s.RazonSocial;
+            string rutInterno = string.IsNullOrWhiteSpace(s.Rut) ? "No informado" : s.Rut;
+            string oficina = string.IsNullOrWhiteSpace(s.DireccionOficina) ? "No informada" : s.DireccionOficina;
             string html = Plantilla("Nueva solicitud de registro",
-                $"<p><b>{WebUtility.HtmlEncode(s.RazonSocial)}</b> (RUT {WebUtility.HtmlEncode(s.Rut)}) pidió acceso al portal de clientes.</p>" +
-                $"<p>Contacto: {WebUtility.HtmlEncode(s.NombreContacto)} · {WebUtility.HtmlEncode(s.Correo)} · {WebUtility.HtmlEncode(s.Telefono)}<br>Oficina: {WebUtility.HtmlEncode(s.DireccionOficina)}</p>",
+                $"<p><b>{WebUtility.HtmlEncode(empresaInterna)}</b> (RUT: {WebUtility.HtmlEncode(rutInterno)}) pidió registro en el portal de clientes.</p>" +
+                $"<p>Contacto: {WebUtility.HtmlEncode(s.NombreContacto)} · {WebUtility.HtmlEncode(s.Correo)} · {WebUtility.HtmlEncode(s.Telefono)}<br>Oficina: {WebUtility.HtmlEncode(oficina)}</p>",
                 "Revisar solicitud", urlRevision);
             foreach (var destino in await CorreosInternosAsync(incluirVentas: true))
-                EncolarCorreo(destino, $"Nueva solicitud de registro en el portal: {s.RazonSocial}", html);
+                EncolarCorreo(destino, $"Nueva solicitud de registro: {(string.IsNullOrWhiteSpace(s.RazonSocial) ? s.NombreContacto : s.RazonSocial)}", html);
         }
 
         /// <summary>Últimas solicitudes pendientes de empresas (para el aviso en pantalla del ERP).</summary>
@@ -258,8 +284,8 @@ namespace AtilsonCargoSpa.Services
                 var l = await _context.SolicitudesRegistroCliente.AsNoTracking()
                     .Where(x => x.Estado == SolicitudRegistroCliente.EstadoPendiente)
                     .OrderByDescending(x => x.Id).Take(max)
-                    .Select(x => new { x.Id, x.RazonSocial, x.FechaSolicitud }).ToListAsync();
-                return l.Select(x => (x.Id, x.RazonSocial, x.FechaSolicitud)).ToList();
+                    .Select(x => new { x.Id, x.RazonSocial, x.NombreContacto, x.FechaSolicitud }).ToListAsync();
+                return l.Select(x => (x.Id, string.IsNullOrWhiteSpace(x.RazonSocial) ? x.NombreContacto : x.RazonSocial, x.FechaSolicitud)).ToList();
             }
             catch { return new(); }
         }

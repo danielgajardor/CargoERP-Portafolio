@@ -6,7 +6,6 @@ using Microsoft.EntityFrameworkCore;
 using AtilsonCargoSpa.Models;
 using System.Collections.Generic;
 using System.Linq;
-using System.Security.Claims;
 using System.Threading.Tasks;
 using System;
 
@@ -34,24 +33,22 @@ namespace AtilsonCargoSpa.Pages.Portal
         public int Entregados { get; set; }
         public string EmpresaCliente { get; set; }
 
+        // Portal antiguo (nov-2026): el formulario "Solicitud de Cotización" de esta página
+        // apuntaba a un handler que no existía (404). La cotización vive en el Portal Cliente;
+        // se lleva al cliente allí con el origen y destino que escribió.
+        public IActionResult OnPostCotizar(string? Origen, string? Destino)
+            => RedirectToPage("/PortalCliente/SolicitarCotizacion", new { pol = Origen?.Trim(), pod = Destino?.Trim() });
+
         public async Task<IActionResult> OnGetAsync()
         {
             string idClienteStr = User.FindFirst("IdCliente")?.Value ?? "0";
-            int idClienteLogueado = int.Parse(idClienteStr);
+            if (!int.TryParse(idClienteStr, out int idClienteLogueado) || idClienteLogueado <= 0)
+                return Forbid();
 
-            string userEmail = User.FindFirst(ClaimTypes.Email)?.Value ?? "";
-            bool esModoLibre = userEmail.Equals("cliente@empresa.cl", StringComparison.OrdinalIgnoreCase) ||
-                               userEmail.Equals("cliente@empresa.com", StringComparison.OrdinalIgnoreCase);
-
-            if (esModoLibre)
-            {
-                EmpresaCliente = "Atilson Demo (Modo Libre)";
-            }
-            else
-            {
-                var clienteInfo = await _context.Clientes.FindAsync(idClienteLogueado);
-                EmpresaCliente = clienteInfo?.RazonSocial ?? "Empresa no asignada";
-            }
+            var clienteInfo = await _context.Clientes.AsNoTracking()
+                .FirstOrDefaultAsync(c => c.Id == idClienteLogueado && !c.IsDeleted && c.Activo == 1);
+            if (clienteInfo == null) return Forbid();
+            EmpresaCliente = clienteInfo.RazonSocial ?? "Empresa";
 
             // CARGAR NAVIERAS PARA EL MÓDULO DE COTIZACIÓN
             var navieras = await _context.Navieras
@@ -65,12 +62,9 @@ namespace AtilsonCargoSpa.Pages.Portal
                 .Include(o => o.IdPuertoDestinoNavigation)
                 .Include(o => o.IdNavieraNavigation)
                 .Include(o => o.IdClienteNavigation)
-                .Where(o => !o.IsDeleted);
+                .Where(o => !o.IsDeleted && !o.EsHistorica);
 
-            if (!esModoLibre)
-            {
-                queryOperaciones = queryOperaciones.Where(o => o.IdCliente == idClienteLogueado);
-            }
+            queryOperaciones = queryOperaciones.Where(o => o.IdCliente == idClienteLogueado);
 
             MisOperaciones = await queryOperaciones
                 .OrderByDescending(o => o.Id)
@@ -89,12 +83,9 @@ namespace AtilsonCargoSpa.Pages.Portal
                     .Include(o => o.IdNavieraNavigation)
                     .Include(o => o.Unidadestecnicas)
                     .Include(o => o.IdClienteNavigation)
-                    .Where(o => o.NumeroBooking.Trim().ToUpper() == BookingNumber.Trim().ToUpper() && !o.IsDeleted);
+                    .Where(o => o.NumeroBooking.Trim().ToUpper() == BookingNumber.Trim().ToUpper() && !o.IsDeleted && !o.EsHistorica);
 
-                if (!esModoLibre)
-                {
-                    queryTracking = queryTracking.Where(o => o.IdCliente == idClienteLogueado);
-                }
+                queryTracking = queryTracking.Where(o => o.IdCliente == idClienteLogueado);
 
                 OperacionTracking = await queryTracking.FirstOrDefaultAsync();
             }

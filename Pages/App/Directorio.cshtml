@@ -19,9 +19,18 @@
     .dir-card h3 { font-size: 15.5px; font-weight: 800; margin: 0; }
     .dir-card .cargo { font-size: 13.5px; color: #1e1835; margin: 2px 0 0; }
     .dir-card .rol { font-size: 12.5px; color: #5d5872; margin: 0 0 8px; }
-    .dir-contacto { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 10px; font-size: 13px; }
-    .dir-contacto a { color: #443094; text-decoration: none; font-weight: 600; }
-    .dir-contacto a:hover { text-decoration: underline; }
+    .dir-card > div:last-child { flex: 1; }
+    .dir-contacto { display: grid; gap: 4px; margin-top: 8px; font-size: 13px; }
+    .dir-linea { display: flex; align-items: center; gap: 6px; min-width: 0; }
+    .dir-linea a { color: #443094; text-decoration: none; font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .dir-linea a:hover { text-decoration: underline; }
+    .dir-linea > i { color: #5d5872; flex: none; }
+    .dir-copiar { flex: none; border: 0; background: none; color: #5d5872; padding: 2px 4px; border-radius: 6px; font-size: 13px; line-height: 1; cursor: pointer; }
+    .dir-copiar:hover { background: #f4f2fa; color: #443094; }
+    .dir-copiar.ok { color: #047857; }
+    .dir-chat { display: inline-flex; align-items: center; gap: 6px; margin-top: 12px; border-radius: 999px; padding: 6px 14px; background: #f4f2fa; color: #443094; font-size: 13px; font-weight: 700; text-decoration: none; }
+    .dir-chat:hover { background: #e9e5f7; color: #33246f; }
+    .dir-tu { display: inline-block; margin-top: 12px; font-size: 12.5px; color: #5d5872; }
 </style>
 
 <div class="pf" style="max-width:none">
@@ -40,7 +49,7 @@
         @foreach (var x in Model.Personas)
         {
             var u = x.Usuario; var p = x.Perfil;
-            <article class="dir-card" data-texto="@($"{u.NombreCompleto} {p?.Cargo} {u.Rol}".ToLower())">
+            <article class="dir-card" data-texto="@($"{u.NombreCompleto} {p?.Cargo} {u.Rol} {u.Correo}".ToLower())">
                 <div class="dir-av">
                     @if (p?.FotoUrl != null) { <img src="@p.FotoUrl" alt="" loading="lazy" /> } else { <div class="ini" aria-hidden="true">@PerfilUsuarioService.Iniciales(u.NombreCompleto)</div> }
                 </div>
@@ -49,12 +58,27 @@
                     @if (!string.IsNullOrEmpty(p?.Cargo)) { <p class="cargo">@p.Cargo</p> }
                     <p class="rol">@u.Rol</p>
                     <div class="dir-contacto">
-                        <a href="mailto:@u.Correo"><i class="bi bi-envelope"></i> Correo</a>
+                        <div class="dir-linea">
+                            <i class="bi bi-envelope" aria-hidden="true"></i>
+                            <a href="mailto:@u.Correo" title="Escribir a @u.Correo">@u.Correo</a>
+                            <button type="button" class="dir-copiar" data-copiar="@u.Correo" title="Copiar correo" aria-label="Copiar el correo de @u.NombreCompleto"><i class="bi bi-copy" aria-hidden="true"></i></button>
+                        </div>
                         @if (!string.IsNullOrEmpty(p?.Telefono))
                         {
-                            <a href="tel:@System.Text.RegularExpressions.Regex.Replace(p.Telefono, @"[^\d+]", "")"><i class="bi bi-telephone"></i> @p.Telefono</a>
+                            <div class="dir-linea">
+                                <i class="bi bi-telephone" aria-hidden="true"></i>
+                                <a href="tel:@System.Text.RegularExpressions.Regex.Replace(p.Telefono, @"[^\d+]", "")">@p.Telefono</a>
+                            </div>
                         }
                     </div>
+                    @if (u.Id == Model.IdYo)
+                    {
+                        <span class="dir-tu">Eres tú</span>
+                    }
+                    else
+                    {
+                        <a class="dir-chat" asp-page="/App/Chat" asp-route-con="@u.Id"><i class="bi bi-chat-dots" aria-hidden="true"></i> Enviar mensaje</a>
+                    }
                 </div>
             </article>
         }
@@ -76,6 +100,15 @@
                 document.getElementById('dirVacio').hidden = n > 0;
             }
             buscar.addEventListener('input', aplicar);
+            // Copiar el correo al portapapeles, con confirmación en el mismo botón.
+            document.querySelectorAll('.dir-copiar').forEach(b => b.addEventListener('click', async () => {
+                const icono = b.querySelector('i');
+                try {
+                    await navigator.clipboard.writeText(b.dataset.copiar);
+                    b.classList.add('ok'); icono.className = 'bi bi-check2'; b.title = 'Copiado';
+                    setTimeout(() => { b.classList.remove('ok'); icono.className = 'bi bi-copy'; b.title = 'Copiar correo'; }, 1800);
+                } catch (e) { window.prompt('Copia el correo:', b.dataset.copiar); }
+            }));
         })();
     </script>
 }

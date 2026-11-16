@@ -3,7 +3,6 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.EntityFrameworkCore;
 using AtilsonCargoSpa.Models;
-using System.Security.Claims;
 using System.Threading.Tasks;
 using System;
 using System.Linq;
@@ -29,22 +28,13 @@ namespace AtilsonCargoSpa.Pages.Portal
         public async Task<IActionResult> OnGetAsync()
         {
             string idClienteStr = User.FindFirst("IdCliente")?.Value ?? "0";
-            int idClienteLogueado = int.Parse(idClienteStr);
+            if (!int.TryParse(idClienteStr, out int idClienteLogueado) || idClienteLogueado <= 0)
+                return Forbid();
 
-            // DETECTAMOS SI ES LA CUENTA DE PRUEBAS "MODO LIBRE"
-            string userEmail = User.FindFirst(ClaimTypes.Email)?.Value ?? "";
-            bool esModoLibre = userEmail.Equals("cliente@empresa.cl", StringComparison.OrdinalIgnoreCase) ||
-                               userEmail.Equals("cliente@empresa.com", StringComparison.OrdinalIgnoreCase);
-
-            if (esModoLibre)
-            {
-                EmpresaCliente = "Atilson Demo (Modo Libre)";
-            }
-            else
-            {
-                var clienteInfo = await _context.Clientes.FindAsync(idClienteLogueado);
-                EmpresaCliente = clienteInfo?.RazonSocial ?? "Empresa no asignada";
-            }
+            var clienteInfo = await _context.Clientes.AsNoTracking()
+                .FirstOrDefaultAsync(c => c.Id == idClienteLogueado && !c.IsDeleted && c.Activo == 1);
+            if (clienteInfo == null) return Forbid();
+            EmpresaCliente = clienteInfo.RazonSocial ?? "Empresa";
 
             // BUSCAMOS EL BOOKING (Con o Sin Filtro de Seguridad)
             if (!string.IsNullOrWhiteSpace(BookingNumber))
@@ -55,12 +45,9 @@ namespace AtilsonCargoSpa.Pages.Portal
                     .Include(o => o.IdNavieraNavigation)
                     .Include(o => o.Unidadestecnicas)
                     .Include(o => o.IdClienteNavigation)
-                    .Where(o => o.NumeroBooking.Trim().ToUpper() == BookingNumber.Trim().ToUpper() && !o.IsDeleted);
+                    .Where(o => o.NumeroBooking.Trim().ToUpper() == BookingNumber.Trim().ToUpper() && !o.IsDeleted && !o.EsHistorica);
 
-                if (!esModoLibre)
-                {
-                    queryTracking = queryTracking.Where(o => o.IdCliente == idClienteLogueado);
-                }
+                queryTracking = queryTracking.Where(o => o.IdCliente == idClienteLogueado);
 
                 OperacionTracking = await queryTracking.FirstOrDefaultAsync();
             }

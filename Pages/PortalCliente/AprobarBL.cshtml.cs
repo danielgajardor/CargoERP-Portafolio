@@ -39,7 +39,7 @@ namespace AtilsonCargoSpa.Pages.PortalCliente
             if (op == null) return NotFound();
 
             Operacion = op;
-            Doc = op.OperacionesDocumentales.OrderBy(x => x.Id).FirstOrDefault();
+            Doc = op.OperacionesDocumentales.OrderBy(x => x.IdUnidadTecnica.HasValue).ThenBy(x => x.Id).FirstOrDefault();
             return Page();
         }
 
@@ -52,7 +52,7 @@ namespace AtilsonCargoSpa.Pages.PortalCliente
                 .FirstOrDefaultAsync(o => o.Id == id && o.IdCliente == idCliente.Value && !o.IsDeleted);
             if (op == null) return NotFound();
 
-            var doc = op.OperacionesDocumentales.OrderBy(x => x.Id).FirstOrDefault();
+            var doc = op.OperacionesDocumentales.OrderBy(x => x.IdUnidadTecnica.HasValue).ThenBy(x => x.Id).FirstOrDefault();
             if (doc != null) doc.EstadoDocumental = "B/L APROBADO";
 
             RegistrarHitoCliente(op, "El cliente aprobó el Borrador de B/L desde el Portal.");
@@ -77,7 +77,7 @@ namespace AtilsonCargoSpa.Pages.PortalCliente
                 .FirstOrDefaultAsync(o => o.Id == id && o.IdCliente == idCliente.Value && !o.IsDeleted);
             if (op == null) return NotFound();
 
-            var doc = op.OperacionesDocumentales.OrderBy(x => x.Id).FirstOrDefault();
+            var doc = op.OperacionesDocumentales.OrderBy(x => x.IdUnidadTecnica.HasValue).ThenBy(x => x.Id).FirstOrDefault();
             if (doc != null) doc.EstadoDocumental = "CAMBIOS B/L";
 
             RegistrarHitoCliente(op, $"El cliente ha RECHAZADO el Borrador de B/L desde el Portal y solicita los siguientes cambios: \"{comentario.Trim()}\"");

@@ -77,7 +77,7 @@ namespace AtilsonCargoSpa.Pages.App.Puertos
                 puerto.FechaModificacion = MaestrosAuditoria.Ahora();
                 puerto.UsuarioModificador = usuario;
                 MaestrosAuditoria.Registrar(_context, MaestrosAuditoria.EntPuerto, puerto.Id, cambios, usuario, "Cambio de estado desde la lista");
-                await _context.SaveChangesAsync();
+                await _context.SaveChangesAsync(); AtilsonCargoSpa.Helpers.PuertosHelper.OlvidarMapaPaises();
             }
 
             TempData["ToastOk"] = activar

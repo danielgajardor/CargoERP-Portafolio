@@ -7,8 +7,7 @@
    .com-premium para no afectar ninguna otra vista que use colores o
    nombres de clase parecidos.
    ========================================================================= */
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
-
+/* Fuentes: se cargan una sola vez en _Layout (nov-2026). */
 /* ---------- 0. Tokens ---------- */
 .com-premium {
     --cp-brand: #6d2d9e;
@@ -34,14 +33,14 @@
     /* --atilson-dark ya era #2c1b4d — coincide con el morado profundo del
        degradé premium, se deja igual. */
 
-    font-family: 'Plus Jakarta Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+    font-family: var(--font-sans);
 }
 body:has(.com-premium) {
     background:
         radial-gradient(1200px 500px at 100% -10%, rgba(139,92,246,.07), transparent 60%),
         #f5f4f9 !important;
 }
-.com-premium .table-erp { font-family: 'Plus Jakarta Sans', system-ui, sans-serif; }
+.com-premium .table-erp { font-family: var(--font-sans); }
 
 /* ---------- 1. Cabecera y botones ---------- */
 .com-premium h1 { font-weight: 800 !important; letter-spacing: -.7px !important; color: var(--cp-ink) !important; }
@@ -163,4 +162,108 @@ body:has(.com-premium) {
 }
 @media (prefers-reduced-motion: reduce) {
     .com-premium * { transition: none !important; }
+}
+
+/* =========================================================================
+   7. BARRA DE TARIFAS (nov-2026) — igual en todas las pestañas
+   Una sola fila: a la izquierda las sub-pestañas (o el título de la sección),
+   a la derecha los filtros. Debajo, la fila de acciones («Nuevo…»,
+   comparativas) alineada a la derecha y con botones de su tamaño (antes
+   algunos se estiraban a todo el ancho). Si en una pantalla angosta no cabe
+   todo, los filtros bajan a una segunda línea, alineados a la derecha.
+   ========================================================================= */
+.com-premium .tarifas-barra,
+.com-premium .tarifas-barra.filtro-toolbar:has(.subtabs-row) {
+    display: flex !important; flex-direction: row !important; flex-wrap: wrap !important;
+    align-items: center !important; justify-content: space-between !important;
+    gap: 10px 18px !important;
+    background: #fff !important; border: 1px solid var(--cp-line) !important; border-radius: 14px !important;
+    box-shadow: var(--cp-shadow) !important;
+    padding: 8px 14px !important; margin-bottom: 14px !important; min-height: 56px;
+}
+.com-premium .tarifas-barra > .subtabs-row { flex: 1 1 auto; min-width: 0; width: auto; }
+.com-premium .tarifas-barra .sub-tabs { border-bottom: 0 !important; gap: 14px; }
+.com-premium .tarifas-barra .sub-tabs .nav-link { padding: 10px 1px 9px !important; margin-bottom: 0 !important; }
+.com-premium .tarifas-barra .sub-tabs .nav-link.pill-rebate { margin-left: 10px; }
+.com-premium .tarifas-barra .sub-tabs .nav-link.pill-rebate::before { left: -10px; }
+/* Filtros: a la derecha, sin el filete ni la segunda fila de antes */
+.com-premium .tarifas-barra.filtro-toolbar:has(.subtabs-row) > div:last-child:not(.subtabs-row),
+.com-premium .tarifas-barra > div:not(.subtabs-row),
+.com-premium .tarifas-barra > .gate-filtros {
+    display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 6px;
+    margin-left: auto; padding-top: 0 !important; border-top: 0 !important;
+}
+.com-premium .tarifas-barra form { display: flex; align-items: center; flex-wrap: wrap; gap: 6px !important; justify-content: flex-end; margin: 0; }
+.com-premium .tarifas-barra select.filtro-select + .select2-container {
+    width: 120px !important; min-width: 120px !important; max-width: 120px;
+}
+/* Mismo aspecto si el filtro queda como lista nativa */
+.com-premium .tarifas-barra select.filtro-select:not(.select2-hidden-accessible) {
+    width: 120px !important; height: 34px; border-radius: 10px !important; border: 1px solid var(--cp-line) !important;
+    background-color: var(--cp-soft) !important; font-size: 11.5px !important; font-weight: 700; color: var(--cp-ink);
+}
+.com-premium .tarifas-barra select.filtro-select + .select2-container .select2-selection--single {
+    width: 100% !important; min-width: 0 !important; height: 34px !important; display: flex; align-items: center;
+    background: var(--cp-soft) !important; border-color: var(--cp-line) !important;
+}
+.com-premium .tarifas-barra select.filtro-select + .select2-container .select2-selection__rendered {
+    font-size: 11.5px !important; font-weight: 700; color: var(--cp-ink) !important; padding-left: 10px !important;
+}
+.com-premium .tarifas-barra select.filtro-select + .select2-container .select2-selection__arrow { height: 32px !important; }
+.com-premium .tarifas-barra form .btn { height: 34px; padding: 0 14px !important; font-size: 11px !important; letter-spacing: .5px; display: inline-flex; align-items: center; }
+.com-premium .tarifas-barra form .btn-light,
+.com-premium .tarifas-barra form .btn-dark { width: 34px; padding: 0 !important; justify-content: center; }
+.com-premium .tarifas-barra form .btn-dark i { font-size: 13px; }
+.com-premium .tarifas-barra .gate-filtros select {
+    height: 34px; min-width: 0; width: auto; max-width: 210px; border-radius: 10px;
+    background-color: var(--cp-soft); border: 1px solid var(--cp-line); font-size: 11.5px; font-weight: 700; color: var(--cp-ink); padding: 0 28px 0 10px;
+}
+/* Título de la sección (pestañas sin sub-pestañas) */
+.com-premium .tarifas-titulo {
+    margin: 0; padding: 0 2px; font-size: 13px; font-weight: 800; color: var(--cp-ink);
+    display: inline-flex; align-items: center; white-space: nowrap;
+}
+
+/* Fila de acciones: botones a la derecha, todos del mismo alto y forma */
+.com-premium .tarifas-acciones {
+    display: flex; justify-content: flex-end; align-items: center; flex-wrap: wrap; gap: 8px; margin: 0 0 12px;
+}
+.com-premium .tarifas-acciones.con-info { justify-content: space-between; }
+.com-premium .tarifas-acciones > .d-flex { gap: 8px !important; }
+.com-premium .tarifas-acciones .btn {
+    height: 34px !important; width: auto !important; padding: 0 16px !important; border-radius: 10px !important;
+    font-size: 11px !important; font-weight: 800 !important; letter-spacing: .5px; text-transform: uppercase;
+    display: inline-flex !important; align-items: center; gap: 6px; white-space: nowrap; flex: 0 0 auto;
+}
+.com-premium .tarifas-acciones .btn i { font-size: 12px !important; margin: 0 !important; }
+.com-premium .tarifas-acciones .btn-outline-primary,
+.com-premium .tarifas-acciones .btn:not(.btn-dark):not([id^="btnToggleRanking"]) {
+    background: #fff !important; border: 1px solid var(--cp-line) !important; color: var(--cp-brand) !important; box-shadow: none !important;
+}
+.com-premium .tarifas-acciones .btn-outline-primary:hover { border-color: var(--cp-brand) !important; background: var(--cp-tint) !important; }
+.com-premium .tarifas-acciones [id^="btnToggleRanking"] { border-radius: 10px !important; }
+
+/* Carga masiva: al lado de Proveedores / Clientes; se ve la del panel activo */
+.com-premium #mainTabs .tarifas-carga { margin-left: auto; display: flex; align-items: center; padding-right: 2px; }
+.com-premium #mainTabs:has(#tab-proveedores.active) [data-carga="ventas"],
+.com-premium #mainTabs:has(#tab-clientes.active) [data-carga="costos"] { display: none; }
+.com-premium .btn-carga-masiva {
+    display: inline-flex; align-items: center; gap: 7px; height: 36px; padding: 0 16px; border-radius: 11px;
+    border: 1px solid var(--cp-line); background: #fff; color: var(--cp-deep);
+    font-size: 11px; font-weight: 800; letter-spacing: .5px; text-transform: uppercase; white-space: nowrap;
+    transition: border-color .15s ease, background .15s ease;
+}
+.com-premium .btn-carga-masiva:hover { border-color: var(--cp-brand); background: var(--cp-tint); color: var(--cp-brand); }
+
+/* Pestaña sin tarifas propias (Clientes › Otros) */
+.com-premium .tarifas-vacio {
+    display: flex; flex-direction: column; align-items: center; gap: 6px; text-align: center;
+    background: #fff; border: 1px dashed #d8d4e6; border-radius: 14px; padding: 34px 20px; color: var(--cp-muted);
+}
+.com-premium .tarifas-vacio i { font-size: 26px; color: var(--cp-brand); opacity: .7; }
+.com-premium .tarifas-vacio strong { font-size: 13px; color: var(--cp-ink); }
+.com-premium .tarifas-vacio span { font-size: 12px; max-width: 560px; }
+
+@media (max-width: 767.98px) {
+    .com-premium .tarifas-barra > .subtabs-row { flex-basis: 100%; }
 }

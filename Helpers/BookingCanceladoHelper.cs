@@ -18,7 +18,7 @@ namespace AtilsonCargoSpa.Helpers
         public static bool EstaCancelado(Operacione op) =>
             EsEstadoCancelado(op.EstadoWorkflow)
             || (op.Unidadestecnicas?.Any(u => EsEstadoCancelado(u.Estado)) ?? false)
-            || (op.RoleosCancelaciones?.Any(r => r.Tipo == "CANCELACION_NOSHOW") ?? false);
+            || (op.RoleosCancelaciones?.Any(r => r.Tipo == "CANCELACION_NOSHOW" || r.Tipo == "CANCELACION" || r.Tipo == "NO_SHOW") ?? false);
 
         public static async Task<bool> EstaCanceladoAsync(AtilsonContext context, int idOperacion)
         {

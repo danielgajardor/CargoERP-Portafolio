@@ -1,0 +1,389 @@
+/* =========================================================================
+   PESTAÑA DOCUMENTAL — estilo corporativo (nov-2026)
+   -------------------------------------------------------------------------
+   Se carga en Detalle.cshtml DESPUÉS de operaciones-detalle.css y de
+   detalle-premium.css, y todo queda bajo la clase .doc-corp que lleva el
+   <form> raíz de _PanelDocumental.cshtml: no toca ninguna otra pestaña.
+
+   Qué cambia respecto del estilo anterior:
+   - Una sola paleta neutra + el morado de la marca (sin el verde, celeste,
+     rosado y azul mezclados de antes). Los colores con significado (enviado,
+     pendiente, rechazado) se mantienen.
+   - Menú lateral de ancho fijo (antes se angostaba según la sección y los
+     nombres quedaban partidos en dos líneas) y fijo al hacer scroll.
+   - Sin el alto fijo de 750 px con scroll interno: la sección crece con su
+     contenido.
+   - Casillas y opciones con el mismo dibujo en todo el panel: cuadradas las
+     casillas, redondas las opciones (DUS / DIN), y un estado "bloqueado"
+     reconocible en modo vista.
+   ========================================================================= */
+
+.doc-corp {
+    --dc-ink: #1d1530;
+    --dc-ink-2: #2c1b4d;
+    --dc-brand: #6d2d9e;
+    --dc-brand-soft: #f5f1fa;
+    --dc-brand-line: #e4d9f1;
+    --dc-text: #3b3550;
+    --dc-muted: #6e6a80;
+    --dc-faint: #9a96ab;
+    --dc-line: #e8e5ef;
+    --dc-line-2: #dcd8e6;
+    --dc-soft: #faf9fc;
+    --dc-side: 236px;
+
+    /* Utilidades de Bootstrap y variables propias del panel: el "celeste
+       informativo" y el azul primario pasan al morado de la marca. */
+    --bs-info-rgb: 76, 42, 133;
+    --bs-primary-rgb: 76, 42, 133;
+    --doc-info: #4c2a85;
+    --doc-info-soft: #f5f1fa;
+    --doc-info-border: #e4d9f1;
+    --doc-info-deep: #3b1f6b;
+    --doc-accent-orange: #c2410c;
+    --doc-gray-border: #e8e5ef;
+
+    font-family: var(--font-sans);
+    color: var(--dc-text);
+}
+.doc-corp .text-purple { color: var(--dc-brand) !important; }
+
+/* ---------- Encabezado ---------- */
+.dt-premium .doc-corp .pro-topbar {
+    border-bottom: 0 !important; margin-bottom: 14px !important; padding-bottom: 0 !important;
+}
+.dt-premium .doc-corp .pro-topbar-ico {
+    width: 38px; height: 38px; border-radius: 10px; font-size: 16px;
+    background: var(--dc-ink-2); color: #fff; box-shadow: none;
+}
+.dt-premium .doc-corp .pro-topbar h5 {
+    font-size: 17px; font-weight: 800 !important; letter-spacing: -.3px !important; color: var(--dc-ink) !important;
+}
+.dt-premium .doc-corp .pro-topbar p { font-size: 12.5px; color: var(--dc-muted) !important; margin-top: 2px !important; }
+.dt-premium .doc-corp .pro-topbar-note {
+    background: transparent !important; color: var(--dc-muted) !important; font-size: 11.5px !important;
+    font-weight: 600 !important; padding: 0 !important;
+}
+.dt-premium .doc-corp .pro-topbar-note i { color: var(--dc-brand); }
+
+/* ---------- Cascarón: menú lateral + contenido ---------- */
+.dt-premium .doc-corp .pro-wrapper {
+    display: grid; grid-template-columns: var(--dc-side) minmax(0, 1fr);
+    border: 1px solid var(--dc-line) !important; border-radius: 16px !important;
+    background: linear-gradient(90deg, var(--dc-soft) 0, var(--dc-soft) calc(var(--dc-side) - 1px),
+                var(--dc-line) calc(var(--dc-side) - 1px), var(--dc-line) var(--dc-side), #fff var(--dc-side)) !important;
+    box-shadow: 0 1px 2px rgba(29,21,48,.04), 0 12px 32px -24px rgba(29,21,48,.25) !important;
+    min-height: 560px;
+    overflow: hidden; overflow: clip; /* clip: recorta las esquinas sin romper el menú fijo */
+}
+.dt-premium .doc-corp .pro-sidebar {
+    width: auto !important; min-width: 0;
+    background: transparent !important; border-right: 0 !important;
+    padding: 20px 14px !important; gap: 2px !important;
+    position: sticky; top: 76px; align-self: start;
+}
+.dt-premium .doc-corp .pro-sidebar .pro-label {
+    font-size: 10px !important; font-weight: 700 !important; letter-spacing: .08em !important;
+    color: var(--dc-faint) !important; margin: 0 8px 8px !important; padding: 0 !important; border: 0 !important;
+}
+.doc-corp .doc-side-grupo { padding-bottom: 14px; margin-bottom: 14px; border-bottom: 1px solid var(--dc-line); }
+
+/* Requerimientos (SAG / Sernapesca / Terrestre) */
+.doc-corp .doc-req {
+    display: flex; align-items: center; gap: 10px; margin: 0; padding: 7px 8px;
+    border-radius: 8px; cursor: pointer; transition: background-color .12s ease;
+}
+.doc-corp .doc-req:hover { background: #f1eff6; }
+.doc-corp .doc-req-txt { font-size: 12.5px; font-weight: 600; color: var(--dc-text); line-height: 1.2; }
+.doc-corp .doc-req-fijo { cursor: default; }
+.doc-corp .doc-req-fijo:hover { background: transparent; }
+.doc-corp .doc-req-fijo .doc-req-txt { color: var(--dc-muted); }
+.doc-corp .doc-req-candado { margin-left: auto; font-size: 10px; color: var(--dc-faint); }
+
+/* Navegación de secciones */
+.dt-premium .doc-corp .pro-nav-btn {
+    display: flex; align-items: center; width: 100%;
+    padding: 9px 10px 9px 12px !important; margin: 0 0 2px !important; border-radius: 8px !important;
+    border: 1px solid transparent !important; background: transparent !important;
+    font-size: 12.5px !important; font-weight: 600 !important; color: var(--dc-muted) !important;
+    line-height: 1.25; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    box-shadow: none !important; transform: none !important;
+}
+.dt-premium .doc-corp .pro-nav-btn::before { left: 0 !important; width: 3px; background: var(--dc-brand) !important; opacity: 1 !important; border-radius: 0 3px 3px 0; }
+.dt-premium .doc-corp .pro-nav-btn:hover { background: #f1eff6 !important; color: var(--dc-ink) !important; }
+.dt-premium .doc-corp .pro-nav-btn.active {
+    background: #fff !important; color: var(--dc-ink) !important; font-weight: 700 !important;
+    border-color: var(--dc-line) !important; box-shadow: 0 1px 2px rgba(29,21,48,.06) !important;
+}
+.dt-premium .doc-corp .pro-nav-btn.active::before { height: 20px; background: var(--dc-brand) !important; opacity: 1 !important; }
+.dt-premium .doc-corp .pro-dot { width: 7px; height: 7px; margin-right: 10px; box-shadow: none !important; }
+.dt-premium .doc-corp .pro-nav-btn.active .pro-dot { box-shadow: none !important; }
+.doc-corp .pro-dot.bg-success { background-color: #16a34a !important; }
+.doc-corp .pro-dot.bg-warning { background-color: #d97706 !important; }
+
+/* Contenido: crece con la sección (sin el alto fijo de 750 px) */
+.dt-premium .doc-corp .pro-content-area {
+    height: auto !important; max-height: none !important; overflow: visible !important;
+    padding: 26px 30px 30px !important; background: transparent !important;
+}
+
+/* ---------- Títulos de cada sección ---------- */
+.dt-premium .doc-corp .pro-title { font-size: 16px !important; font-weight: 800 !important; color: var(--dc-ink) !important; }
+.dt-premium .doc-corp .pro-title > i:first-child {
+    width: 30px; height: 30px; border-radius: 8px; font-size: 14px !important;
+    background: var(--dc-brand-soft); color: var(--dc-brand) !important;
+}
+.dt-premium .doc-corp .pro-subtitle { font-size: 12.5px; color: var(--dc-muted) !important; }
+.doc-corp .border-light { border-color: var(--dc-line) !important; }
+
+/* ---------- Etiquetas y campos ---------- */
+.dt-premium .doc-corp .pro-label {
+    font-size: 10.5px !important; font-weight: 700 !important; letter-spacing: .06em !important;
+    text-transform: uppercase; color: var(--dc-muted) !important; margin-bottom: 6px;
+}
+.doc-corp .doc-label-nota { text-transform: none; letter-spacing: 0; font-weight: 500; color: var(--dc-faint); }
+.dt-premium .doc-corp .pro-input {
+    border: 1px solid var(--dc-line-2) !important; border-radius: 8px !important;
+    background-color: var(--dc-soft) !important; color: var(--dc-ink) !important;
+    font-size: 13px; min-height: 38px;
+}
+.dt-premium .doc-corp .pro-input[readonly], .dt-premium .doc-corp select.pro-input:disabled { color: var(--dc-text) !important; }
+.dt-premium .doc-corp .edit-mode .pro-input:not([readonly]):not(:disabled) {
+    background-color: #fff !important; border-color: #b9a6d6 !important; box-shadow: none !important;
+}
+.dt-premium .doc-corp .edit-mode .pro-input:not([readonly]):not(:disabled):focus {
+    border-color: var(--dc-brand) !important; box-shadow: 0 0 0 3px rgba(109,45,158,.12) !important; outline: none;
+}
+.dt-premium .doc-corp .pro-content-area .select2-container--default .select2-selection--single {
+    border-radius: 8px !important; border-color: var(--dc-line-2) !important; background-color: var(--dc-soft) !important;
+    min-height: 38px;
+}
+
+/* ---------- Tarjetas: todas neutras ---------- */
+.dt-premium .doc-corp .pro-card,
+.dt-premium .doc-corp .pro-card-gray,
+.dt-premium .doc-corp .pro-card-red {
+    border-radius: 12px !important; border: 1px solid var(--dc-line) !important; box-shadow: none !important;
+}
+.dt-premium .doc-corp .pro-card { background: #fff !important; }
+.dt-premium .doc-corp .pro-card-gray { background: var(--dc-soft) !important; }
+.dt-premium .doc-corp .pro-card-red { background: #fff !important; }
+.doc-corp .pro-card-red .pro-label i { color: #c2410c; }
+.doc-corp .doc-grupo { background: #fff !important; padding: 20px !important; }
+.doc-corp .doc-grupo-titulo {
+    display: flex; align-items: center; gap: 10px; margin: 0 0 16px;
+    font-size: 13px; font-weight: 800; color: var(--dc-ink); letter-spacing: -.1px;
+}
+.doc-corp .doc-grupo-num {
+    width: 22px; height: 22px; border-radius: 6px; display: inline-flex; align-items: center; justify-content: center;
+    background: var(--dc-brand-soft); color: var(--dc-brand); font-size: 11px; font-weight: 800;
+}
+.doc-corp .pro-content-area .rounded.border.bg-white,
+.doc-corp .pro-content-area .p-3.rounded.border,
+.doc-corp .pro-content-area .p-3.bg-white.rounded.border { border-color: var(--dc-line) !important; border-radius: 10px !important; }
+
+/* Textos de opciones */
+.doc-corp .doc-radio-txt, .doc-corp .doc-tram-txt, .doc-corp .doc-sub-txt {
+    font-size: 12.5px; font-weight: 700; color: var(--dc-ink); letter-spacing: .01em;
+}
+.doc-corp .doc-radio-txt small { font-weight: 500; color: var(--dc-muted); margin-left: 3px; font-size: 11.5px; }
+.doc-corp .doc-radio, .doc-corp .pro-card-red label, .doc-corp .doc-sub-toggles label { transition: opacity .15s ease; }
+
+/* ---------- Casillas y opciones: un solo dibujo en todo el panel ---------- */
+.dt-premium .doc-corp .pro-check {
+    width: 18px !important; height: 18px !important; flex: 0 0 18px;
+    border: 1.5px solid #bcb6cc !important; border-radius: 5px !important;
+    background-color: #fff !important; background-image: none !important;
+    background-repeat: no-repeat !important; background-position: center !important;
+    box-shadow: none !important;
+    transition: background-color .1s ease, border-color .1s ease !important;
+}
+/* .inline-field deja pointer-events:none fuera de edición (operaciones-detalle.css): en
+   las casillas eso hacía que el clic sobre el cuadradito no llegara (solo funcionaba
+   el clic sobre el texto, y en las que no tienen texto no funcionaba nunca). */
+.dt-premium .doc-corp .pro-check { pointer-events: auto !important; cursor: pointer; }
+.dt-premium .doc-corp .pro-check:hover:not(:disabled) { border-color: var(--dc-brand) !important; }
+.dt-premium .doc-corp .pro-check:focus-visible { outline: 2px solid rgba(109,45,158,.35); outline-offset: 2px; }
+.dt-premium .doc-corp .pro-check:checked {
+    background-color: var(--dc-ink-2) !important; border-color: var(--dc-ink-2) !important;
+    background-size: 12px 12px !important;
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23fff' stroke-linecap='round' stroke-linejoin='round' stroke-width='2.4' d='M3.5 8.4 6.6 11.3 12.5 4.8'/%3e%3c/svg%3e") !important;
+}
+.doc-corp .pro-check:checked::after { content: none !important; }
+
+/* Opciones (radio): redondas, con punto */
+.dt-premium .doc-corp .pro-check[type="radio"] { border-radius: 50% !important; }
+.dt-premium .doc-corp .pro-check[type="radio"]:checked {
+    background-color: #fff !important; border-color: var(--dc-ink-2) !important; background-size: 100% 100% !important;
+    background-image: radial-gradient(circle, var(--dc-ink-2) 0 4px, transparent 4.5px) !important;
+}
+
+/* Bloqueado (modo vista): se ve qué está marcado, en tono apagado. Un clic
+   abre la edición de esa sección (operaciones-detalle.js). */
+.dt-premium .doc-corp .pro-check:disabled { cursor: pointer; border-color: #d6d2e0 !important; background-color: #f6f5f9 !important; }
+.dt-premium .doc-corp .pro-check:disabled:checked { background-color: #8c84a3 !important; border-color: #8c84a3 !important; }
+.dt-premium .doc-corp .pro-check[type="radio"]:disabled:checked {
+    background-color: #f6f5f9 !important; border-color: #8c84a3 !important;
+    background-image: radial-gradient(circle, #8c84a3 0 4px, transparent 4.5px) !important;
+}
+.dt-premium .doc-corp .doc-req-fijo .pro-check:disabled { cursor: default; }
+
+/* ---------- Cobro al cliente de Honorarios y DUS ---------- */
+.doc-corp .doc-cobro-card {
+    display: flex; align-items: center; justify-content: space-between; gap: 18px; flex-wrap: wrap;
+    padding: 14px 16px; border: 1px solid var(--dc-line); border-radius: 12px; background: var(--dc-soft);
+}
+.doc-corp .doc-cobro-texto { display: flex; flex-direction: column; gap: 3px; min-width: 240px; flex: 1 1 320px; }
+.doc-corp .doc-cobro-titulo { font-size: 12.5px; font-weight: 800; color: var(--dc-ink); display: inline-flex; align-items: center; gap: 7px; }
+.doc-corp .doc-cobro-titulo i { color: var(--dc-brand); }
+.doc-corp .doc-cobro-ayuda { font-size: 11.5px; color: var(--dc-muted); line-height: 1.45; }
+.doc-corp .doc-cobro-ayuda strong { color: var(--dc-text); font-weight: 700; }
+.doc-corp .doc-segmento {
+    display: inline-flex; padding: 3px; gap: 2px; border-radius: 10px;
+    background: #efedf4; border: 1px solid var(--dc-line);
+}
+.doc-corp .doc-segmento label {
+    margin: 0; padding: 7px 13px; border-radius: 8px; cursor: pointer; white-space: nowrap;
+    font-size: 12px; font-weight: 700; color: var(--dc-muted);
+    display: inline-flex; align-items: center; gap: 6px; transition: background-color .12s ease, color .12s ease;
+}
+.doc-corp .doc-segmento label:hover { color: var(--dc-ink); }
+.doc-corp .doc-segmento .btn-check:checked + label {
+    background: #fff; color: var(--dc-ink); box-shadow: 0 1px 2px rgba(29,21,48,.10), 0 0 0 1px var(--dc-line);
+}
+.doc-corp .doc-segmento .btn-check:checked + label i { color: var(--dc-brand); }
+.doc-corp .doc-segmento .btn-check:focus-visible + label { outline: 2px solid rgba(109,45,158,.35); outline-offset: 1px; }
+
+/* Modalidad GRUPAL / INDIVIDUAL de cada certificado: mismo segmentado sobrio */
+.dt-premium .doc-corp .modalidad-cert-radio + label.btn {
+    border-radius: 8px !important; color: var(--dc-muted) !important; border-color: var(--dc-line) !important; background: #fff !important;
+}
+.dt-premium .doc-corp .modalidad-cert-radio:checked + label.btn {
+    background: var(--dc-ink-2) !important; color: #fff !important; border-color: var(--dc-ink-2) !important; box-shadow: none !important;
+}
+
+/* Mini-stepper (Env → Proc → Vis) */
+.dt-premium .doc-corp .mini-step { background: #efedf4 !important; color: var(--dc-muted) !important; }
+.dt-premium .doc-corp .mini-step.active { background: var(--dc-ink-2) !important; color: #fff !important; }
+
+/* Selectores Paga / Responsable */
+.dt-premium .doc-corp .resp-pagado, .dt-premium .doc-corp .resp-responsable {
+    background-color: var(--dc-soft) !important; border: 1px solid var(--dc-line) !important; color: var(--dc-text) !important;
+}
+
+/* Subcertificados */
+.doc-corp .subcert-row > div:first-child[style*="width:4px"] { background: var(--dc-brand-line) !important; }
+
+/* ---------- Pantallas angostas ---------- */
+@media (max-width: 767.98px) {
+    .dt-premium .doc-corp .pro-wrapper { display: flex; flex-direction: column; background: #fff !important; }
+    .dt-premium .doc-corp .pro-sidebar {
+        position: static; width: 100% !important; background: var(--dc-soft) !important;
+        border-bottom: 1px solid var(--dc-line) !important;
+    }
+    .dt-premium .doc-corp .pro-content-area { padding: 20px 16px !important; }
+    .doc-corp .doc-segmento { width: 100%; }
+    .doc-corp .doc-segmento label { flex: 1 1 0; justify-content: center; }
+}
+
+/* Responsables (Paga → Resp) de Honorarios agencia, al pie de la tarjeta de cobro */
+.doc-corp .doc-cobro-resp {
+    flex: 1 1 100%; align-items: center; gap: 8px; flex-wrap: wrap;
+    padding-top: 12px; margin-top: 2px; border-top: 1px solid var(--dc-line);
+}
+.doc-corp .doc-cobro-resp-lbl { font-size: 10.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--dc-muted); margin-right: 2px; }
+.dt-premium .doc-corp .doc-cobro-resp .form-select { font-size: 11.5px !important; padding: 4px 28px 4px 10px !important; border-radius: 7px !important; }
+
+/* Generación IVV: tarjeta normal (antes quedaba semitransparente cuando no estaba marcada) */
+.dt-premium .doc-corp [id^="ivv-container-"] {
+    opacity: 1 !important; background: #fff !important; border: 1px solid var(--dc-line) !important; border-radius: 12px !important;
+}
+
+/* Textos de opciones en tipo oración (las etiquetas de campo siguen en versalitas) */
+.dt-premium .doc-corp .doc-req-txt, .dt-premium .doc-corp .doc-tram-txt, .dt-premium .doc-corp .doc-radio-txt,
+.dt-premium .doc-corp .doc-radio-txt small, .dt-premium .doc-corp .doc-sub-txt, .dt-premium .doc-corp .doc-segmento label {
+    text-transform: none !important; letter-spacing: 0 !important;
+}
+.doc-corp .doc-sub-txt { letter-spacing: .02em !important; }
+
+/* Aire entre el selector de Agencia (select2) y el campo siguiente */
+.dt-premium .doc-corp .pro-content-area .select2-container { margin-bottom: 18px; }
+
+/* En edición, una casilla bloqueada por la regla de exclusión (Cancelación ⇄ Aclaración) no se puede marcar */
+.dt-premium .doc-corp .edit-mode .pro-check:disabled { cursor: not-allowed; }
+
+
+/* Nov-2026: todos los certificados comparten jerarquía y espacios; la
+   diferencia operativa de Sanitario (aprobación del cliente) sigue disponible,
+   pero ya no es una hilera interminable de botones sin agrupación. */
+.dt-premium .doc-corp .doc-modalidad-cert {
+    display:flex; flex-wrap:wrap; align-items:center;
+    border:1px solid var(--dc-line-2) !important;
+    background:var(--dc-soft) !important;
+    border-radius:11px !important;
+    padding:12px 14px !important;
+    margin-bottom:6px !important;
+    gap:12px !important;
+}
+.dt-premium .doc-corp .doc-modalidad-cert .mod-label {
+    flex:0 0 122px; font-size:10.5px !important; color:var(--dc-ink) !important;
+    letter-spacing:0 !important;
+}
+.doc-corp .doc-modalidad-cert .btn-group { display:inline-flex; max-width:100%; flex-wrap:nowrap; }
+.dt-premium .doc-corp .doc-modalidad-cert .btn-group label {
+    min-width:105px; padding:7px 12px; font-size:10.5px !important;
+    white-space:nowrap;
+}
+.doc-corp .doc-modalidad-ayuda {
+    font-size:11px; line-height:1.55; color:var(--dc-muted);
+    margin:0 0 20px; padding:0 2px; display:flex;
+    align-items:flex-start; gap:7px;
+}
+.doc-corp .doc-modalidad-ayuda i { color:var(--dc-brand); margin-top:2px; }
+.dt-premium .doc-corp .pro-pane-v3 .pro-title,
+.dt-premium .doc-corp [id^="pane-origen-"] .pro-title,
+.dt-premium .doc-corp [id^="pane-fito-"] .pro-title,
+.dt-premium .doc-corp [id^="pane-sani-"] .pro-title,
+.dt-premium .doc-corp [id^="pane-cap-"] .pro-title { line-height:1.5; }
+.dt-premium .doc-corp [id^="pane-fito-"] .pro-stepper,
+.dt-premium .doc-corp [id^="pane-sani-"] .pro-stepper,
+.dt-premium .doc-corp [id^="pane-cap-"] .pro-stepper {
+    display:flex; flex-wrap:wrap; gap:7px;
+    padding:12px 0 18px; margin-bottom:10px;
+    border-bottom:1px solid var(--dc-line);
+}
+.doc-corp .doc-acciones-cert {
+    display:grid; grid-template-columns:repeat(2,minmax(0,1fr));
+    gap:12px; border-bottom:1px solid var(--dc-line); padding-bottom:18px;
+}
+.doc-corp .doc-accion-grupo {
+    border:1px solid var(--dc-line); border-radius:11px;
+    background:var(--dc-soft); padding:12px; min-width:0;
+}
+.doc-corp .doc-accion-titulo {
+    display:block; color:var(--dc-ink); font-size:10.5px; font-weight:800;
+    margin-bottom:10px; letter-spacing:.02em;
+}
+.doc-corp .doc-accion-botones {
+    display:flex; flex-wrap:wrap; gap:7px; align-items:center;
+}
+.doc-corp .doc-accion-botones .pro-btn {
+    min-height:32px; font-size:10.5px !important;
+    padding:7px 11px !important; border-radius:8px !important;
+    white-space:normal;
+}
+.dt-premium .doc-corp .pro-content-area [id^="log-ori-txt-"],
+.dt-premium .doc-corp .pro-content-area [id^="log-fit-txt-"],
+.dt-premium .doc-corp .pro-content-area [id^="log-san-txt-"],
+.dt-premium .doc-corp .pro-content-area [id^="log-cap-txt-"] {
+    height:auto !important; min-height:210px !important; max-height:360px;
+    overflow:auto; border-radius:10px;
+}
+@media(max-width:900px) {
+    .doc-corp .doc-acciones-cert { grid-template-columns:1fr; }
+}
+@media(max-width:600px) {
+    .dt-premium .doc-corp .doc-modalidad-cert .mod-label { flex:1 1 100%; }
+    .doc-corp .doc-modalidad-cert .btn-group { width:100%; }
+    .dt-premium .doc-corp .doc-modalidad-cert .btn-group label { min-width:0; flex:1; }
+}

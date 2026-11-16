@@ -108,7 +108,7 @@
                 <p>Cotiza, solicita servicios y sigue tus embarques en línea.</p>
             </div>
             <ol class="rg-pasos">
-<li><b>1</b><span>Completa los datos de tu empresa y de la persona de contacto.</span></li>
+<li><b>1</b><span>Déjanos tu nombre, teléfono y email. Si quieres, agrega los datos de tu empresa.</span></li>
                 <li><b>2</b><span>Atilson revisa tu solicitud.</span></li>
                 <li><b>3</b><span>Te avisamos por correo y entras con tu correo y contraseña.</span></li>
             </ol>
@@ -124,11 +124,11 @@
                 <div class="rg-ok" role="status">
                     <svg class="rg-ok-check" viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="30" /><path d="M20 33 l8 8 l16 -17" /></svg>
                     <h1>¡Listo! Recibimos tu solicitud</h1>
-                    <p>Atilson revisará los datos de tu empresa. Te avisaremos @(string.IsNullOrEmpty(Model.CorreoEnviado) ? "por correo" : $"a {Model.CorreoEnviado}") cuando tu cuenta esté aprobada; desde ese momento podrás entrar con tu correo y la contraseña que elegiste.</p>
+                    <p>Atilson revisará tu solicitud. Te avisaremos @(string.IsNullOrEmpty(Model.CorreoEnviado) ? "por correo" : $"a {Model.CorreoEnviado}") cuando esté revisada y te indicaremos cómo acceder al portal.</p>
                     <ol class="rg-ok-pasos">
                         <li class="hecho"><span><i class="bi bi-check-lg"></i></span><div><b>Solicitud recibida</b>Ya le avisamos al equipo de Atilson.</div></li>
                         <li><span>2</span><div><b>Revisamos los datos de tu empresa</b>Te avisamos apenas quede revisada.</div></li>
-                        <li><span>3</span><div><b>Te avisamos y entras al portal</b>Con tu correo y la contraseña que elegiste.</div></li>
+                        <li><span>3</span><div><b>Te avisamos cómo acceder al portal</b>Si no definiste contraseña, Atilson preparará una temporal antes de activar tu usuario.</div></li>
                     </ol>
                     <div class="rg-ok-acciones">
                         <a href="/Login" class="rg-btn"><i class="bi bi-box-arrow-in-right"></i> Ir a iniciar sesión</a>
@@ -155,9 +155,9 @@
                     </div>
                 }
                 <h1 class="rg-titulo">Registra tu empresa</h1>
-                <p class="rg-sub">Todos los campos son obligatorios. Si tu empresa ya trabaja con Atilson, pide el acceso a tu ejecutivo(a) en vez de registrarte.</p>
+                <p class="rg-sub"><strong>Solo Nombre, Teléfono y Email son obligatorios.</strong> Los datos de la empresa y la contraseña son opcionales en esta etapa; puedes completarlos ahora o coordinarlos con el equipo de Atilson durante la revisión.</p>
 
-                <form method="post" novalidate id="formRegistro">
+                <form method="post" id="formRegistro">
                     <div asp-validation-summary="All" class="rg-errores" role="alert"><strong>Revisa lo siguiente:</strong></div>
 
                     <div class="rg-trampa" aria-hidden="true">
@@ -169,18 +169,18 @@
                         <h2><i class="bi bi-building"></i> Empresa</h2>
                         <div class="rg-campos">
                             <div class="rg-campo">
-                                <label asp-for="Form.RazonSocial">Razón social <span class="req">*</span></label>
-                                <input asp-for="Form.RazonSocial" maxlength="100" autocomplete="organization" required />
+                                <label asp-for="Form.RazonSocial">Razón social <span class="text-muted fw-normal">(opcional)</span></label>
+                                <input asp-for="Form.RazonSocial" maxlength="100" autocomplete="organization" />
                                 <span asp-validation-for="Form.RazonSocial" class="rg-error"></span>
                             </div>
                             <div class="rg-campo">
-                                <label asp-for="Form.Rut">RUT <span class="req">*</span></label>
-                                <input asp-for="Form.Rut" maxlength="12" placeholder="76.123.456-7" autocomplete="off" required />
+                                <label asp-for="Form.Rut">RUT <span class="text-muted fw-normal">(opcional)</span></label>
+                                <input asp-for="Form.Rut" maxlength="12" placeholder="76.123.456-7" autocomplete="off" />
                                 <span asp-validation-for="Form.Rut" class="rg-error"></span>
                             </div>
                             <div class="rg-campo full">
-                                <label asp-for="Form.DireccionOficina">Dirección de la oficina <span class="req">*</span></label>
-                                <input asp-for="Form.DireccionOficina" maxlength="255" autocomplete="street-address" required />
+                                <label asp-for="Form.DireccionOficina">Dirección de la oficina <span class="text-muted fw-normal">(opcional)</span></label>
+                                <input asp-for="Form.DireccionOficina" maxlength="255" autocomplete="street-address" />
                                 <span asp-validation-for="Form.DireccionOficina" class="rg-error"></span>
                             </div>
                         </div>
@@ -190,7 +190,7 @@
                         <h2><i class="bi bi-person-lines-fill"></i> Persona de contacto</h2>
                         <div class="rg-campos">
                             <div class="rg-campo full">
-                                <label asp-for="Form.NombreContacto">Nombre y apellido <span class="req">*</span></label>
+                                <label asp-for="Form.NombreContacto">Nombre <span class="req">*</span></label>
                                 <input asp-for="Form.NombreContacto" maxlength="100" autocomplete="name" required />
                                 <span asp-validation-for="Form.NombreContacto" class="rg-error"></span>
                             </div>
@@ -200,7 +200,7 @@
                                 <span asp-validation-for="Form.Telefono" class="rg-error"></span>
                             </div>
                             <div class="rg-campo">
-                                <label asp-for="Form.Correo">Correo <span class="req">*</span></label>
+                                <label asp-for="Form.Correo">Email <span class="req">*</span></label>
                                 <input asp-for="Form.Correo" type="email" maxlength="100" autocomplete="email" required />
                                 <span asp-validation-for="Form.Correo" class="rg-error"></span>
                                 <div class="rg-ayuda">Con este correo entrarás al portal.</div>
@@ -209,24 +209,25 @@
                     </section>
 
                     <section class="rg-card">
-                        <h2><i class="bi bi-shield-lock"></i> Contraseña</h2>
+                        <h2><i class="bi bi-shield-lock"></i> Acceso al portal <span class="text-muted fw-normal" style="font-size:10px;text-transform:none;letter-spacing:0;">(opcional)</span></h2>
+                        <p class="rg-ayuda mb-3">Si defines una contraseña ahora, quedará lista para tu acceso cuando aprobemos la solicitud. Si la dejas vacía, el equipo de Atilson podrá definir una temporal durante la revisión.</p>
                         <div class="rg-campos">
                             <div class="rg-campo">
-                                <label asp-for="Form.Password">Contraseña <span class="req">*</span></label>
-                                <input asp-for="Form.Password" type="password" autocomplete="new-password" required />
+                                <label asp-for="Form.Password">Contraseña <span class="text-muted fw-normal">(opcional)</span></label>
+                                <input asp-for="Form.Password" type="password" autocomplete="new-password" />
                                 <span asp-validation-for="Form.Password" class="rg-error"></span>
                                 <div class="rg-ayuda">Mínimo 8 caracteres, con letras y números.</div>
                             </div>
                             <div class="rg-campo">
-                                <label asp-for="Form.ConfirmarPassword">Repite la contraseña <span class="req">*</span></label>
-                                <input asp-for="Form.ConfirmarPassword" type="password" autocomplete="new-password" required />
+                                <label asp-for="Form.ConfirmarPassword">Repite la contraseña <span class="text-muted fw-normal">(solo si definiste una)</span></label>
+                                <input asp-for="Form.ConfirmarPassword" type="password" autocomplete="new-password" />
                                 <span asp-validation-for="Form.ConfirmarPassword" class="rg-error"></span>
                             </div>
                         </div>
                     </section>
 
                     <div class="rg-pie">
-                        <p>Al enviar, Atilson revisará tus datos antes de activar tu cuenta.</p>
+                        <p>Al enviar, Atilson revisará tu solicitud. Los únicos datos obligatorios son Nombre, Teléfono y Email.</p>
                         <button type="submit" class="rg-btn" id="btnRegistro"><i class="bi bi-send"></i> <span>Enviar solicitud</span></button>
                     </div>
                 </form>

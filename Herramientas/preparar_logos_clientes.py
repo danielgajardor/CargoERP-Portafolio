@@ -22,7 +22,7 @@ AREA = 44000          # área objetivo del logo (px² en el lienzo 2x)
 MAX_W, MAX_H = 420, 188
 # Logos blancos sobre transparente: el blanco se pinta de este color. Se puede limitar a una
 # franja vertical (0 a 1) para no tocar letras blancas dentro de otras formas.
-OSCURECER = {'promar': ((27, 36, 84), 0.0, 0.565)}
+OSCURECER = {'marfrio': ((27, 36, 84), 0.0, 0.565)}
 
 def quitar_fondo(im):
     """Vuelve transparente el fondo claro conectado con los bordes (relleno por inundación)."""

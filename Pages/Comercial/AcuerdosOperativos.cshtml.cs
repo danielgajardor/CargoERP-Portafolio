@@ -1,4 +1,4 @@
-using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.EntityFrameworkCore;
 using AtilsonCargoSpa.Models;
@@ -83,6 +83,34 @@ namespace AtilsonCargoSpa.Pages.Comercial
             // tanto NO se cobra aparte en este booking.
             public bool EsClienteEspecial { get; set; }
             public Dictionary<string, bool> MatrizTarifaPlana { get; set; } = new();
+
+            // Contenedores del booking (nov-2026), para rotular los cobros por contenedor
+            // (Late Arrival, Extra Late Arrival, flete...) con "2° · MSKU1234567".
+            public string? NumeroContenedor { get; set; }
+            public List<(int Id, string? Nro)> Unidades { get; set; } = new();
+        }
+
+        /// <summary>
+        /// Acuerdos Operativos es para excepciones de un booking (nov-2026): en cualquier
+        /// concepto se puede ajustar el monto y la moneda sin tocar la tarifa maestra. El IVA no
+        /// se elige aquí: sigue la regla del concepto (ver ControlFinancieroModel.EsMaritimoExento).
+        /// </summary>
+        public static bool MonedaElegible(TxDTO tx) => true;
+
+        /// <summary>
+        /// Conceptos que Control Financiero refleja en CLP aunque se cobren en USD (el USD queda
+        /// como referencia, al dólar del día del acuerdo): Emisión BL, Late Arrival, Extra Late y
+        /// demás recargos marítimos, Gate e ISPS. Flete, Roleo, Cancelación / No-Show, Rebate y
+        /// el resto se quedan en la moneda del acuerdo.
+        /// </summary>
+        public static bool SeReflejaEnClp(string grupoCobro, string? concepto, bool veniaConvertido)
+        {
+            string c = (concepto ?? "").ToUpperInvariant();
+            if (grupoCobro == "Marítimo")
+                return !AtilsonCargoSpa.Pages.Finanzas.ControlFinancieroModel.EsFleteMaritimo(concepto)
+                    && !AtilsonCargoSpa.Services.FinanzasSyncService.EsPenalidadNavieraEnUsd(concepto)
+                    && !c.StartsWith("REBATE");
+            return veniaConvertido || grupoCobro == "Depósito" || grupoCobro == "Gate-Out/In" || c.Contains("ISPS") || c.Contains("GATE OUT") || c.Contains("GATE IN");
         }
 
         public List<BookingPricingDTO> Bookings { get; set; } = new();
@@ -129,6 +157,7 @@ namespace AtilsonCargoSpa.Pages.Comercial
                 .Include(o => o.OperacionesDocumentales)
                 .Include(o => o.OperacionesAlmacenamientos) // <--- INYECTADO ALMACENAMIENTO
                 .Include(o => o.TransaccionesFinancieras)
+                .Include(o => o.Unidadestecnicas)
                                 .Where(o => !o.IsDeleted)
                 .OrderByDescending(o => o.Id)
                 .ToListAsync();
@@ -157,7 +186,9 @@ namespace AtilsonCargoSpa.Pages.Comercial
                     AplicaTarifaGatePlana = op.IdNavieraNavigation?.AplicaTarifaGatePlana == true,
                     IdNaviera = op.IdNaviera,
                     TipoGate = esRfDto ? "RF" : "DRY",
-                    EsClienteEspecial = op.IdClienteNavigation?.EsClienteEspecial == true
+                    EsClienteEspecial = op.IdClienteNavigation?.EsClienteEspecial == true,
+                    NumeroContenedor = op.NumeroContenedor,
+                    Unidades = (op.Unidadestecnicas ?? new List<Unidadestecnica>()).OrderBy(u => u.Id).Select(u => (u.Id, u.NroContenedor)).ToList()
                 };
 
                 if (dto.EsClienteEspecial)
@@ -248,6 +279,7 @@ namespace AtilsonCargoSpa.Pages.Comercial
                 {
                     decimal montoAnterior = tx.MontoNeto;
                     string monedaAnterior = tx.Moneda;
+                    bool veniaConvertido = tx.Moneda == "CLP" && tx.MontoOriginalUsd.HasValue && tx.MontoOriginalUsd.Value > 0;
 
                     tx.MontoNeto = update.NuevoMonto;
                     tx.ProfitHandling = update.ProfitHandling;
@@ -262,18 +294,27 @@ namespace AtilsonCargoSpa.Pages.Comercial
                     tx.TipoCambio = null;
                     tx.MontoOriginalUsd = null;
 
-                    // Late / Extra Late: siempre CLP (+IVA). Si se ingresó en USD, se convierte
-                    // y el USD queda como referencia.
-                    string cUp = (tx.Concepto ?? "").ToUpperInvariant();
-                    bool esLate = cUp.Contains("LATE ARRIVAL") || cUp.Contains("EXTRA LATE") || cUp.Contains("(LAR)") || cUp.Contains("(ELAR)");
-                    if (esLate && tx.Moneda == "USD")
+                    // Moneda del acuerdo (nov-2026). Acuerdos Operativos es la excepción de ESTE
+                    // booking: no cambia la tarifa maestra ni el IVA (regla del concepto).
+                    //  - Conceptos que Finanzas refleja en CLP (Emisión BL, Late, Extra Late, demás
+                    //    recargos marítimos, Gate, ISPS): si se acordó en USD, se pasa a CLP con el
+                    //    dólar del día y el USD queda como referencia.
+                    //  - El resto (flete, roleo, cancelación / no-show, transporte...): queda en la
+                    //    moneda acordada, tal cual.
+                    string? monedaElegida = (update.Moneda ?? "").Trim().ToUpperInvariant() is "USD" or "CLP" ? update.Moneda!.Trim().ToUpperInvariant() : null;
+                    string monedaFinal = monedaElegida ?? (veniaConvertido ? "USD" : tx.Moneda);
+                    if (SeReflejaEnClp(tx.GrupoCobro, tx.Concepto, veniaConvertido))
                     {
-                        decimal dolar = await _indicadores.ObtenerValorDolarAsync();
-                        tx.MontoOriginalUsd = update.NuevoMonto;
-                        tx.TipoCambio = dolar;
-                        tx.MontoNeto = System.Math.Round(update.NuevoMonto * dolar);
+                        if (monedaFinal == "USD")
+                        {
+                            decimal dolar = await _indicadores.ObtenerValorDolarAsync();
+                            tx.MontoOriginalUsd = update.NuevoMonto;
+                            tx.TipoCambio = dolar;
+                            tx.MontoNeto = System.Math.Round(update.NuevoMonto * dolar);
+                        }
                         tx.Moneda = "CLP";
                     }
+                    else tx.Moneda = monedaFinal;
                     // Saca la fila de "PENDIENTE VALORIZAR" — sin esto la alerta en
                     // Operaciones nunca desaparece, porque se calcula exactamente sobre
                     // este campo, y con TarifaManual=true el motor de sincronización ya
@@ -288,7 +329,9 @@ namespace AtilsonCargoSpa.Pages.Comercial
                         IdRegistro = tx.Id,
                         Campo = $"{tx.Concepto} ({tx.TipoMovimiento})",
                         ValorAnterior = $"{monedaAnterior} {montoAnterior:N0}",
-                        ValorNuevo = $"{tx.Moneda} {tx.MontoNeto:N0}",
+                        ValorNuevo = tx.MontoOriginalUsd.HasValue && tx.TipoCambio.HasValue
+                            ? $"{tx.Moneda} {tx.MontoNeto:N0} (USD {tx.MontoOriginalUsd.Value:N2})"
+                            : $"{tx.Moneda} {tx.MontoNeto:N0}",
                         Comentario = string.IsNullOrWhiteSpace(update.Justificacion) ? "(Sin comentario)" : update.Justificacion.Trim(),
                         Usuario = usuario,
                         FechaCambio = System.DateTime.Now,
@@ -317,6 +360,8 @@ namespace AtilsonCargoSpa.Pages.Comercial
             public decimal NuevoMonto { get; set; }
             public decimal ProfitHandling { get; set; }
             public string Justificacion { get; set; } = string.Empty;
+            // Moneda elegida en Acuerdos Operativos para conceptos marítimos ("USD" / "CLP").
+            public string? Moneda { get; set; }
         }
 
         public class NuevoTramoPayload

@@ -1,0 +1,438 @@
+@page
+@model AtilsonCargoSpa.Pages.Finanzas.DatosHistoricosModel
+@{
+    ViewData["Title"] = "Datos históricos";
+}
+<style>
+    .hist-shell{max-width:100%}
+    .hist-card{background:#fff;border:1px solid #d9dee5;border-radius:10px;box-shadow:0 2px 10px rgba(15,23,42,.04)}
+    .hist-upload{display:grid;grid-template-columns:minmax(300px,1.5fr) auto;gap:12px;align-items:end;padding:16px}
+    .hist-label{font-size:9px;font-weight:850;text-transform:uppercase;letter-spacing:.05em;color:#64748b;margin-bottom:5px}
+    .hist-note{font-size:10.5px;color:#64748b;line-height:1.55}
+    .hist-example{background:#f8fafc;border:1px solid #e2e8f0;padding:10px 12px;border-radius:8px;font-size:11px}
+    .hist-rule{border:1px solid #e2e8f0;background:#f8fafc;border-radius:8px;padding:10px 12px;font-size:10px;color:#475569}
+    .hist-row>td{background:#f8fafc!important;color:#475569;border-color:#e2e8f0!important}
+    .hist-row:hover>td{background:#f1f5f9!important}
+    .hist-bkg{font-weight:900;color:#334155}
+    .hist-chip{display:inline-flex;align-items:center;gap:4px;padding:3px 7px;border-radius:999px;background:#e5e7eb;color:#4b5563;border:1px solid #d1d5db;font-size:8.5px;font-weight:850;text-transform:uppercase}
+    .hist-table th{font-size:9px;text-transform:uppercase;letter-spacing:.04em;color:#64748b;background:#fff;white-space:nowrap}
+    .hist-table td{font-size:10.5px;vertical-align:middle}
+    .hist-money{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-variant-numeric:tabular-nums;font-weight:750}
+    .hist-warn{white-space:pre-line;font-size:10px}
+    @@media(max-width:760px){.hist-upload{grid-template-columns:1fr}}
+</style>
+
+<link rel="stylesheet" href="~/css/finanzas-modulo.css" asp-append-version="true" />
+<div class="container-fluid px-4 py-4 hist-shell fin-modulo">
+    <div class="page-header">
+        <div class="page-header__title-row">
+            <div class="page-header__icon"><i class="bi bi-clock-history"></i></div>
+            <div>
+                <h1>Datos históricos</h1>
+                <p class="page-header__subtitle">Operaciones anteriores al ERP. Se integran a Finanzas y al historial del cliente, pero quedan bloqueadas en Operaciones.</p>
+            </div>
+        </div>
+    </div>
+
+    <partial name="/Pages/Finanzas/_FinanzasNav.cshtml" model='"DatosHistoricos"' />
+
+    @if (TempData["SuccessMsg"] != null)
+    {
+        <div class="alert alert-success py-2 small"><i class="bi bi-check-circle-fill me-2"></i>@TempData["SuccessMsg"]</div>
+    }
+    @if (TempData["PreviewMsg"] != null)
+    {
+        <div class="alert alert-info py-3 small border border-info-subtle" role="status">
+            <i class="bi bi-shield-check me-2"></i><strong>@TempData["PreviewMsg"]</strong>
+        </div>
+    }
+    @if (TempData["ErrorMsg"] != null)
+    {
+        <div class="alert alert-danger py-2 small"><i class="bi bi-exclamation-triangle-fill me-2"></i>@TempData["ErrorMsg"]</div>
+    }
+    @if (TempData["ImportWarnings"] is string warnings && !string.IsNullOrWhiteSpace(warnings))
+    {
+        <details class="alert alert-warning py-2 hist-warn">
+            <summary class="fw-bold" style="cursor:pointer;">Revisar filas omitidas / advertencias</summary>
+            <div class="mt-2">@warnings</div>
+        </details>
+    }
+
+    @if (TempData["AnalisisFuentes"] is string analisis && !string.IsNullOrWhiteSpace(analisis))
+    {
+        <div class="alert alert-info py-3 small border border-info-subtle">
+            <div class="fw-bold mb-2"><i class="bi bi-clipboard-data me-1"></i> Resultado del análisis de hojas</div>
+            <pre class="mb-0" style="white-space:pre-wrap;word-break:break-word;font-family:inherit;font-size:11px;">@analisis</pre>
+        </div>
+    }
+
+    @* Creación de operación (nov-2026, pedido de Cristian): ingreso manual de una operación
+       antigua con sus columnas mínimas, que impacta solo en Finanzas. *@
+    <div class="hist-card mb-3 hist-crear">
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 p-3">
+            <div>
+                <div class="fw-bold text-dark small"><i class="bi bi-plus-square me-1"></i> Creación de operación</div>
+                <div class="hist-note mt-1">Ingresa a mano una operación antigua (booking, contenedor, nave y viaje, cliente) con sus ingresos y costos. Solo impacta Finanzas: no crea tareas en Operaciones. Si el booking ya existe, los conceptos se agregan a él en su sección.</div>
+            </div>
+            <button type="button" class="btn btn-dark btn-sm fw-bold px-3" data-bs-toggle="modal" data-bs-target="#modalCrearOp" style="min-height:34px;">
+                <i class="bi bi-plus-lg me-1"></i> Creación de operación
+            </button>
+        </div>
+    </div>
+
+    <div class="hist-card mb-3">
+        <div class="d-flex flex-wrap justify-content-between align-items-center px-3 pt-3 gap-2">
+            <div class="fw-bold text-dark small"><i class="bi bi-search me-1"></i> 1. Analizar varios Excel sin guardar</div>
+            <span class="text-muted small">Hasta 8 archivos por análisis</span>
+        </div>
+        <form method="post" asp-page-handler="AnalizarFormatos" enctype="multipart/form-data" class="hist-upload">
+            <div>
+                <label class="hist-label" for="ArchivosAnalisis">Excel de Finanzas · múltiples hojas y formatos</label>
+                <input id="ArchivosAnalisis" name="ArchivosAnalisis" type="file" multiple
+                       accept=".xlsx,.xlsm,.xls" class="form-control form-control-sm" required />
+                <div class="hist-note mt-2">
+                    Detecta posibles hojas de facturación, transportistas, agencias, embarques y hojas auxiliares.
+                    <strong>No crea registros en SQL Server</strong> ni intenta asignar facturas sin booking.
+                </div>
+            </div>
+            <button type="submit" class="btn btn-outline-primary btn-sm fw-bold px-3" style="min-height:34px;">
+                <i class="bi bi-search me-1"></i> Analizar estructura de los archivos
+            </button>
+        </form>
+    </div>
+
+    <div class="hist-card mb-3">
+        <div class="d-flex flex-wrap justify-content-between align-items-center px-3 pt-3 gap-2">
+            <div class="fw-bold text-dark small"><i class="bi bi-file-earmark-spreadsheet me-1"></i> 2. Importar movimientos normalizados por booking (plantilla)</div>
+            <a asp-page-handler="Plantilla" class="btn btn-outline-primary btn-sm fw-bold"><i class="bi bi-download me-1"></i> Descargar plantilla Excel</a>
+        </div>
+        <form method="post" asp-page-handler="Importar" enctype="multipart/form-data" class="hist-upload">
+            <div>
+                <div class="hist-label">Archivo Excel histórico</div>
+                <input asp-for="ArchivoExcel" type="file" class="form-control form-control-sm" accept=".xlsx,.xlsm,.xls" required />
+                <div class="hist-note mt-2">
+                    Formatos admitidos: <strong>.xlsx, .xlsm y .xls</strong>, hasta 20 MB. El importador necesita identificar <strong>Booking y Cliente</strong>, además de movimientos financieros con concepto, importe y tipo (Ingreso/Egreso). Este segundo formulario solo sirve para archivos ya normalizados con Booking + Cliente + movimientos. Las facturas de proveedores o documentos sin booking deben revisarse primero en el análisis superior; no los importes forzando columnas.
+                </div>
+            </div>
+            <div class="d-flex flex-wrap gap-2 align-items-end">
+                <button type="submit" name="soloValidar" value="true" class="btn btn-outline-primary btn-sm fw-bold px-3" style="min-height:34px;">
+                    <i class="bi bi-search me-1"></i> Previsualizar sin guardar
+                </button>
+                <button type="submit" name="soloValidar" value="false" class="btn btn-dark btn-sm fw-bold px-3" style="min-height:34px;"
+                        onclick="return confirm('¿Confirmas importar estos movimientos históricos reales a Finanzas? Recomendamos utilizar primero Previsualizar sin guardar.');">
+                    <i class="bi bi-file-earmark-arrow-up me-1"></i> Importar histórico
+                </button>
+            </div>
+        </form>
+        <div class="px-3 pb-3">
+            <div class="hist-example mb-2"><strong>Prueba segura:</strong> sube tu Excel real y pulsa <em>Previsualizar sin guardar</em>. El sistema analiza los registros dentro de una transacción y después la revierte; la tabla de históricos y los saldos quedan intactos. Cuando los conteos sean correctos, vuelve a elegir el mismo archivo y pulsa <em>Importar histórico</em>.</div>
+            <div class="hist-example mb-2"><strong>Cómo cargar:</strong> una fila por movimiento. Ejemplo conceptual: un booking con una factura al cliente (Ingreso) y un costo naviera (Egreso) se registra en dos filas con el mismo booking y cliente. No ingreses montos inventados.</div>
+            <div class="hist-rule">
+                <i class="bi bi-shield-lock me-1"></i>
+                <strong>Regla de seguridad:</strong> un booking importado queda marcado como <em>Histórico Excel</em>, no genera alertas operativas y no permite entrar a Detalle/Edit.
+                Si el booking ya existe como operación normal, la fila del Excel se omite en lugar de mezclar datos.
+            </div>
+        </div>
+    </div>
+
+    <div class="d-flex justify-content-between align-items-end gap-3 mb-2 flex-wrap">
+        <form method="get" class="d-flex gap-2" style="min-width:min(100%,420px);">
+            <input asp-for="Buscar" class="form-control form-control-sm" placeholder="Buscar booking, cliente o N° documento" />
+            <button class="btn btn-outline-dark btn-sm fw-bold"><i class="bi bi-search"></i></button>
+            @if(!string.IsNullOrWhiteSpace(Model.Buscar)){<a asp-page="./DatosHistoricos" class="btn btn-outline-secondary btn-sm"><i class="bi bi-x-lg"></i></a>}
+        </form>
+        <span class="text-muted" style="font-size:10px;font-weight:700;">@Model.Total booking(s) históricos</span>
+    </div>
+
+    <div class="hist-card table-responsive">
+        <table class="table table-hover hist-table mb-0" style="min-width:980px;">
+            <thead>
+                <tr>
+                    <th>Booking / Cliente</th>
+                    <th>Fecha operación</th>
+                    <th>Naviera</th>
+                    <th>Fuente</th>
+                    <th class="text-center">Conceptos</th>
+                    <th class="text-end">Ingresos</th>
+                    <th class="text-end">Egresos</th>
+                    <th>Importado</th>
+                </tr>
+            </thead>
+            <tbody>
+            @foreach(var op in Model.Historicos)
+            {
+                var txs = op.TransaccionesFinancieras ?? new List<AtilsonCargoSpa.Models.TransaccionesFinanciera>();
+                decimal ingUsd = txs.Where(t=>t.TipoMovimiento=="INGRESO" && t.Moneda=="USD").Sum(t=>t.MontoNeto);
+                decimal ingClp = txs.Where(t=>t.TipoMovimiento=="INGRESO" && t.Moneda=="CLP").Sum(t=>t.MontoNeto);
+                decimal egrUsd = txs.Where(t=>t.TipoMovimiento=="EGRESO" && t.Moneda=="USD").Sum(t=>t.MontoNeto);
+                decimal egrClp = txs.Where(t=>t.TipoMovimiento=="EGRESO" && t.Moneda=="CLP").Sum(t=>t.MontoNeto);
+                <tr class="hist-row">
+                    <td>
+                        <div class="d-flex align-items-center gap-2">
+                            <span class="hist-bkg">@op.NumeroBooking</span>
+                            <span class="hist-chip"><i class="bi bi-archive-fill"></i> Histórico Excel</span>
+                        </div>
+                        <div class="text-muted mt-1">@(op.IdClienteNavigation?.RazonSocial ?? "Sin cliente")</div>
+                    </td>
+                    <td>@(op.FechaCreacion?.ToString("dd/MM/yyyy") ?? "Sin fecha")</td>
+                    <td>@(op.IdNavieraNavigation?.NombreNaviera ?? "No informado")</td>
+                    <td title="@op.OrigenHistorico">@(!string.IsNullOrWhiteSpace(op.OrigenHistorico) ? op.OrigenHistorico : "Excel histórico")</td>
+                    <td class="text-center"><span class="hist-chip">@txs.Count</span></td>
+                    <td class="text-end hist-money">
+                        @if(ingUsd != 0){<div>USD @ingUsd.ToString("N2")</div>}
+                        @if(ingClp != 0){<div>$ @ingClp.ToString("N0")</div>}
+                        @if(ingUsd == 0 && ingClp == 0){<span>—</span>}
+                    </td>
+                    <td class="text-end hist-money">
+                        @if(egrUsd != 0){<div>USD @egrUsd.ToString("N2")</div>}
+                        @if(egrClp != 0){<div>$ @egrClp.ToString("N0")</div>}
+                        @if(egrUsd == 0 && egrClp == 0){<span>—</span>}
+                    </td>
+                    <td>@(op.FechaImportacionHistorica?.ToString("dd/MM/yyyy HH:mm") ?? "—")</td>
+                </tr>
+            }
+            @if(!Model.Historicos.Any())
+            {
+                <tr><td colspan="8" class="text-center text-muted py-5"><i class="bi bi-archive me-2"></i>Aún no hay datos históricos importados.</td></tr>
+            }
+            </tbody>
+        </table>
+    </div>
+
+    @if(Model.TotalPaginas > 1)
+    {
+        <div class="d-flex justify-content-end mt-3">
+            <ul class="pagination pagination-sm mb-0">
+                <li class="page-item @(Model.Pagina<=1?"disabled":"")"><a class="page-link" asp-page="./DatosHistoricos" asp-route-Pagina="@(Model.Pagina-1)" asp-route-Buscar="@Model.Buscar"><i class="bi bi-chevron-left"></i></a></li>
+                <li class="page-item disabled"><span class="page-link">@Model.Pagina / @Model.TotalPaginas</span></li>
+                <li class="page-item @(Model.Pagina>=Model.TotalPaginas?"disabled":"")"><a class="page-link" asp-page="./DatosHistoricos" asp-route-Pagina="@(Model.Pagina+1)" asp-route-Buscar="@Model.Buscar"><i class="bi bi-chevron-right"></i></a></li>
+            </ul>
+        </div>
+    }
+</div>
+
+<div class="modal fade" id="modalCrearOp" tabindex="-1" aria-labelledby="crearOpTitulo" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+        <form method="post" asp-page-handler="CrearOperacion" class="modal-content hist-crear-modal" id="formCrearOp">
+            <div class="modal-header">
+                <div>
+                    <h5 class="modal-title" id="crearOpTitulo">Creación de operación</h5>
+                    <div class="hist-note">Operación histórica solo para Finanzas: cuentas por cobrar, por pagar y resultado del booking.</div>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body">
+                <div class="hist-label mb-2">Datos de la operación</div>
+                <div class="row g-3 mb-4">
+                    <div class="col-md-3">
+                        <label class="hist-label" for="coBooking">N° de booking *</label>
+                        <input id="coBooking" name="Creacion.Booking" class="form-control form-control-sm text-uppercase" maxlength="45" required />
+                    </div>
+                    <div class="col-md-3">
+                        <label class="hist-label" for="coContenedor">Contenedor</label>
+                        <input id="coContenedor" name="Creacion.Contenedor" class="form-control form-control-sm text-uppercase" maxlength="50" placeholder="Ej: MSCU1234567" />
+                    </div>
+                    <div class="col-md-3">
+                        <label class="hist-label" for="coNave">Nave y viaje</label>
+                        <input id="coNave" name="Creacion.NaveViaje" class="form-control form-control-sm text-uppercase" maxlength="150" placeholder="Ej: MSC ANNA / 245W" />
+                    </div>
+                    <div class="col-md-3">
+                        <label class="hist-label" for="coFecha">Fecha de la operación</label>
+                        <input id="coFecha" name="Creacion.Fecha" type="date" class="form-control form-control-sm" />
+                    </div>
+                    <div class="col-md-5">
+                        <label class="hist-label" for="coCliente">Cliente *</label>
+                        <select id="coCliente" name="Creacion.Cliente" class="form-select form-select-sm">
+                            <option value="">Seleccionar…</option>
+                            @foreach (var cli in Model.ClientesLista)
+                            {
+                                <option value="@cli.Id">@cli.Nombre</option>
+                            }
+                            <option value="otro">Otro (escribir nombre)</option>
+                        </select>
+                        <input id="coClienteTexto" name="Creacion.ClienteTexto" class="form-control form-control-sm text-uppercase mt-1 d-none" maxlength="100" placeholder="Razón social del cliente" />
+                    </div>
+                    <div class="col-md-3">
+                        <label class="hist-label" for="coNaviera">Naviera</label>
+                        <select id="coNaviera" name="Creacion.IdNaviera" class="form-select form-select-sm">
+                            <option value="">No informada</option>
+                            @foreach (var nv in Model.NavierasLista)
+                            {
+                                <option value="@nv.Id">@nv.Nombre</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="hist-label" for="coProveedor">Proveedor <span class="text-muted text-lowercase fw-normal">(se copia a los costos)</span></label>
+                        <select id="coProveedor" class="form-select form-select-sm" data-buscador="si">
+                            <option value="">Seleccionar…</option>
+                            @foreach (var (grupo, seccion) in new[] { ("Navieras", "Marítimo"), ("Agencias de aduana", "Documental"), ("Transportistas", "Terrestre"), ("Depósitos", "Almacenaje") })
+                            {
+                                <optgroup label="@grupo">
+                                    @foreach (var pr in Model.ProveedoresPorSeccion[seccion])
+                                    {
+                                        <option value="@pr.Valor">@pr.Nombre</option>
+                                    }
+                                </optgroup>
+                            }
+                        </select>
+                    </div>
+                </div>
+
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <div class="hist-label m-0">Conceptos · clasificación, valor y respaldo</div>
+                    <button type="button" class="btn btn-outline-primary btn-sm fw-bold" onclick="coAgregarLinea()"><i class="bi bi-plus-lg me-1"></i> Agregar concepto</button>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-sm align-middle hist-co-tabla mb-0">
+                        <thead>
+                            <tr>
+                                <th style="width:110px;">Movimiento</th>
+                                <th style="width:125px;">Sección</th>
+                                <th>Concepto</th>
+                                <th style="width:190px;">Proveedor <span class="text-lowercase fw-normal">(según la sección)</span></th>
+                                <th style="width:115px;">Valor neto</th>
+                                <th style="width:78px;">Moneda</th>
+                                <th style="width:98px;">Impuesto</th>
+                                <th style="width:150px;">N° documento(s)</th>
+                                <th style="width:32px;"></th>
+                            </tr>
+                        </thead>
+                        <tbody id="coLineas"></tbody>
+                    </table>
+                </div>
+                <div class="hist-note mt-2">Ingreso = cobro al cliente · Egreso = costo del proveedor. Varios documentos (facturas / notas de cobro) se separan con coma.</div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-link btn-sm text-muted" data-bs-dismiss="modal">Cancelar</button>
+                <button type="submit" class="btn btn-dark btn-sm fw-bold px-3"><i class="bi bi-check2 me-1"></i> Guardar operación</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+@{
+    var provJson = System.Text.Json.JsonSerializer.Serialize(Model.ProveedoresPorSeccion.ToDictionary(k => k.Key, v => v.Value.Select(o => new[] { o.Valor, o.Nombre }).ToList()))
+        .Replace("</", "<\\/");
+}
+<script type="application/json" id="coProveedoresJson">@Html.Raw(provJson)</script>
+<template id="tplLineaCo">
+    <tr>
+        <td><select class="form-select form-select-sm" data-f="Tipo"><option value="INGRESO">Ingreso</option><option value="EGRESO" selected>Egreso</option></select></td>
+        <td>
+            <select class="form-select form-select-sm" data-f="Seccion">
+                @foreach (var sec in AtilsonCargoSpa.Helpers.ConceptoExtraordinarioHelper.Secciones)
+                {
+                    <option value="@sec.Texto">@sec.Texto</option>
+                }
+            </select>
+        </td>
+        <td><input class="form-control form-control-sm" data-f="Concepto" maxlength="200" placeholder="Ej: Flete marítimo, Honorarios agencia" /></td>
+        <td>
+            @* 13-nov: las opciones se cargan según la sección del concepto (coLlenarProveedores). *@
+            <select class="form-select form-select-sm co-prov" data-f="Proveedor" data-buscador="no">
+                <option value="">—</option>
+            </select>
+            <input class="form-control form-control-sm mt-1 d-none co-prov-txt" data-f="ProveedorTexto" maxlength="200" placeholder="Nombre del proveedor" />
+        </td>
+        <td><input class="form-control form-control-sm text-end" data-f="Monto" inputmode="decimal" placeholder="0" /></td>
+        <td><select class="form-select form-select-sm" data-f="Moneda"><option value="CLP">CLP</option><option value="USD">USD</option></select></td>
+        <td><select class="form-select form-select-sm" data-f="Iva"><option value="AFECTO">Afecto IVA</option><option value="EXENTO">Exento</option></select></td>
+        <td><input class="form-control form-control-sm text-uppercase" data-f="Documentos" maxlength="300" placeholder="F-123, NC-45" /></td>
+        <td class="text-center"><button type="button" class="btn btn-link btn-sm text-danger p-0" onclick="coQuitarLinea(this)" title="Quitar concepto"><i class="bi bi-x-lg"></i></button></td>
+    </tr>
+</template>
+
+<style>
+    .hist-crear { border-left: 3px solid #2c1b4d; }
+    .hist-crear-modal .modal-title { font-size: 16px; font-weight: 800; color: #1d1530; }
+    .hist-co-tabla th { font-size: 9px; text-transform: uppercase; letter-spacing: .04em; color: #64748b; white-space: nowrap; font-weight: 800; }
+    .hist-co-tabla td { padding: 4px 4px; }
+    .hist-co-tabla .form-control-sm, .hist-co-tabla .form-select-sm { font-size: 11.5px; }
+</style>
+
+@section Scripts {
+    <script>
+        (function () {
+            const tbody = document.getElementById('coLineas');
+            const tpl = document.getElementById('tplLineaCo');
+            function renombrar() {
+                Array.from(tbody.rows).forEach((tr, i) => tr.querySelectorAll('[data-f]').forEach(el => el.name = `Creacion.Lineas[${i}].${el.dataset.f}`));
+            }
+            // 13-nov: proveedores según la sección (Marítimo → navieras, Documental → agencias de aduana,
+            // Terrestre → transportistas, Almacenaje → depósitos, Otros → todos). Un cobro (ingreso) no lleva
+            // proveedor: es al cliente del booking.
+            const provPorSeccion = JSON.parse(document.getElementById('coProveedoresJson').textContent || '{}');
+            function coLlenarProveedores(tr, preferido) {
+                const sel = tr.querySelector('.co-prov');
+                const seccion = tr.querySelector('[data-f="Seccion"]').value;
+                const tipo = tr.querySelector('[data-f="Tipo"]').value;
+                const previo = preferido !== undefined ? preferido : sel.value;
+                const lista = provPorSeccion[seccion] || [];
+                sel.innerHTML = '';
+                const vacio = document.createElement('option');
+                vacio.value = '';
+                vacio.textContent = tipo === 'INGRESO' ? '— cobro al cliente —' : (lista.length ? 'Seleccionar…' : '—');
+                sel.appendChild(vacio);
+                lista.forEach(([valor, nombre]) => { const o = document.createElement('option'); o.value = valor; o.textContent = nombre; sel.appendChild(o); });
+                const otro = document.createElement('option');
+                otro.value = 'otro'; otro.textContent = 'Otro (escribir)';
+                sel.appendChild(otro);
+                sel.disabled = tipo === 'INGRESO';
+                if (tipo !== 'INGRESO') {
+                    const cab = document.getElementById('coProveedor').value;
+                    const nav = document.getElementById('coNaviera').value;
+                    const opciones = Array.from(sel.options).map(o => o.value);
+                    if (previo && opciones.includes(previo)) sel.value = previo;
+                    else if (cab && opciones.includes(cab)) sel.value = cab;
+                    else if (seccion === 'Marítimo' && nav && opciones.includes('nav:' + nav)) sel.value = 'nav:' + nav;
+                }
+                tr.querySelector('.co-prov-txt').classList.toggle('d-none', sel.value !== 'otro' || sel.disabled);
+            }
+            window.coAgregarLinea = function () {
+                const fila = tpl.content.firstElementChild.cloneNode(true);
+                tbody.appendChild(fila);
+                coLlenarProveedores(fila, '');
+                renombrar();
+                fila.querySelector('[data-f="Concepto"]').focus();
+            };
+            window.coQuitarLinea = function (btn) {
+                btn.closest('tr').remove();
+                if (!tbody.rows.length) coAgregarLinea();
+                renombrar();
+            };
+            tbody.addEventListener('change', ev => {
+                const t = ev.target;
+                if (t.classList.contains('co-prov')) t.closest('td').querySelector('.co-prov-txt').classList.toggle('d-none', t.value !== 'otro');
+                else if (t.dataset.f === 'Seccion') coLlenarProveedores(t.closest('tr'), '');
+                else if (t.dataset.f === 'Tipo') coLlenarProveedores(t.closest('tr'));
+            });
+            document.getElementById('coCliente').addEventListener('change', ev => {
+                document.getElementById('coClienteTexto').classList.toggle('d-none', ev.target.value !== 'otro');
+            });
+            document.getElementById('coProveedor').addEventListener('change', ev => {
+                // El proveedor del encabezado se copia a los costos que aún no tienen uno (si es de su sección).
+                Array.from(tbody.rows).forEach(tr => {
+                    const tipo = tr.querySelector('[data-f="Tipo"]').value, sel = tr.querySelector('.co-prov');
+                    if (tipo === 'EGRESO' && !sel.value && Array.from(sel.options).some(o => o.value === ev.target.value)) sel.value = ev.target.value;
+                });
+            });
+            document.getElementById('coNaviera').addEventListener('change', ev => {
+                // La naviera del encabezado es el proveedor por defecto de los costos marítimos.
+                Array.from(tbody.rows).forEach(tr => {
+                    const tipo = tr.querySelector('[data-f="Tipo"]').value, sel = tr.querySelector('.co-prov');
+                    const val = 'nav:' + ev.target.value;
+                    if (tipo === 'EGRESO' && !sel.value && Array.from(sel.options).some(o => o.value === val)) sel.value = val;
+                });
+            });
+            document.getElementById('formCrearOp').addEventListener('submit', ev => {
+                if (!document.getElementById('coBooking').value.trim()) { ev.preventDefault(); alert('Ingresa el N° de booking.'); return; }
+                const cli = document.getElementById('coCliente').value;
+                if (!cli || (cli === 'otro' && !document.getElementById('coClienteTexto').value.trim())) {
+                    if (!confirm('No elegiste el cliente. Si el booking ya existe se usan sus datos; si es nuevo, se pedirá el cliente. ¿Continuar?')) ev.preventDefault();
+                }
+            });
+            coAgregarLinea();
+        })();
+    </script>
+}

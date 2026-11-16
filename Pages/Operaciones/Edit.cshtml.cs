@@ -49,6 +49,19 @@ namespace AtilsonCargoSpa.Pages.Operaciones
             return Page();
         }
 
+        // nov-2026: igual que Create. double.TryParse con la cultura del servidor (es-CL)
+        // convertía "-0.5" en -5 y "2.5" en 25 al editar un booking.
+        private static decimal? LeerNumero(string? valor)
+        {
+            if (string.IsNullOrWhiteSpace(valor)) return null;
+            var limpio = new string(valor.Trim().Where(c => char.IsDigit(c) || c == '.' || c == ',' || c == '-').ToArray());
+            if (limpio.Length == 0) return null;
+            if (limpio.Contains(',') && !limpio.Contains('.')) limpio = limpio.Replace(',', '.');
+            else limpio = limpio.Replace(",", "");
+            return decimal.TryParse(limpio, System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture, out var n) ? n : null;
+        }
+
         public async Task<IActionResult> OnPostAsync()
         {
             ModelState.Clear();
@@ -79,12 +92,21 @@ namespace AtilsonCargoSpa.Pages.Operaciones
                 .Include(o => o.ExtracostosOperacions)
                 .FirstOrDefaultAsync(m => m.Id == Operacione.Id);
 
+            // nov-2026: si se cambian los puertos, origen y destino no pueden ser del mismo país.
+            if (opDb != null && (opDb.IdPuertoOrigen != Operacione.IdPuertoOrigen || opDb.IdPuertoDestino != Operacione.IdPuertoDestino)
+                && await AtilsonCargoSpa.Helpers.PuertosHelper.MismoPaisAsync(_context, Operacione.IdPuertoOrigen, Operacione.IdPuertoDestino) is string paisRuta)
+            {
+                TempData["ErrorMsg"] = AtilsonCargoSpa.Helpers.PuertosHelper.MensajeMismoPais(paisRuta);
+                return RedirectToPage(new { id = Operacione.Id });
+            }
+
             if (opDb != null)
             {
                 // ========================================================================
                 // 1. CAPTURAR ESTADOS ANTERIORES (Para detectar las señales de Finanzas)
                 // ========================================================================
                 string estadoLarAnterior = opDb.EstadoLar;
+                var fotoNave = AtilsonCargoSpa.Services.FechasNave.De(opDb);
                 bool correctorAnterior = opDb.OperacionesDocumentales.FirstOrDefault()?.ExtensionDocumental == true;
 
 
@@ -99,23 +121,29 @@ namespace AtilsonCargoSpa.Pages.Operaciones
                 opDb.EstadoWorkflow = Operacione.EstadoWorkflow;
                 opDb.IdNaviera = Operacione.IdNaviera;
                 opDb.Nave = Operacione.Nave;
+                // La salida del maestro (nov-2026) se conserva solo si sigue siendo la misma nave y viaje.
+                await AtilsonCargoSpa.Helpers.ItinerariosHelper.AlinearConNaveAsync(_context, opDb);
                 opDb.Transbordo = Operacione.Transbordo;
                 opDb.TerminalPortuario = Operacione.TerminalPortuario;
                 opDb.IdPuertoOrigen = Operacione.IdPuertoOrigen;
                 opDb.IdPuertoDestino = Operacione.IdPuertoDestino;
-                opDb.EtdPol = Operacione.EtdPol;
-                opDb.EtaPod = Operacione.EtaPod;
+                opDb.EtdPol = AtilsonCargoSpa.Services.FechasNave.ConservarHora(Operacione.EtdPol, opDb.EtdPol);
+                opDb.EtaPod = AtilsonCargoSpa.Services.FechasNave.ConservarHora(Operacione.EtaPod, opDb.EtaPod);
                 opDb.FechaStacking = Operacione.FechaStacking;
                 opDb.CutOffMatriz = Operacione.CutOffMatriz;
 
-                opDb.EstadoLar = Request.Form.TryGetValue("EstadoLar", out var elar) && !string.IsNullOrWhiteSpace(elar) ? elar.ToString() : null;
+                opDb.EstadoLar = Request.Form.TryGetValue("Operacione.EstadoLar", out var elar) && !string.IsNullOrWhiteSpace(elar) ? elar.ToString()
+                               : (Request.Form.TryGetValue("EstadoLar", out var elar2) && !string.IsNullOrWhiteSpace(elar2) ? elar2.ToString() : null);
+                // Stacking OUT (cierre) = LateArrival. Con LAR autorizado / ingresado manda la fecha del LAR;
+                // sin LAR, el "Cierre (Out)" de Plazos de Stacking (antes se borraba al guardar sin LAR).
                 if (opDb.EstadoLar != null && (opDb.EstadoLar.Contains("AUTORIZADO") || opDb.EstadoLar.Contains("INGRESADO")))
                 {
-                    if (Request.Form.TryGetValue("LateArrival", out var lat) && DateTime.TryParse(lat, out DateTime ldt)) opDb.LateArrival = ldt;
+                    if (Operacione.LateArrival != null) opDb.LateArrival = Operacione.LateArrival;
+                    else if (Request.Form.TryGetValue("LateArrival", out var lat) && DateTime.TryParse(lat, out DateTime ldt)) opDb.LateArrival = ldt;
                 }
-                else
+                else if (Request.Form.TryGetValue("StackingCierre", out var stkCierre))
                 {
-                    opDb.LateArrival = null;
+                    opDb.LateArrival = DateTime.TryParse(stkCierre, out DateTime cdt) ? cdt : null;
                 }
                 opDb.ContenedorIngresado = Request.Form.TryGetValue("ContenedorIngresado", out var cIng) && cIng == "true";
 
@@ -129,11 +157,11 @@ namespace AtilsonCargoSpa.Pages.Operaciones
                 opDb.MarcaAc = Request.Form.TryGetValue("MarcaAc", out var ma) ? ma.ToString() : null;
                 opDb.Atmosfera = Request.Form.TryGetValue("TipoAtmosfera", out var ta) ? ta.ToString() : null;
 
-                if (Request.Form.TryGetValue("TempSeteada", out var ts) && double.TryParse(ts, out double t)) opDb.Temperatura = t; else opDb.Temperatura = null;
-                if (Request.Form.TryGetValue("Ventilacion", out var v) && double.TryParse(v, out double ve)) opDb.Ventilacion = ve; else opDb.Ventilacion = null;
-                if (Request.Form.TryGetValue("Humedad", out var h) && double.TryParse(h, out double hu)) opDb.Humedad = hu; else opDb.Humedad = null;
-                if (Request.Form.TryGetValue("NivelO2", out var o2) && double.TryParse(o2, out double o2v)) opDb.O2 = o2v; else opDb.O2 = null;
-                if (Request.Form.TryGetValue("NivelCO2", out var co2) && double.TryParse(co2, out double co2v)) opDb.Co2 = co2v; else opDb.Co2 = null;
+                opDb.Temperatura = (double?)LeerNumero(Request.Form["TempSeteada"]);
+                opDb.Ventilacion = (double?)LeerNumero(Request.Form["Ventilacion"]);
+                opDb.Humedad = (double?)LeerNumero(Request.Form["Humedad"]);
+                opDb.O2 = (double?)LeerNumero(Request.Form["NivelO2"]);
+                opDb.Co2 = (double?)LeerNumero(Request.Form["NivelCO2"]);
 
                 opDb.FechaModificacion = DateTime.Now;
                 opDb.UsuarioModificador = nombreUsuario;
@@ -234,11 +262,11 @@ namespace AtilsonCargoSpa.Pages.Operaciones
                             UsuarioCreador = nombreUsuario
                         };
 
-                        if (Request.Form.TryGetValue($"ContenedoresExtra[{i}].TempSeteada", out var tExt) && decimal.TryParse(tExt, out decimal tempExt)) nuevaU.Temperatura = tempExt;
+                        if (LeerNumero(Request.Form[$"ContenedoresExtra[{i}].TempSeteada"]) is decimal tempExt) nuevaU.Temperatura = tempExt;
                         if (Request.Form.TryGetValue($"ContenedoresExtra[{i}].Humedad", out var hExt) && int.TryParse(hExt, out int humExt)) nuevaU.Humedad = humExt;
                         if (Request.Form.TryGetValue($"ContenedoresExtra[{i}].Ventilacion", out var vExt) && int.TryParse(vExt, out int ventExt)) nuevaU.Ventilacion = ventExt;
-                        if (Request.Form.TryGetValue($"ContenedoresExtra[{i}].NivelO2", out var o2ExtVal) && decimal.TryParse(o2ExtVal, out decimal o2Ext)) nuevaU.NivelO2 = o2Ext;
-                        if (Request.Form.TryGetValue($"ContenedoresExtra[{i}].NivelCO2", out var co2ExtVal) && decimal.TryParse(co2ExtVal, out decimal co2Ext)) nuevaU.NivelCo2 = co2Ext;
+                        if (LeerNumero(Request.Form[$"ContenedoresExtra[{i}].NivelO2"]) is decimal o2Ext) nuevaU.NivelO2 = o2Ext;
+                        if (LeerNumero(Request.Form[$"ContenedoresExtra[{i}].NivelCO2"]) is decimal co2Ext) nuevaU.NivelCo2 = co2Ext;
 
                         var fileExtra = Request.Form.Files.GetFile($"EvidenciaExtra_{i}");
                         if (fileExtra != null && fileExtra.Length > 0)
@@ -307,6 +335,9 @@ namespace AtilsonCargoSpa.Pages.Operaciones
 
                 // Finalmente guardamos todo
                 await _context.SaveChangesAsync();
+                // Fechas de la nave: lo que cambió aquí pasa a la salida y a todos sus bookings.
+                var fechasNave = await AtilsonCargoSpa.Services.FechasNave.DesdeBookingAsync(_context, opDb, fotoNave, nombreUsuario, "Edición completa");
+                if (fechasNave.Otros > 0 || fechasNave.CamposSalida.Count > 0) TempData["ToastOk"] = "Operación guardada." + fechasNave.Mensaje();
             }
             return RedirectToPage("./Index");
         }

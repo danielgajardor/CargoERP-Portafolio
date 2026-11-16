@@ -14,6 +14,8 @@
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
 <link rel="stylesheet" href="~/css/emision-bl.css" asp-append-version="true" />
+<link rel="stylesheet" href="~/css/buscador-salidas.css" asp-append-version="true" />
+<link rel="stylesheet" href="~/css/naves-catalogo.css" asp-append-version="true" />
 
 <style>
     /* VARIABLES CORPORATIVAS B2B ATILSON */
@@ -31,7 +33,7 @@
 
     body {
         background-color: var(--bg-body);
-        font-family: 'Inter', system-ui, -apple-system, sans-serif;
+        font-family: var(--font-sans);
     }
 
     /* SELECT2 — BÚSQUEDA PREDICTIVA (mismo motor que Comercial) */
@@ -134,6 +136,12 @@
     background-color: #fef2f2;
     box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.1);
     }
+    /* 13-nov: faltantes en Select2 y aviso en el paso del asistente. */
+    .cr-s2-invalido .select2-selection { border-color: #ef4444 !important; background-color: #fef2f2 !important; box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.1) !important; }
+    .cr-desde-salida { background-color: #f5f0fd !important; border-color: #c4b5fd !important; }
+    .cr-stack-aviso { font-size: 11.5px; font-weight: 700; color: #6d2d9e; margin-top: 4px; }
+    .cr-stack-aviso:empty { display: none; }
+    .cr-falta-badge { display: inline-flex; align-items: center; justify-content: center; min-width: 17px; height: 17px; padding: 0 5px; margin-left: 6px; border-radius: 999px; background: #ef4444; color: #fff; font-size: 10px; font-weight: 800; line-height: 1; }
 
     /* WIZARD CONTAINER */
     .wizard-container {
@@ -577,6 +585,12 @@
                                 <option value="">-- PAÍS --</option>
                             </select>
                         </div>
+                        <div class="col-md-3 d-none" id="divPaisDestinoContainer">
+                            <label class="erp-label">País de Destino (Importación)</label>
+                            <select name="PaisDestinoImpo" class="form-select erp-input text-uppercase" id="inpPaisDestino" onchange="poblarPuertosDestino(); poblarDepositos();">
+                                <option value="">-- SELECCIONAR PAÍS --</option>
+                            </select>
+                        </div>
                         <div class="col-md-3" id="colCliente">
                             <label class="erp-label">Cliente Asociado <span class="text-danger">*</span></label>
                             <select asp-for="Operacione.IdCliente" class="form-select erp-input req-general select2-enable" id="inpCliente" asp-items="ViewBag.IdCliente">
@@ -610,22 +624,12 @@
                         <div class="section-title mt-2">
                             <div><i class="bi bi-life-preserver"></i> Datos del Embarque</div>
                         </div>
-                        <div class="row g-4 mb-4" id="embarqueRow">
-                            <div class="col-md-3" id="bookingFieldWrapper">
+                        <div class="row g-4 mb-3" id="embarqueRow">
+                            <div class="col-md-6" id="bookingFieldWrapper">
                                 <label class="erp-label text-primary">Booking / Ref N° <span class="text-danger">*</span></label>
                                 <input asp-for="Operacione.NumeroBooking" class="form-control erp-input text-uppercase fw-bold border-primary req-general" id="inpBooking" placeholder="Ej: SCL123456" style="background-color: #f0f9ff;" />
                             </div>
-                            <div class="col-md-3" id="colNaviera">
-                                <label class="erp-label">Naviera <span class="text-danger">*</span></label>
-                                <select asp-for="Operacione.IdNaviera" class="form-select erp-input select2-enable" id="inpNaviera" asp-items="ViewBag.IdNaviera">
-                                    <option value="">-- Seleccionar --</option>
-                                </select>
-                            </div>
-                            <div class="col-md-3" id="colNave">
-                                <label class="erp-label">Nave / Viaje <span class="text-danger" id="astNave" style="display:none;">*</span></label>
-                                <input asp-for="Operacione.Nave" class="form-control erp-input text-uppercase" id="inpNave" maxlength="150" placeholder="Nombre de la Nave" />
-                            </div>
-                            <div class="col-md-3" id="colPropietario">
+                            <div class="col-md-6" id="colPropietario">
                                 <label class="erp-label">Propietario de Contrato <span class="text-danger">*</span></label>
                                 <select asp-for="Operacione.PropietarioContrato" class="form-select erp-input" id="inpPropietario" onchange="togglePropietarioOtro()">
                                     <option value="">-- Seleccionar --</option>
@@ -635,6 +639,124 @@
                                     }
                                 </select>
                                 <input asp-for="Operacione.PropietarioContratoOtro" class="form-control erp-input text-uppercase mt-2" id="inpPropietarioOtro" maxlength="100" placeholder="Cliente / recibidor (opcional)" style="display:none;" />
+                            </div>
+                        </div>
+
+                        @* nov-2026: buscador de salidas del maestro de itinerarios (para todos los servicios).
+                           1) POL, POD y fecha de inicio → Buscar; 2) salidas en tarjetas (6 semanas, «ver más»);
+                           3) al elegir, se rellenan Naviera, Nave / Viaje, Modalidad de Tránsito, ETD, ETA y Corte.
+                           La nave no se escribe a mano: si no está, «Agregar salida». Ver wwwroot/js/buscador-salidas.js. *@
+                        <div class="emb-card mb-3" id="embBuscador">
+                            <div class="emb-paso"><span class="emb-num">1</span> Buscar salida en itinerarios</div>
+                            <div class="row g-3 align-items-end">
+                                <div class="col-md-4" id="colPolBuscador">
+                                    <label class="erp-label" for="inpPol">Puerto de Origen (POL)</label>
+                                    <select asp-for="Operacione.IdPuertoOrigen" class="form-select erp-input text-uppercase req-maritimo select2-enable" id="inpPol" data-ruta="pol" onchange="actualizarTerminalMaritimo(); syncPuertoTerrestre(this);">
+                                        <option value="" data-pais="">-- Seleccione País Primero --</option>
+                                        @if (puertosDb != null)
+                                        {
+                                            foreach (var pto in puertosDb.GroupBy(p => p.NombrePuerto).Select(g => g.First()))
+                                            {
+                                                <option value="@pto.Id" data-pais="@(pto.Pais?.ToUpper() ?? "OTROS")">@pto.NombrePuerto</option>
+                                            }
+                                        }
+                                    </select>
+                                </div>
+                                <div class="col-md-4" id="colPodBuscador">
+                                    <label class="erp-label" for="inpPod">Puerto de Destino (POD)</label>
+                                    <select asp-for="Operacione.IdPuertoDestino" class="form-select erp-input text-uppercase req-maritimo select2-enable" id="inpPod" data-ruta="pod" onchange="actualizarTerminalMaritimoImpo(); syncPuertoTerrestre(this);">
+                                        <option value="" data-pais="">-- Seleccionar Puerto --</option>
+                                        @if (puertosDb != null)
+                                        {
+                                            foreach (var pto in puertosDb.GroupBy(p => p.NombrePuerto).Select(g => g.First()))
+                                            {
+                                                <option value="@pto.Id" data-pais="@(pto.Pais?.ToUpper() ?? "OTROS")">@pto.NombrePuerto</option>
+                                            }
+                                        }
+                                    </select>
+                                </div>
+                                <div class="col-md-2">
+                                    <label class="erp-label" for="embFechaInicio">Fecha de inicio</label>
+                                    <input type="date" class="form-control erp-input" id="embFechaInicio" />
+                                </div>
+                                <div class="col-md-2">
+                                    <button type="button" class="btn emb-btn-buscar w-100" id="embBuscar"><i class="bi bi-search me-1"></i> Buscar</button>
+                                </div>
+                            </div>
+                            <small class="d-none" id="hintDestinoCot" style="display:block; margin-top:5px; font-size:11px; font-weight:600; color: var(--atilson-purple);"></small>
+                            <div class="emb-aviso d-none" id="embAviso" role="status"></div>
+                        </div>
+
+                        <div class="emb-resultados mb-3 d-none" id="embResultados" aria-live="polite">
+                            <div class="emb-res-cab">
+                                <div class="emb-paso m-0"><span class="emb-num">2</span> <span id="embResTitulo"></span></div>
+                                <div class="emb-filtros" id="embFiltros"></div>
+                            </div>
+                            <div class="emb-lista" id="embLista"></div>
+                            <div class="emb-res-pie">
+                                <button type="button" class="btn emb-btn-sec d-none" id="embVerMas"><i class="bi bi-chevron-down me-1"></i> Ver 6 semanas más</button>
+                                <button type="button" class="btn emb-btn-sec" id="embAgregar"><i class="bi bi-plus-lg me-1"></i> Agregar salida</button>
+                            </div>
+                        </div>
+
+                        @* Aparece al elegir una salida. Naviera y Nave / Viaje son de la salida (solo se muestran:
+                           para cambiarlas se elige otra salida); modalidad y fechas quedan editables. *@
+                        <div class="emb-card mb-4 d-none" id="embSeleccion">
+                            <div class="emb-paso"><span class="emb-num">3</span> Salida elegida <span class="emb-paso-nota"><span id="embInfoSalida"></span> · modalidad y fechas editables</span></div>
+                            @* Misma grilla que los campos de abajo: los datos de la salida quedan alineados con ellos. *@
+                            <div class="row g-3">
+                                <div class="col-md-6 col-lg-3">
+                                    <div class="erp-label">Naviera</div>
+                                    <div class="emb-dato-val" id="embInfoNaviera">—</div>
+                                </div>
+                                <div class="col-md-6 col-lg-3">
+                                    <div class="erp-label">Nave / Viaje</div>
+                                    <div class="emb-dato-val" id="embInfoNave">—</div>
+                                </div>
+                                <div class="col-md-6 col-lg-3">
+                                    <div class="erp-label">Ruta</div>
+                                    <div class="emb-dato-val" id="embInfoRuta">—</div>
+                                </div>
+                                <div class="col-md-6 col-lg-3 d-flex align-items-end justify-content-lg-end">
+                                    <button type="button" class="emb-btn-sec emb-btn-cambiar" data-cambiar-salida><i class="bi bi-arrow-repeat me-1"></i> Cambiar salida</button>
+                                </div>
+                            </div>
+                            @* Campos que se guardan (los llena la salida elegida). *@
+                            <div class="d-none" id="colNaviera">
+                                <label class="erp-label">Naviera <span class="text-danger">*</span></label>
+                                <select asp-for="Operacione.IdNaviera" class="form-select erp-input select2-enable" id="inpNaviera" asp-items="ViewBag.IdNaviera">
+                                    <option value="">-- Seleccionar --</option>
+                                </select>
+                            </div>
+                            <div class="d-none" id="colNave">
+                                <label class="erp-label" for="inpNave">Nave / Viaje <span class="text-danger" id="astNave" style="display:none;">*</span></label>
+                                <input type="hidden" name="Operacione.Nave" id="inpNave" value="@Model.Operacione?.Nave" />
+                                <input type="hidden" name="Operacione.IdItinerario" id="inpIdItinerario" value="@Model.Operacione?.IdItinerario" />
+                                <div class="naves-hint" id="naveHint" aria-live="polite"></div>
+                            </div>
+                            <div class="row g-3 mt-1">
+                                <div class="col-md-6 col-lg-3">
+                                    <label class="erp-label">Modalidad de Tránsito</label>
+                                    <div class="d-flex gap-2">
+                                        <select class="form-select erp-input" id="selectTransbordo" style="flex: 1 1 0; min-width: 0;">
+                                            <option value="DIRECTO">Directo</option>
+                                            <option value="TRANSBORDO">Transbordo</option>
+                                        </select>
+                                        <input asp-for="Operacione.Transbordo" class="form-control erp-input text-uppercase" id="divPuertoTransbordo" placeholder="Puerto..." style="display: none; flex: 1 1 0; min-width: 0;" />
+                                    </div>
+                                </div>
+                                <div class="col-md-6 col-lg-3">
+                                    <label class="erp-label">ETD (Zarpe)</label>
+                                    <input asp-for="Operacione.EtdPol" type="date" class="form-control erp-input" id="inpEtd" />
+                                </div>
+                                <div class="col-md-6 col-lg-3">
+                                    <label class="erp-label">ETA (Arribo)</label>
+                                    <input asp-for="Operacione.EtaPod" type="date" class="form-control erp-input" id="inpEta" />
+                                </div>
+                                <div class="col-md-6 col-lg-3">
+                                    <label class="erp-label text-primary">Corte Documental (Matriz BL)</label>
+                                    <input asp-for="Operacione.CutOffMatriz" type="datetime-local" id="inpCorteDoc" class="form-control erp-input border-primary" />
+                                </div>
                             </div>
                         </div>
 
@@ -737,17 +859,7 @@
                     </div>
                     <div class="row g-4 mb-5" id="maritimoRow">
                         <div class="col-12">
-                            <div class="text-muted" style="font-size:11.5px;"><i class="bi bi-info-circle me-1"></i>Naviera, Nave y Propietario de Contrato se ingresan en <strong>Datos del Embarque</strong> (pestaña Base y Carga).</div>
-                        </div>
-                        <div class="col-md-6">
-                            <label class="erp-label">Modalidad de Tránsito</label>
-                            <div class="d-flex gap-2">
-                                <select class="form-select erp-input" id="selectTransbordo" style="width: 50%;">
-                                    <option value="DIRECTO">Directo</option>
-                                    <option value="TRANSBORDO">Transbordo</option>
-                                </select>
-                                <input asp-for="Operacione.Transbordo" class="form-control erp-input text-uppercase" id="divPuertoTransbordo" placeholder="Puerto..." style="display: none; width: 50%;" />
-                            </div>
+                            <div class="text-muted" style="font-size:11.5px;"><i class="bi bi-info-circle me-1"></i>Naviera, Nave / Viaje, puertos, ETD, ETA, Corte Documental y Modalidad de Tránsito se ingresan en <strong>Datos del Embarque</strong> (pestaña Base y Carga).</div>
                         </div>
                         <div class="col-md-6">
                             <label class="erp-label" for="inpTipoTarifa">Condición de Tarifa</label>
@@ -800,16 +912,7 @@
                             <div class="row g-2">
                                 <div class="col-md-7" id="divPolSelectContainer">
                                     <label class="erp-label">Puerto de Origen (POL)</label>
-                                    <select asp-for="Operacione.IdPuertoOrigen" class="form-select erp-input text-uppercase req-maritimo select2-enable" id="inpPol" onchange="actualizarTerminalMaritimo(); syncPuertoTerrestre(this);">
-                                        <option value="" data-pais="">-- Seleccione País Primero --</option>
-                                        @if (puertosDb != null)
-                                        {
-                                            foreach (var pto in puertosDb.GroupBy(p => p.NombrePuerto).Select(g => g.First()))
-                                            {
-                                                <option value="@pto.Id" data-pais="@(pto.Pais?.ToUpper() ?? "OTROS")">@pto.NombrePuerto</option>
-                                            }
-                                        }
-                                    </select>
+                                    <input type="text" class="form-control erp-input text-uppercase emb-espejo" id="inpPolEspejo" readonly tabindex="-1" placeholder="Se elige en Datos del Embarque" />
                                 </div>
                                 <div class="col-md-5" id="divTerminalExpo">
                                     <label class="erp-label">Terminal</label>
@@ -825,25 +928,9 @@
 
                         <div class="col-md-6">
                             <div class="row g-2">
-                                <div class="col-md-12 mb-2 d-none" id="divPaisDestinoContainer">
-                                    <label class="erp-label">País de Destino (Importación)</label>
-                                    <select name="PaisDestinoImpo" class="form-select erp-input text-uppercase" id="inpPaisDestino" onchange="poblarPuertosDestino(); poblarDepositos();">
-                                        <option value="">-- SELECCIONAR PAÍS --</option>
-                                    </select>
-                                </div>
                                 <div class="col-md-12" id="divPodSelectContainer">
                                     <label class="erp-label">Puerto de Destino (POD)</label>
-                                    <select asp-for="Operacione.IdPuertoDestino" class="form-select erp-input text-uppercase req-maritimo select2-enable" id="inpPod" onchange="actualizarTerminalMaritimoImpo(); syncPuertoTerrestre(this);">
-                                        <option value="" data-pais="">-- Seleccionar Puerto --</option>
-                                        @if (puertosDb != null)
-                                        {
-                                            foreach (var pto in puertosDb.GroupBy(p => p.NombrePuerto).Select(g => g.First()))
-                                            {
-                                                <option value="@pto.Id" data-pais="@(pto.Pais?.ToUpper() ?? "OTROS")">@pto.NombrePuerto</option>
-                                            }
-                                        }
-                                    </select>
-                                    <small class="d-none" id="hintDestinoCot" style="display:block; margin-top:5px; font-size:11px; font-weight:600; color: var(--atilson-purple);"></small>
+                                    <input type="text" class="form-control erp-input text-uppercase emb-espejo" id="inpPodEspejo" readonly tabindex="-1" placeholder="Se elige en Datos del Embarque" />
                                 </div>
                                 <div class="col-md-12 mt-2 d-none" id="divTerminalImpo">
                                     <label class="erp-label">Terminal Llegada</label>
@@ -864,13 +951,9 @@
                         <div><i class="bi bi-calendar3"></i> Fechas Estimadas e Hitos de Corte Marítimo</div>
                     </div>
                     <div class="row g-4 mb-4">
-                        <div class="col-md-3">
-                            <label class="erp-label">ETD (Zarpe)</label>
-                            <input asp-for="Operacione.EtdPol" type="date" class="form-control erp-input" id="inpEtd" />
-                        </div>
-                        <div class="col-md-3">
-                            <label class="erp-label">ETA (Arribo)</label>
-                            <input asp-for="Operacione.EtaPod" type="date" class="form-control erp-input" id="inpEta" />
+                        <div class="col-12">
+                            <div class="text-muted" style="font-size:11.5px;"><i class="bi bi-info-circle me-1"></i>ETD (Zarpe), ETA (Arribo), Corte Documental y Stacking vienen de la salida elegida en <strong>Datos del Embarque</strong> (stacking Dry o Reefer según la carga). Si la salida aún no tiene stacking y lo ingresas aquí, queda en la salida y se copia a los demás bookings de esa nave.</div>
+                            <div class="cr-stack-aviso" id="crStackAviso"></div>
                         </div>
                         <div class="col-md-3">
                             <label class="erp-label text-success">Stacking IN (Apertura)</label>
@@ -879,10 +962,6 @@
                         <div class="col-md-3">
                             <label class="erp-label text-danger">Stacking OUT (Cierre)</label>
                             <input asp-for="Operacione.LateArrival" id="inpStackingOut" type="datetime-local" class="form-control erp-input border-danger" />
-                        </div>
-                        <div class="col-md-4 mt-4">
-                            <label class="erp-label text-primary">Corte Documental (Matriz BL)</label>
-                            <input asp-for="Operacione.CutOffMatriz" type="datetime-local" id="inpCorteDoc" class="form-control erp-input border-primary" />
                         </div>
                     </div>
                 </div>
@@ -1003,6 +1082,18 @@
                             </select>
                             <div class="text-muted mt-1" style="font-size:11px;">Para la tarifa del Gate y saber a qué depósito pagar.</div>
                         </div>
+                        @* nov-2026: el ISPS (Seguridad de la Carga) es un cobro documental por contenedor y
+                           depende del terminal portuario. Sin Marítimo ni Terrestre, el terminal se elige aquí. *@
+                        <div class="col-md-6">
+                            <label class="erp-label" for="inpTerminalIspsDoc">Terminal portuario (ISPS)</label>
+                            <select class="form-select erp-input text-uppercase" id="inpTerminalIspsDoc" name="TerminalIspsDoc">
+                                <option value="">Sin ISPS / no aplica</option>
+                                <option value="TPS">TPS · Valparaíso</option>
+                                <option value="STI">STI · San Antonio</option>
+                                <option value="DPW">DP World · San Antonio</option>
+                            </select>
+                            <div class="text-muted mt-1" style="font-size:11px;">Se cobra un ISPS por cada contenedor del booking.</div>
+                        </div>
                     </div>
                     <div class="row g-4 mb-5">
                         <div class="col-md-6">
@@ -1064,6 +1155,113 @@
 
         </div>
     </form>
+
+@* nov-2026: «Agregar salida» desde el buscador de Datos del Embarque. Mismos campos y validaciones
+   que Operaciones › Itinerarios de naves (se guarda en el maestro y queda elegida). *@
+<div class="modal fade emb-modal" id="modalAgregarSalida" tabindex="-1" aria-labelledby="embNvTitulo" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div>
+                    <h5 class="modal-title" id="embNvTitulo"><i class="bi bi-calendar-plus me-2"></i>Agregar salida</h5>
+                    <div class="emb-modal-nota">Queda en Itinerarios de naves y se elige para esta operación.</div>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body">
+                <div class="row g-3">
+                    <div class="col-md-4">
+                        <label class="erp-label" for="embNvNaviera">Naviera <span class="text-danger">*</span></label>
+                        <select id="embNvNaviera" class="form-select erp-input" asp-items="ViewBag.IdNaviera">
+                            <option value="">Seleccionar…</option>
+                        </select>
+                    </div>
+                    <div class="col-md-5">
+                        <label class="erp-label" for="embNvNave">Nave <span class="text-danger">*</span></label>
+                        <select id="embNvNave" class="form-select erp-input"></select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="erp-label" for="embNvViaje">N° viaje <span class="text-danger">*</span></label>
+                        <input id="embNvViaje" class="form-control erp-input text-uppercase" maxlength="40" placeholder="Ej: 432N" />
+                    </div>
+                    <div class="col-md-6">
+                        <label class="erp-label" for="embNvPol">Puerto de origen (POL) <span class="text-danger">*</span></label>
+                        <select id="embNvPol" class="form-select erp-input" data-ruta="pol">
+                            <option value="">Seleccionar…</option>
+                            @if (puertosDb != null)
+                            {
+                                foreach (var pto in puertosDb.GroupBy(p => p.NombrePuerto).Select(g => g.First()))
+                                {
+                                    <option value="@pto.Id" data-pais="@(pto.Pais?.ToUpper() ?? "")">@pto.NombrePuerto</option>
+                                }
+                            }
+                        </select>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="erp-label" for="embNvPod">Puerto de destino (POD) <span class="text-danger">*</span></label>
+                        <select id="embNvPod" class="form-select erp-input" data-ruta="pod">
+                            <option value="">Seleccionar…</option>
+                            @if (puertosDb != null)
+                            {
+                                foreach (var pto in puertosDb.GroupBy(p => p.NombrePuerto).Select(g => g.First()))
+                                {
+                                    <option value="@pto.Id" data-pais="@(pto.Pais?.ToUpper() ?? "")">@pto.NombrePuerto</option>
+                                }
+                            }
+                        </select>
+                    </div>
+                    <div class="col-md-6 col-lg-3">
+                        <label class="erp-label" for="embNvEtd">ETD · fecha y hora de zarpe <span class="text-danger">*</span></label>
+                        <input id="embNvEtd" type="datetime-local" class="form-control erp-input" />
+                    </div>
+                    <div class="col-md-6 col-lg-3">
+                        <label class="erp-label" for="embNvEta">ETA · fecha y hora de arribo <span class="text-danger">*</span></label>
+                        <input id="embNvEta" type="datetime-local" class="form-control erp-input" />
+                        <small class="emb-modal-nota" id="embNvTransito" aria-live="polite"></small>
+                    </div>
+                    <div class="col-md-6 col-lg-3">
+                        <label class="erp-label" for="embNvCorte">Corte documental</label>
+                        <input id="embNvCorte" type="datetime-local" class="form-control erp-input" />
+                    </div>
+                    <div class="col-md-6 col-lg-3">
+                        <label class="erp-label" for="embNvTransbordo">Transbordo</label>
+                        <input id="embNvTransbordo" class="form-control erp-input text-uppercase" maxlength="150" placeholder="Vacío = directo" />
+                    </div>
+                    <div class="col-12">
+                        <div class="emb-modal-nota fw-bold mb-1"><i class="bi bi-box-seam me-1"></i>Stacking de la nave (opcional — si la naviera aún no lo da, se completa después)</div>
+                        <div class="row g-2">
+                            <div class="col-md-6 col-lg-3">
+                                <label class="erp-label" for="embNvStkDryIni">Dry · apertura</label>
+                                <input id="embNvStkDryIni" type="datetime-local" class="form-control erp-input" />
+                            </div>
+                            <div class="col-md-6 col-lg-3">
+                                <label class="erp-label" for="embNvStkDryFin">Dry · cierre</label>
+                                <input id="embNvStkDryFin" type="datetime-local" class="form-control erp-input" />
+                            </div>
+                            <div class="col-md-6 col-lg-3">
+                                <label class="erp-label" for="embNvStkRfIni">Reefer · apertura</label>
+                                <input id="embNvStkRfIni" type="datetime-local" class="form-control erp-input" />
+                            </div>
+                            <div class="col-md-6 col-lg-3">
+                                <label class="erp-label" for="embNvStkRfFin">Reefer · cierre</label>
+                                <input id="embNvStkRfFin" type="datetime-local" class="form-control erp-input" />
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-12">
+                        <label class="erp-label" for="embNvObs">Observaciones <span class="emb-modal-nota">(las ve el cliente)</span></label>
+                        <input id="embNvObs" class="form-control erp-input" maxlength="500" placeholder="Ej: servicio semanal, sujeto a confirmación de espacio" />
+                    </div>
+                </div>
+                <div class="alert alert-danger py-2 small mt-3 mb-0 d-none" id="embNvError" role="alert"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-link text-muted" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn emb-btn-buscar px-4" id="embNvGuardar" style="height:auto;"><i class="bi bi-check2 me-1"></i> Guardar salida</button>
+            </div>
+        </div>
+    </div>
+</div>
 </div>
 
 <div class="modal fade modal-resumen" id="modalConfirmacion" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
@@ -1159,11 +1357,38 @@
                     <span id="indicadorEnvio" class="badge" style="font-size: 12px; padding: 8px 14px; border-radius: 20px; display:none;"></span>
                 </div>
             </div>
-            <div class="modal-body p-0" style="background: #f1f5f9;">
-                <iframe id="iframePdf" src="" style="width: 100%; height: 70vh; border: none; display: none;"></iframe>
-                <div id="pdfLoadingSpinner" style="height: 70vh; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 16px;">
-                    <div class="spinner-border text-primary" style="width: 3rem; height: 3rem;"></div>
-                    <p class="text-muted fw-semibold" style="font-size: 14px;">Generando documento...</p>
+            <div class="modal-body p-3" style="background:#f1f5f9;">
+                <div class="row g-3">
+                    <div class="col-12 col-lg-6">
+                        <div class="bg-white border rounded-3 overflow-hidden">
+                            <div class="px-3 py-2 border-bottom small fw-bold">Documento de reserva</div>
+                            <iframe id="iframePdf" title="Documento de booking" src="about:blank" style="width:100%;height:54vh;min-height:360px;border:0;display:none;"></iframe>
+                            <div id="pdfLoadingSpinner" style="height:54vh;min-height:360px;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:12px;">
+                                <div class="spinner-border text-primary"></div>
+                                <p class="text-muted small">Generando documento...</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-12 col-lg-6">
+                        <div class="bg-white border rounded-3 p-3">
+                            <div class="d-flex justify-content-between align-items-center gap-2 mb-2">
+                                <strong class="small">Correo de confirmación al cliente</strong>
+                                <button type="button" id="btnActualizarCorreoBookingCreate" class="btn btn-outline-primary btn-sm">Actualizar vista previa</button>
+                            </div>
+                            <label for="emailDestinoBookingCreate" class="form-label fw-semibold small mb-1">Destinatario</label>
+                            <input id="emailDestinoBookingCreate" type="email" class="form-control form-control-sm mb-2" autocomplete="off" />
+                            <label for="emailAsuntoBookingCreate" class="form-label fw-semibold small mb-1">Asunto (editable)</label>
+                            <input id="emailAsuntoBookingCreate" type="text" maxlength="200" class="form-control form-control-sm mb-2" autocomplete="off" />
+                            <label for="emailMensajeBookingCreate" class="form-label fw-semibold small mb-1">Mensaje adicional (opcional)</label>
+                            <textarea id="emailMensajeBookingCreate" rows="2" maxlength="1200"
+                                      class="form-control form-control-sm mb-2"
+                                      placeholder="Información adicional que recibirá el cliente"></textarea>
+                            <p class="small text-muted">La ruta, fechas y contenedores se obtienen de la operación guardada. Para corregirlos, edita el booking.</p>
+                            <div id="emailEstadoSmtpCreate" class="small mb-2" role="status" aria-live="polite"></div>
+                            <iframe id="iframeCorreoBookingCreate" title="Correo real de reserva" sandbox="" referrerpolicy="no-referrer"
+                                    style="width:100%;height:30vh;min-height:200px;border:1px solid #e2e8f0;border-radius:8px;"></iframe>
+                        </div>
+                    </div>
                 </div>
             </div>
             <div class="modal-footer justify-content-between" style="background-color: var(--bg-soft); border-top: 1px solid #e2e8f0; padding: 18px 30px;">
@@ -1179,10 +1404,20 @@
     </div>
 </div>
 
+<style>
+    .naves-hint { font-size: 11px; color: #64748b; margin-top: 4px; line-height: 1.35; }
+    .naves-hint--ok { color: #15803d; }
+    .naves-hint--error { color: #b45309; }
+    .naves-hint a { font-weight: 700; }
+</style>
+
 @section Scripts {
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <script src="~/js/emision-bl.js" asp-append-version="true"></script>
     <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+    <script src="~/js/naves-itinerario.js" asp-append-version="true"></script>
+    <script src="~/js/naves-catalogo.js" asp-append-version="true"></script>
+    <script src="~/js/buscador-salidas.js" asp-append-version="true"></script>
     <script>
         // =========================================================================
         // MAGIA ATILSON: AUTO-LLENADO PROFUNDO POR PDF (AJAX)
@@ -1233,7 +1468,7 @@
 
         if (result.data.nave) {
         const inp = document.getElementById('inpNave');
-        if (inp) { inp.value = result.data.nave.replace('PORT','').trim(); inp.dispatchEvent(new Event('change')); }
+        if (inp && inp._navesApi) inp._navesApi.fijarTexto(result.data.nave.replace('PORT','').trim());
         }
 
         if (result.data.commodity) {
@@ -1275,7 +1510,7 @@
         clienteEncontrado = true;
         }
         });
-        // Si no hay match exacto, busca la primera palabra (ej. PROMAR)
+        // Si no hay match exacto, busca la primera palabra (ej. MARFRIO)
         if(!clienteEncontrado) {
         let primeraPalabra = result.data.cliente.split(' ')[0];
         Array.from(selCliente.options).forEach(opt => {
@@ -1832,8 +2067,10 @@
 
         // --- 2. LÓGICA DEL WIZARD (Pestañas y Módulos) ---
         const ddlServicio = document.getElementById('ddlServicio');
-        const tabs = document.querySelectorAll('.nav-link');
-        const panes = document.querySelectorAll('.tab-pane');
+        // Solo las pestañas del asistente: con '.nav-link' a secas también se tomaban los enlaces del
+        // menú lateral del layout (el clic quedaba anulado y perdían la marca de página activa).
+        const tabs = document.querySelectorAll('#wizardTabs .nav-link');
+        const panes = document.querySelectorAll('.wizard-container .tab-pane');
         const btnPrev = document.getElementById('btnPrev');
         const btnNext = document.getElementById('btnNext');
         const btnResumen = document.getElementById('btnResumen');
@@ -2126,13 +2363,31 @@
         }
         }
 
+        // Naviera y Nave / Viaje salen de la salida elegida (la tarjeta aparece al elegirla).
+        // 13-nov: cada campo obligatorio vacío queda en rojo (también los Select2) y se lista con
+        // su paso del asistente; se abre el primer paso con faltantes.
+        let faltaSalida = false;
         document.querySelectorAll('.req-general, .req-activa').forEach(el => {
         if(!el.value) {
-        el.classList.add('is-invalid');
-        let label = el.previousElementSibling?.innerText.replace('*','').trim();
-        errores.push(label || "Campo Obligatorio");
+        if (el.id === 'inpNaviera' || el.id === 'inpNave') { faltaSalida = true; return; }
+        // Campos de pasos ocultos (servicio no contratado) o de bloques escondidos no cuentan.
+        const paso = el.closest('.tab-pane');
+        const pasoBtn = paso ? document.querySelector('#wizardTabs .nav-link[data-target="' + paso.id + '"]') : null;
+        if (pasoBtn && pasoBtn.closest('.nav-item') && pasoBtn.closest('.nav-item').style.display === 'none') return;
+        if (el.closest('.d-none') || (el.closest('[style*="display: none"]') && !el.classList.contains('select2-hidden-accessible'))) return;
+        crMarcarFaltante(el);
+        errores.push({ label: crEtiquetaCampo(el), paso: pasoBtn ? pasoBtn.innerText.trim() : 'Base y Carga', btn: pasoBtn, el });
         }
         });
+
+        const embBusc = document.getElementById('embBuscador');
+        if (embBusc) embBusc.classList.toggle('emb-card--falta', faltaSalida);
+        if (faltaSalida) {
+        errores.push('Salida');
+        Swal.fire({ title: 'Falta elegir la salida', text: 'Busca con Puerto de Origen (POL), Puerto de Destino (POD) y fecha de inicio, y selecciona la salida (o agrégala con «Agregar salida»). La Naviera y la Nave / Viaje salen de ahí.', icon: 'warning', confirmButtonColor: 'var(--atilson-dark)' })
+        .then(() => { document.getElementById('tab-general')?.click(); if (embBusc) setTimeout(() => embBusc.scrollIntoView({ behavior: 'smooth', block: 'center' }), 50); });
+        return;
+        }
 
         const tabMaritimo = document.getElementById('tab-maritimo');
         if(tabMaritimo && tabMaritimo.parentElement.style.display !== 'none') {
@@ -2151,7 +2406,7 @@
         }).then((result) => {
         if (result.isConfirmed) {
         if (errores.length > 0) {
-        Swal.fire({ title: 'Faltan Datos Obligatorios', icon: 'warning', confirmButtonColor: 'var(--atilson-dark)' });
+        crMostrarFaltantes(errores);
         } else {
         mostrarResumen();
         }
@@ -2162,10 +2417,63 @@
         }
 
         if (errores.length > 0) {
-        Swal.fire({ title: 'Faltan Datos Obligatorios', icon: 'warning', confirmButtonColor: 'var(--atilson-dark)' });
+        crMostrarFaltantes(errores);
         } else {
         mostrarResumen();
         }
+        });
+        }
+
+        // ---- Campos obligatorios faltantes (13-nov) ----
+        function crEtiquetaCampo(el) {
+        const cont = el.closest('[class*="col-"], .col, .mb-3, .form-group') || el.parentElement;
+        const lab = (cont && cont.querySelector('label, .erp-label')) || el.previousElementSibling;
+        let t = lab ? (lab.innerText || '') : '';
+        t = t.replace(/\*/g, '').replace(/\s+/g, ' ').trim();
+        if (!t) t = el.getAttribute('placeholder') || el.getAttribute('aria-label') || 'Campo obligatorio';
+        const unidad = el.closest('.contenedor-item');
+        if (unidad) {
+        const items = Array.from(document.querySelectorAll('.contenedor-item'));
+        const i = items.indexOf(unidad);
+        if (i > 0) t += ' (contenedor ' + (i + 1) + ')';
+        }
+        return t;
+        }
+        function crMarcarFaltante(el) {
+        el.classList.add('is-invalid');
+        const s2 = el.classList.contains('select2-hidden-accessible') && el.nextElementSibling && el.nextElementSibling.classList.contains('select2')
+        ? el.nextElementSibling : null;
+        if (s2) s2.classList.add('cr-s2-invalido');
+        const limpiar = () => { el.classList.remove('is-invalid'); if (s2) s2.classList.remove('cr-s2-invalido'); };
+        el.addEventListener('input', limpiar, { once: true });
+        el.addEventListener('change', limpiar, { once: true });
+        if (window.jQuery && s2) jQuery(el).one('change', limpiar);
+        }
+        function crMostrarFaltantes(errores) {
+        // Pasos del asistente con faltantes: punto rojo con la cantidad.
+        document.querySelectorAll('#wizardTabs .cr-falta-badge').forEach(b => b.remove());
+        const porPaso = new Map();
+        errores.forEach(e => { if (!porPaso.has(e.paso)) porPaso.set(e.paso, []); porPaso.get(e.paso).push(e); });
+        porPaso.forEach((lista) => {
+        const btn = lista[0].btn;
+        if (btn) { const b = document.createElement('span'); b.className = 'cr-falta-badge'; b.textContent = lista.length; btn.appendChild(b); }
+        });
+        const esc = t => String(t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+        let html = '<div style="text-align:left;font-size:13px;">Completa los campos marcados en rojo:';
+        porPaso.forEach((lista, paso) => {
+        html += '<div style="margin-top:10px;font-weight:800;color:#0f172a;">' + esc(paso) + '</div><ul style="margin:4px 0 0;padding-left:18px;color:#b91c1c;">'
+        + [...new Set(lista.map(e => e.label))].map(l => '<li>' + esc(l) + '</li>').join('') + '</ul>';
+        });
+        html += '</div>';
+        Swal.fire({ title: 'Faltan datos obligatorios', html, icon: 'warning', confirmButtonText: 'Ir al primero', confirmButtonColor: 'var(--atilson-dark)' })
+        .then(() => {
+        const primero = errores[0];
+        if (primero.btn) primero.btn.click();
+        setTimeout(() => {
+        const destino = (primero.el.classList.contains('select2-hidden-accessible') && primero.el.nextElementSibling) || primero.el;
+        destino.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        if (!primero.el.classList.contains('select2-hidden-accessible')) primero.el.focus({ preventScroll: true });
+        }, 150);
         });
         }
 
@@ -2262,10 +2570,19 @@
 
         // --- 5. AUTO GUARDADO (LOCAL STORAGE) ---
         const formInputs = document.querySelectorAll(
-        '#frmOperacion input:not([type="hidden"]):not([type="file"]), #frmOperacion select, #frmOperacion textarea'
+        '#frmOperacion input:not([type="hidden"]):not([type="file"]), #frmOperacion select, #frmOperacion textarea, #inpNave, #inpIdItinerario'
         );
 
-        const savedData = localStorage.getItem('AtilsonDraftOperacion');
+        // nov-2026: los radios (Tipo de emisión, Lugar) y checkboxes se guardaban mal: se
+        // tomaba el value del ÚLTIMO radio del grupo ("OTRO") y al restaurar se escribía ese
+        // value en TODOS los radios, así que "Originales" quedaba valiendo "OTRO". Ahora se
+        // guarda solo el marcado y se restaura marcándolo. Clave nueva para descartar los
+        // borradores dañados.
+        const CLAVE_BORRADOR = 'AtilsonDraftOperacion_v2';
+        try { localStorage.removeItem('AtilsonDraftOperacion'); } catch (e) { }
+        const esMarcable = (inp) => inp.type === 'radio' || inp.type === 'checkbox';
+        let savedData = null;
+        try { savedData = localStorage.getItem(CLAVE_BORRADOR); } catch (e) { savedData = null; }
         if (savedData) {
         Swal.fire({
         title: 'Borrador Encontrado',
@@ -2287,16 +2604,24 @@
 
         setTimeout(() => {
         formInputs.forEach(input => {
-        if (parsed[input.name] && input.id !== 'ddlServicio') {
+        if (!input.name || input.id === 'ddlServicio' || input.id === 'inpIdItinerario' || !(input.name in parsed)) return;
+        if (esMarcable(input)) {
+        const debe = input.type === 'radio' ? parsed[input.name] === input.value : (parsed[input.name] || []).includes(input.value);
+        if (input.checked !== debe) { input.checked = debe; input.dispatchEvent(new Event('change', { bubbles: true })); }
+        } else if (parsed[input.name]) {
+        // Nave / Viaje es un select del maestro: si la nave del borrador no está en la lista
+        // se conserva como opción "no está en el maestro" en vez de quedar en blanco.
+        if (input._navesApi) { input._navesApi.fijarTexto(parsed[input.name], parsed['Operacione.IdItinerario']); return; }
         input.value = parsed[input.name];
         input.dispatchEvent(new Event('change', { bubbles: true }));
         }
         });
+        document.querySelectorAll('[data-embl]').forEach(b => window.emisionBlRefrescar && window.emisionBlRefrescar(b));
         Swal.fire('Restaurado', 'Tus datos han sido cargados.', 'success');
         }, 300);
 
         } else {
-        localStorage.removeItem('AtilsonDraftOperacion');
+        try { localStorage.removeItem(CLAVE_BORRADOR); } catch (e) { }
         }
         });
         }
@@ -2304,8 +2629,13 @@
         formInputs.forEach(input => {
         input.addEventListener('change', () => {
         let draft = {};
-        formInputs.forEach(inp => { if(inp.name && inp.value) draft[inp.name] = inp.value; });
-        localStorage.setItem('AtilsonDraftOperacion', JSON.stringify(draft));
+        formInputs.forEach(inp => {
+        if (!inp.name) return;
+        if (inp.type === 'radio') { if (inp.checked) draft[inp.name] = inp.value; }
+        else if (inp.type === 'checkbox') { if (inp.checked) (draft[inp.name] = draft[inp.name] || []).push(inp.value); }
+        else if (inp.value) draft[inp.name] = inp.value;
+        });
+        try { localStorage.setItem(CLAVE_BORRADOR, JSON.stringify(draft)); } catch (e) { }
         });
         });
 
@@ -2320,7 +2650,7 @@
         const formData = new FormData(document.getElementById('frmOperacion'));
         formData.set('GenerarPdfDirecto', 'true');
 
-        localStorage.removeItem('AtilsonDraftOperacion');
+        try { localStorage.removeItem(CLAVE_BORRADOR); } catch (e) { }
 
         try {
         const response = await fetch(window.location.pathname, {
@@ -2364,10 +2694,15 @@
         window._operacionGuardadaId = data.id;
         window._correoClienteGuardado = data.correoCliente || '';
 
+        document.getElementById('emailDestinoBookingCreate').value = window._correoClienteGuardado;
+        document.getElementById('emailAsuntoBookingCreate').value = '';
+        document.getElementById('emailMensajeBookingCreate').value = '';
+
         const indicador = document.getElementById('indicadorEnvio');
         indicador.style.display = 'inline-flex';
         indicador.className = 'badge bg-danger';
         indicador.innerHTML = '<i class="bi bi-circle-fill me-1" style="font-size:8px;"></i> No enviado';
+        actualizarCorreoBookingCreate(true);
 
         } catch (err) {
         Swal.fire({ title: 'Error inesperado', text: err.message, icon: 'error' });
@@ -2381,60 +2716,106 @@
         window.location.href = '/Operaciones';
         });
 
+        async function actualizarCorreoBookingCreate(inicial) {
+            const id = window._operacionGuardadaId;
+            const token = document.querySelector('input[name="__RequestVerificationToken"]')?.value || '';
+            const asunto = document.getElementById('emailAsuntoBookingCreate');
+            const nota = document.getElementById('emailMensajeBookingCreate');
+            const destino = document.getElementById('emailDestinoBookingCreate');
+            const aviso = document.getElementById('emailEstadoSmtpCreate');
+            const btnEnviar = document.getElementById('btnEnviarAlCliente');
+            btnEnviar.disabled = true;
+            aviso.textContent = 'Preparando correo...';
+            try {
+                if (!id || !token) throw new Error('No hay una operación guardada o sesión válida.');
+                const fd = new FormData();
+                fd.append('id', id);
+                fd.append('mensajePersonalizado', nota.value);
+                fd.append('__RequestVerificationToken', token);
+                const res = await fetch('/Operaciones/Index?handler=PrevisualizarCorreoReserva', {
+                    method:'POST',body:fd,credentials:'same-origin',
+                    headers:{'RequestVerificationToken':token}
+                });
+                const json = await res.json();
+                if (!res.ok || !json.success) throw new Error(json.message || 'No se pudo preparar el correo.');
+                document.getElementById('iframeCorreoBookingCreate').srcdoc = json.html;
+                if (inicial || !asunto.value.trim() || asunto.value === asunto.dataset.default) asunto.value = json.asunto;
+                asunto.dataset.default = json.asunto;
+                nota.dataset.previsualizado = nota.value;
+                btnEnviar.dataset.version = json.version;
+                const indicador = document.getElementById('indicadorEnvio');
+                indicador.textContent = json.enviadoAlgunaVez ? 'Actualización V' + json.version : 'Pendiente de primer envío V1';
+                indicador.className = 'badge bg-warning text-dark';
+                aviso.textContent = json.smtpConfigurado
+                    ? 'Correo preparado. Revisa destinatario, asunto y texto antes de enviar.'
+                    : 'Falta configurar SMTP en el servidor (host, remitente o contraseña).';
+                aviso.className = json.smtpConfigurado ? 'small text-success mb-2' : 'small text-danger mb-2';
+                btnEnviar.disabled = !json.smtpConfigurado;
+                if (inicial && !destino.value.trim()) destino.value = json.correo || '';
+            } catch(err) {
+                btnEnviar.dataset.version = '';
+                aviso.textContent = err.message || 'No se pudo preparar la vista previa.';
+                aviso.className = 'small text-danger mb-2';
+                btnEnviar.disabled = true;
+            }
+        }
+        document.getElementById('btnActualizarCorreoBookingCreate')?.addEventListener('click', function() {
+            actualizarCorreoBookingCreate(false);
+        });
+
         document.getElementById('btnEnviarAlCliente')?.addEventListener('click', async function () {
-        const btn = this;
-        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span> Enviando...';
-        btn.disabled = true;
-
-        try {
-        // Envía la confirmación de reserva (V1) con el mismo handler del tablero.
-        let correoDestino = window._correoClienteGuardado || '';
-        if (!correoDestino) {
-        const r = await Swal.fire({ title: 'Correo del cliente', input: 'email', inputPlaceholder: 'correo@cliente.cl', text: 'El cliente no tiene correo registrado. ¿A qué correo envío el booking?', showCancelButton: true, confirmButtonText: 'Enviar', cancelButtonText: 'Cancelar' });
-        if (!r.isConfirmed || !r.value) {
-        btn.innerHTML = '<i class="bi bi-send-check me-2"></i> Enviar al Cliente';
-        btn.disabled = false;
-        return;
-        }
-        correoDestino = r.value;
-        }
-        const tokenEnvio = document.querySelector('input[name="__RequestVerificationToken"]')?.value || '';
-        const fdEnvio = new FormData();
-        fdEnvio.append('id', window._operacionGuardadaId);
-        fdEnvio.append('correoDestino', correoDestino);
-        fdEnvio.append('nuevaVersion', '1');
-        fdEnvio.append('__RequestVerificationToken', tokenEnvio);
-        const response = await fetch('/Operaciones/Index?handler=EnviarCorreoReserva', {
-        method: 'POST',
-        body: fdEnvio,
-        headers: {
-        'X-Requested-With': 'XMLHttpRequest',
-        'RequestVerificationToken': tokenEnvio
-        }
-        });
-
-        const data = await response.json();
-
-        if (data.success) {
-        const indicador = document.getElementById('indicadorEnvio');
-        indicador.className = 'badge bg-success';
-        indicador.innerHTML = '<i class="bi bi-check-circle-fill me-1"></i> Enviado';
-
-        btn.innerHTML = '<i class="bi bi-check2 me-2"></i> Enviado';
-        btn.className = 'btn btn-success fw-bold px-4 rounded-3';
-
-        setTimeout(() => { window.location.href = '/Operaciones'; }, 1500);
-        } else {
-        Swal.fire({ title: 'Error al enviar', text: data.message, icon: 'error' });
-        btn.innerHTML = '<i class="bi bi-send-check me-2"></i> Enviar al Cliente';
-        btn.disabled = false;
-        }
-        } catch (err) {
-        Swal.fire({ title: 'Error', text: err.message, icon: 'error' });
-        btn.innerHTML = '<i class="bi bi-send-check me-2"></i> Enviar al Cliente';
-        btn.disabled = false;
-        }
-        });
+            const btn = this;
+            const asunto = document.getElementById('emailAsuntoBookingCreate');
+            const nota = document.getElementById('emailMensajeBookingCreate');
+            const destino = document.getElementById('emailDestinoBookingCreate');
+            if (!btn.dataset.version) {
+                Swal.fire('Vista previa incompleta','Prepara el correo antes de enviarlo.','warning');
+                return;
+            }
+            if (!destino.value.trim() || !destino.checkValidity() || !asunto.value.trim() || !asunto.checkValidity()) {
+                Swal.fire('Correo inválido','Revisa destinatario y asunto.','warning');
+                return;
+            }
+            if (nota.value !== nota.dataset.previsualizado) {
+                Swal.fire('Actualiza la vista previa','Modificaste el mensaje personalizado. Actualiza la vista previa antes de enviarlo.','warning');
+                return;
+            }
+            btn.disabled = true;
+            const original = btn.innerHTML;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span> Enviando...';
+            try {
+                const token = document.querySelector('input[name="__RequestVerificationToken"]')?.value || '';
+                const fd = new FormData();
+                fd.append('id', window._operacionGuardadaId);
+                fd.append('correoDestino', destino.value.trim());
+                fd.append('nuevaVersion', btn.dataset.version);
+                fd.append('asunto', asunto.value.trim());
+                fd.append('mensajePersonalizado', nota.value);
+                fd.append('__RequestVerificationToken', token);
+                const response = await fetch('/Operaciones/Index?handler=EnviarCorreoReserva', {
+                    method:'POST',body:fd,credentials:'same-origin',
+                    headers:{'RequestVerificationToken':token}
+                });
+                const data = await response.json();
+                if (!response.ok || !data.success) {
+                    if (data.enviado) {
+                        await Swal.fire('Revisar estado de envío',data.message,'warning');
+                        return;
+                    }
+                    throw new Error(data.message || 'No se pudo enviar.');
+                }
+                const indicador = document.getElementById('indicadorEnvio');
+                indicador.className = 'badge bg-success';
+                indicador.textContent = 'Enviado V' + data.version;
+                await Swal.fire('Booking enviado','SMTP aceptó el mensaje y su estado quedó registrado.','success');
+                window.location.href = '/Operaciones';
+            } catch(err) {
+                Swal.fire('Error al enviar',err.message || 'Revisa la conexión de correo.','error');
+            } finally {
+                btn.innerHTML = original;
+                btn.disabled = false;
+            }
+        });;
         });
 
         // =========================================================================
@@ -2584,6 +2965,61 @@
             $(document).on('keyup', '.select2-search__field', function() {
                 $(this).val($(this).val().toUpperCase());
             });
+
+            // POL y POD con el país entre paréntesis, gris y alineado a la derecha (en columna).
+            const conPais = (o) => window.BuscadorSalidas && window.BuscadorSalidas.plantillaPuerto ? window.BuscadorSalidas.plantillaPuerto(o) : o.text;
+            ['#inpPol', '#inpPod'].forEach(sel => {
+                const $s = $(sel);
+                if ($s.data('select2')) $s.select2('destroy');
+                $s.select2({ width: '100%', templateResult: conPais, language: { noResults: () => 'Sin puertos con ese nombre', searching: () => 'Buscando...' } });
+            });
+
+            // nov-2026: Nave / Viaje sale del buscador de salidas (Datos del Embarque).
+            window.BuscadorSalidas.iniciar({
+                buscador: document.getElementById('embBuscador'),
+                pol: document.getElementById('inpPol'),
+                pod: document.getElementById('inpPod'),
+                fecha: document.getElementById('embFechaInicio'),
+                btnBuscar: document.getElementById('embBuscar'),
+                aviso: document.getElementById('embAviso'),
+                resultados: document.getElementById('embResultados'),
+                titulo: document.getElementById('embResTitulo'),
+                filtros: document.getElementById('embFiltros'),
+                lista: document.getElementById('embLista'),
+                verMas: document.getElementById('embVerMas'),
+                btnAgregar: document.getElementById('embAgregar'),
+                naviera: document.getElementById('inpNaviera'),
+                seleccion: document.getElementById('embSeleccion'),
+                infoNaviera: document.getElementById('embInfoNaviera'),
+                infoNave: document.getElementById('embInfoNave'),
+                infoRuta: document.getElementById('embInfoRuta'),
+                infoSalida: document.getElementById('embInfoSalida'),
+                nave: document.getElementById('inpNave'),
+                idItinerario: document.getElementById('inpIdItinerario'),
+                hint: document.getElementById('naveHint'),
+                etd: document.getElementById('inpEtd'),
+                eta: document.getElementById('inpEta'),
+                corte: document.getElementById('inpCorteDoc'),
+                // 13-nov: stacking de la salida según la carga (Dry / Reefer) del booking.
+                stackIn: document.getElementById('inpStackingIn'),
+                stackOut: document.getElementById('inpStackingOut'),
+                stackAviso: document.getElementById('crStackAviso'),
+                esReefer: function () {
+                    const sel = document.getElementById('inpCarga');
+                    const txt = removeAccents((sel && sel.options[sel.selectedIndex] ? sel.options[sel.selectedIndex].text : '') || '').toUpperCase();
+                    const tc = (document.getElementById('inpTipoConte')?.value || '').toUpperCase();
+                    return txt.includes('REEFER') || txt.includes('REFRIGER') || tc.includes('RF') || tc.includes('REEFER');
+                },
+                modalidad: document.getElementById('selectTransbordo'),
+                puertoTransbordo: document.getElementById('divPuertoTransbordo'),
+                espejoPol: document.getElementById('inpPolEspejo'),
+                espejoPod: document.getElementById('inpPodEspejo')
+            });
+            // Si cambia la carga (Dry ↔ Reefer) se toma el stacking que corresponde de la salida.
+            ['inpCarga', 'inpTipoConte'].forEach(function (id) {
+                const el = document.getElementById(id);
+                if (el) el.addEventListener('change', function () { window.BuscadorSalidas?.reaplicarStacking?.(); });
+            });
         });
 
         // =========================================================================
@@ -2695,18 +3131,19 @@
             const esMar = servicio.includes('MAR') || servicio.includes('INTEGRAL');
             const setVal = (id, v) => { const el = document.getElementById(id); if (el && v) { el.value = v; el.dispatchEvent(new Event('change')); } };
 
-            if (esMar) {
-                elegirPuertoConPais(document.getElementById('inpPol'), document.getElementById('inpPaisOrigen'), d.polNombre);
-                elegirPuertoConPais(document.getElementById('inpPod'), document.getElementById('inpPaisDestino'), d.podNombre);
-                setVal('inpEtd', d.etd);
-                setVal('inpEta', d.eta);
-            } else {
+            // nov-2026: POL, POD, ETD y ETA están en Datos del Embarque para todos los servicios.
+            elegirPuertoConPais(document.getElementById('inpPol'), document.getElementById('inpPaisOrigen'), d.polNombre);
+            elegirPuertoConPais(document.getElementById('inpPod'), document.getElementById('inpPaisDestino'), d.podNombre);
+            if (window.jQuery) jQuery('#inpPol, #inpPod').trigger('change.select2');
+            setVal('inpEtd', d.etd);
+            setVal('inpEta', d.eta);
+            if (!esMar) {
                 // Sin marítimo, el puerto del tramo terrestre lo informa el cliente.
                 elegirOpcionPorTexto(document.getElementById('inpPuertoTerrestre'), d.puertoTerrestre);
             }
             // Naviera y Nave están en "Datos del Embarque" para todos los servicios.
             if (d.idNaviera) { setVal('inpNaviera', String(d.idNaviera)); if (window.jQuery) jQuery('#inpNaviera').trigger('change.select2'); }
-            setVal('inpNave', d.nave);
+            { const selNave = document.getElementById('inpNave'); if (selNave && selNave._navesApi && d.nave) selNave._navesApi.fijarTexto(d.nave, d.idItinerario); }
             setVal('inpBooking', d.booking);
             setVal('inpNumeroInstructivo', d.instructivo);
             setVal('inpCorteDoc', d.corteDoc);
@@ -2733,8 +3170,10 @@
             if (astNave) astNave.style.display = sinMar ? 'inline' : 'none';
             togglePropietarioOtro();
 
+            // nov-2026: el Corte Documental está en Datos del Embarque para todos los servicios;
+            // la copia de la pestaña Documental queda oculta (sigue sincronizada con el real).
             const colCorte = document.getElementById('colCorteDocDocumental');
-            if (colCorte) colCorte.style.display = sinMar ? '' : 'none';
+            if (colCorte) colCorte.style.display = 'none';
         }
 
         function togglePropietarioOtro() {
@@ -2752,8 +3191,20 @@
             if (ddl) ddl.addEventListener('change', actualizarEmbarqueCliente);
             actualizarEmbarqueCliente();
 
+            // Solo documental (EXP DOC 7 / IMP DOC 14): con el puerto chileno en Valparaíso se sugiere
+            // TPS para el ISPS si aún no se eligió terminal (San Antonio queda a elección: STI o DP World).
+            const sugerirIspsDoc = () => {
+                const isps = document.getElementById('inpTerminalIspsDoc');
+                if (!ddl || !isps || isps.value || !['7', '14'].includes(ddl.value)) return;
+                const sel = document.getElementById(ddl.value === '7' ? 'inpPol' : 'inpPod');
+                const txt = sel && sel.selectedIndex > 0 ? removeAccents(sel.options[sel.selectedIndex].text) : '';
+                if (txt.includes('VALPARAISO')) isps.value = 'TPS';
+            };
+            if (window.jQuery) jQuery('#inpPol, #inpPod').on('change', sugerirIspsDoc);
+            if (ddl) ddl.addEventListener('change', sugerirIspsDoc);
+
             // Corte documental: la copia de la pestaña Documental y el campo real
-            // (pestaña Marítimo, el que se guarda) se mantienen iguales.
+            // (Datos del Embarque, el que se guarda) se mantienen iguales.
             const corteReal = document.getElementById('inpCorteDoc');
             const corteDoc = document.getElementById('inpCorteDocDocumental');
             if (corteReal && corteDoc) {

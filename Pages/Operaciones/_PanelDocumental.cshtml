@@ -30,7 +30,7 @@
     bool TieneSolicitudPendiente(string certKey)
         => op.SolicitudesDesbloqueos != null && op.SolicitudesDesbloqueos.Any(s => s.CertKey == certKey && s.IdUnidadTecnica == Model.IdUnidadTecnica && s.Estado == "PENDIENTE");
 }
-<form id="doc-global-form-v3-@Model.IdSuffix" method="post" action="/Operaciones/Index?handler=QuickEditDocumental" enctype="multipart/form-data">
+<form id="doc-global-form-v3-@Model.IdSuffix" class="doc-corp" method="post" action="/Operaciones/Index?handler=QuickEditDocumental" enctype="multipart/form-data">
     <input type="hidden" name="__RequestVerificationToken" value="" class="anti-forgery-token-input" />
     <input type="hidden" name="IdOperacion" value="@op.Id" />
     @if (Model.IdUnidadTecnica.HasValue)
@@ -42,12 +42,12 @@
         <div class="d-flex align-items-center gap-3">
             <div class="pro-topbar-ico"><i class="bi bi-folder2-open"></i></div>
             <div>
-                <h5 class="fw-black text-dark m-0" style="font-size: 18px; letter-spacing: -0.5px;">Gestor Documental Pro@(Model.Label != null ? $" — {Model.Label}" : "")</h5>
-                <p class="text-muted m-0 mt-1" style="font-size: 12px;">Arquitectura limpia para gestión de certificados.</p>
+                <h5 class="m-0">Documental@(Model.Label != null ? $" — {Model.Label}" : "")</h5>
+                <p class="m-0">Aduana, certificados y documentos del embarque</p>
             </div>
         </div>
         <div class="d-flex gap-2 align-items-center">
-            <span class="pro-topbar-note text-muted" style="font-size:10px;"><i class="bi bi-shield-check"></i> Cada certificado guarda y notifica a Finanzas de forma independiente.</span>
+            <span class="pro-topbar-note"><i class="bi bi-shield-check"></i> Cada certificado se guarda y se informa a Finanzas por separado</span>
         </div>
     </div>
 
@@ -63,25 +63,22 @@
     <div class="pro-wrapper">
 
         <div class="pro-sidebar d-flex flex-column">
-        <div class="mb-4 pb-3 border-bottom" style="border-color: var(--doc-gray-border);">
-            <label class="pro-label text-dark mb-3"><i class="bi bi-gear-fill me-1 text-muted"></i> Requerimientos</label>
-            <div class="d-flex flex-column gap-2 px-1">
-                <label class="d-flex align-items-center gap-2 m-0 cursor-pointer p-1 rounded" style="transition: background 0.2s;" onmouseover="this.style.background='var(--surface-raised)'" onmouseout="this.style.background='transparent'">
+        <div class="doc-side-grupo">
+            <label class="pro-label mb-2">Requerimientos</label>
+            <div class="d-flex flex-column gap-1">
+                <label class="doc-req">
                     <input class="pro-check inline-field" type="checkbox" id="chkSag-v3-@Model.IdSuffix" name="docUpdates.AplicaSag" value="true" @(d?.AplicaSag == true ? "checked" : "") onchange="handleTipoTramite('v3-@Model.IdSuffix', 'sag')">
-                    <span class="fw-bold text-success" style="font-size:10px; text-transform:uppercase; margin-top:1px;">Aplica SAG</span>
+                    <span class="doc-req-txt">Aplica SAG</span>
                 </label>
-                <label class="d-flex align-items-center gap-2 m-0 cursor-pointer p-1 rounded" style="transition: background 0.2s;" onmouseover="this.style.background='var(--surface-raised)'" onmouseout="this.style.background='transparent'">
+                <label class="doc-req">
                     <input class="pro-check inline-field" type="checkbox" id="chkSerna-v3-@Model.IdSuffix" name="docUpdates.AplicaSernapesca" value="true" @(d?.AplicaSernapesca == true ? "checked" : "") onchange="handleTipoTramite('v3-@Model.IdSuffix', 'sernapesca')">
-                    <span class="fw-bold text-info" style="font-size:10px; text-transform:uppercase; margin-top:1px;">Aplica Sernapesca</span>
+                    <span class="doc-req-txt">Aplica Sernapesca</span>
                 </label>
-                <label class="d-flex align-items-center gap-2 m-0 cursor-pointer p-1 rounded" style="transition: background 0.2s;" onmouseover="this.style.background='var(--surface-raised)'" onmouseout="this.style.background='transparent'">
-                    <input class="pro-check inline-field" type="checkbox" id="chkTerr-v3-@Model.IdSuffix" value="true" @(Model.ReqTerrestre ? "checked" : "") onchange="handleTipoTramite('v3-@Model.IdSuffix', 'terrestre')">
-                    <span class="fw-bold text-secondary" style="font-size:10px; text-transform:uppercase; margin-top:1px;">Servicio Terrestre</span>
-                </label>
+
             </div>
         </div>
 
-        <label class="pro-label text-dark mb-2"><i class="bi bi-file-earmark-check me-1 text-muted"></i> Certificados</label>
+        <label class="pro-label mb-2">Certificados</label>
         <button type="button" class="pro-nav-btn pro-nav-btn-@Model.IdSuffix active" id="btn-aduana-@Model.IdSuffix" onclick="openProTab('@Model.IdSuffix', 'aduana')"><div class="pro-dot @dAd"></div> Aduana y Trámites</button>
         <button type="button" class="pro-nav-btn pro-nav-btn-@Model.IdSuffix" id="btn-origen-@Model.IdSuffix" onclick="openProTab('@Model.IdSuffix', 'origen')"><div class="pro-dot @dOr"></div> Origen / TLC</button>
         <button type="button" class="pro-nav-btn pro-nav-btn-@Model.IdSuffix" id="sidebar-btn-fito-@Model.IdSuffix" onclick="openProTab('@Model.IdSuffix', 'fito')" style="display: @(d?.AplicaSag == true ? "flex" : "none");">
@@ -97,7 +94,7 @@
         <button type="button" class="pro-nav-btn pro-nav-btn-@Model.IdSuffix" id="btn-base-@Model.IdSuffix" onclick="openProTab('@Model.IdSuffix', 'base')"><div class="pro-dot @dBa"></div> Documentos Base</button>
     </div>
 
-    <div class="pro-content-area" style="overflow-y: auto; height: 750px; transition: none;">
+    <div class="pro-content-area">
 
         @{ bool aduanaPendiente = TarifaPendiente("Honorarios Agencia", "Legalización / Emisión DUS"); }
         <div class="pro-pane-@Model.IdSuffix" id="pane-aduana-@Model.IdSuffix" style="display: block;" data-tarifa-pendiente="@(aduanaPendiente ? "true" : "false")">
@@ -139,47 +136,46 @@
                 </div>
                 <div class="col-md-7">
                     <div class="pro-card-gray m-0 h-100">
+                        <label class="pro-label">Tipo de declaración</label>
                         <div class="d-flex gap-4 mb-3">
-                            <label class="d-flex align-items-center gap-2 m-0 cursor-pointer">
+                            <label class="d-flex align-items-center gap-2 m-0 cursor-pointer doc-radio">
                                 <input class="pro-check inline-field" type="radio" name="TipoDec_v3_@Model.IdSuffix" id="radioDus_v3-@Model.IdSuffix" value="DUS" @(string.IsNullOrEmpty(d?.Din) ? "checked" : "") onchange="toggleDeclaracion('v3-@Model.IdSuffix')" disabled>
-                                <span class="fw-bold text-primary" style="font-size:12px;">DUS (Exportación)</span>
+                                <span class="doc-radio-txt">DUS <small>Exportación</small></span>
                             </label>
-                            <label class="d-flex align-items-center gap-2 m-0 cursor-pointer">
+                            <label class="d-flex align-items-center gap-2 m-0 cursor-pointer doc-radio">
                                 <input class="pro-check inline-field" type="radio" name="TipoDec_v3_@Model.IdSuffix" id="radioDin_v3-@Model.IdSuffix" value="DIN" @(!string.IsNullOrEmpty(d?.Din) ? "checked" : "") onchange="toggleDeclaracion('v3-@Model.IdSuffix')" disabled>
-                                <span class="fw-bold text-primary" style="font-size:12px;">DIN (Importación)</span>
+                                <span class="doc-radio-txt">DIN <small>Importación</small></span>
                             </label>
                         </div>
                         <div class="row g-3" id="container-dus-v3-@Model.IdSuffix" style="display: @(string.IsNullOrEmpty(d?.Din) ? "flex" : "none");">
-                            <div class="col-7"><label class="pro-label text-primary">N° DUS</label><input type="text" name="docUpdates.Dus" class="pro-input text-uppercase fw-bold text-primary" value="@d?.DusDin" placeholder="Número..." readonly /></div>
-                            <div class="col-5"><label class="pro-label text-success">Valor Trámite ($)</label><input type="text" inputmode="decimal" name="docUpdates.ValorDus" class="pro-input doc-val-input text-success fw-bold" value="@d?.ValorDus" placeholder="0" readonly /></div>
+                            <div class="col-12"><label class="pro-label">N° DUS</label><input type="text" name="docUpdates.Dus" class="pro-input text-uppercase fw-bold" value="@d?.DusDin" placeholder="Número..." readonly /></div>
                         </div>
                         <div class="row g-3" id="container-din-v3-@Model.IdSuffix" style="display: @(!string.IsNullOrEmpty(d?.Din) ? "flex" : "none");">
-                            <div class="col-7"><label class="pro-label text-primary">N° DIN</label><input type="text" name="docUpdates.Din" class="pro-input text-uppercase fw-bold text-primary" value="@d?.Din" placeholder="Número..." readonly /></div>
-                            <div class="col-5"><label class="pro-label text-success">Valor Trámite ($)</label><input type="text" inputmode="decimal" name="docUpdates.ValorDin" class="pro-input doc-val-input text-success fw-bold" value="@d?.ValorDin" placeholder="0" readonly /></div>
+                            <div class="col-12"><label class="pro-label">N° DIN</label><input type="text" name="docUpdates.Din" class="pro-input text-uppercase fw-bold" value="@d?.Din" placeholder="Número..." readonly /></div>
                         </div>
                     </div>
                 </div>
             </div>
 
             <div class="pro-card-red m-0">
-    <label class="pro-label text-danger mb-3"><i class="bi bi-exclamation-triangle-fill me-1"></i> Trámites de Corrección / Extracostos</label>
+    <label class="pro-label mb-3"><i class="bi bi-arrow-repeat me-1"></i> Trámites de corrección <span class="doc-label-nota">· generan extracosto</span></label>
     <div class="row g-3">
         <div class="col-md-4">
             <label class="d-flex align-items-center gap-2 m-0 cursor-pointer">
-                <input class="pro-check inline-field" type="checkbox" id="chkAcl-v3-@Model.IdSuffix" name="docUpdates.ExtensionDocumental" value="true" @(d?.ExtensionDocumental == true ? "checked" : "") onchange="toggleExclusionTramites('v3-@Model.IdSuffix');">
-                <span class="fw-bold" style="font-size:12px; color:var(--doc-danger-deep);">Aclaración</span>
+                <input class="pro-check inline-field" type="checkbox" id="chkAcl-v3-@Model.IdSuffix" name="docUpdates.ExtensionDocumental" value="true" @(d?.ExtensionDocumental == true ? "checked" : "") onchange="toggleExclusionTramites('v3-@Model.IdSuffix', this);">
+                <span class="doc-tram-txt">Aclaración</span>
             </label>
         </div>
         <div class="col-md-4">
             <label class="d-flex align-items-center gap-2 m-0 cursor-pointer">
-                <input class="pro-check inline-field" type="checkbox" id="chkCan-v3-@Model.IdSuffix" name="docUpdates.GuiaVisado" value="true" @(d?.GuiaVisado == true ? "checked" : "") onchange="toggleExclusionTramites('v3-@Model.IdSuffix');">
-                <span class="fw-bold" style="font-size:12px; color:var(--doc-danger-deep);">Cancelación</span>
+                <input class="pro-check inline-field" type="checkbox" id="chkCan-v3-@Model.IdSuffix" name="docUpdates.GuiaVisado" value="true" @(d?.GuiaVisado == true ? "checked" : "") onchange="toggleExclusionTramites('v3-@Model.IdSuffix', this);">
+                <span class="doc-tram-txt">Cancelación</span>
             </label>
         </div>
         <div class="col-md-4">
             <label class="d-flex align-items-center gap-2 m-0 cursor-pointer">
                 <input class="pro-check inline-field" type="checkbox" id="chkRol-v3-@Model.IdSuffix" name="docUpdates.Roleo" value="true" @(d?.Roleo == true ? "checked" : "")>
-                <span class="fw-bold" style="font-size:12px; color:var(--doc-danger-deep);">Roleo</span>
+                <span class="doc-tram-txt">Roleo</span>
             </label>
         </div>
     </div>
@@ -188,51 +184,80 @@
     <div class="pro-card m-0 mt-3 p-3" id="ivv-container-v3-@Model.IdSuffix" style="background-color: var(--bg-soft); border-color: var(--border-strong); opacity: @(d?.GeneracionIvv == true ? "1" : "0.5"); transition: opacity 0.3s;">
         <div class="d-flex align-items-center gap-2">
             <input class="pro-check inline-field" type="checkbox" id="chkIvv-v3-@Model.IdSuffix" name="docUpdates.GeneracionIvv" value="true" @(d?.GeneracionIvv == true ? "checked" : "") disabled onchange="document.getElementById('ivv-container-v3-@Model.IdSuffix').style.opacity = this.checked ? '1' : '0.5';">
-            <label class="form-check-label fw-bold text-dark" style="font-size:12px; text-transform:uppercase; cursor: pointer;" for="chkIvv-v3-@Model.IdSuffix">
-                <i class="bi bi-file-earmark-check text-primary me-1"></i> Generación IVV
+            <label class="form-check-label doc-tram-txt" style="cursor: pointer;" for="chkIvv-v3-@Model.IdSuffix">
+                Generación IVV
             </label>
         </div>
     </div>
 
     @{ var estRespAduana = EstadoConcepto("Honorarios Agencia"); }
-    <div class="d-flex align-items-center gap-1 mt-2 pt-2 border-top" style="font-size:10px;">
-        <span class="text-muted fw-bold"><i class="bi bi-cash-coin"></i></span>
-        <select class="form-select form-select-sm resp-pagado border-0 bg-light" style="width:auto; font-size:10px; font-weight:700; padding:2px 6px; color:var(--doc-slate);" data-concepto="@estRespAduana.ConceptoReal" onchange="guardarResponsabilidad(@op.Id, this.getAttribute('data-concepto'), this, this.closest('.d-flex').querySelector('.resp-responsable'))">
-            <option value="ATILSON" selected="@(estRespAduana.PagadoPor == "ATILSON" || estRespAduana.PagadoPor == null ? "selected" : null)">Paga: Atilson</option>
-            <option value="AGENCIA" selected="@(estRespAduana.PagadoPor == "AGENCIA" ? "selected" : null)">Paga: Agencia</option>
-            <option value="PROVEEDOR" selected="@(estRespAduana.PagadoPor == "PROVEEDOR" ? "selected" : null)">Paga: Proveedor</option>
-        </select>
-        <span class="text-muted">→</span>
-        <select class="form-select form-select-sm resp-responsable border-0 bg-light" style="width:auto; font-size:10px; font-weight:700; color:var(--doc-danger-strong);" data-concepto="@estRespAduana.ConceptoReal" onchange="guardarResponsabilidad(@op.Id, this.getAttribute('data-concepto'), this.closest('.d-flex').querySelector('.resp-pagado'), this)">
-            <option value="CLIENTE" selected="@(estRespAduana.Responsable == "CLIENTE" || estRespAduana.Responsable == null ? "selected" : null)">Resp: Cliente</option>
-            <option value="ATILSON" selected="@(estRespAduana.Responsable == "ATILSON" ? "selected" : null)">Resp: Atilson</option>
-            <option value="PROVEEDOR" selected="@(estRespAduana.Responsable == "PROVEEDOR" ? "selected" : null)">Resp: Proveedor</option>
-            <option value="AGENCIA" selected="@(estRespAduana.Responsable == "AGENCIA" ? "selected" : null)">Resp: Agencia</option>
-        </select>
-        <span class="text-muted ms-1" style="font-size:9px;">(Honorarios Agencia)</span>
-    </div>
-
     @{
         string modCobroAga = string.Equals(Model.Op.ModalidadCobroAgencia, "GRUPAL", StringComparison.OrdinalIgnoreCase) ? "GRUPAL" : "INDIVIDUAL";
         int nContenedoresAga = Math.Max(1, Model.Contenedores.Count);
     }
-    @* Solo tiene sentido elegir con más de un contenedor (oct-2026). *@
-    @if (Model.Contenedores.Count > 1)
-    {
-    <div class="pro-card m-0 mt-3 p-3" style="background-color: var(--bg-soft); border-color: var(--border-strong);">
-        <div class="d-flex flex-wrap align-items-center justify-content-between gap-2">
-            <div>
-                <span class="fw-bold text-dark" style="font-size:12px; text-transform:uppercase;"><i class="bi bi-receipt me-1 text-primary"></i> Cobro al cliente: Honorarios y DUS</span>
-                <span class="d-block text-muted" style="font-size:10.5px;">La agencia cobra a Atilson por cada contenedor (@nContenedoresAga). Al cliente se le puede cobrar igual o en un solo cobro por el booking.</span>
-            </div>
-            <div class="btn-group btn-group-sm" role="group">
-                <input type="radio" class="btn-check" name="modCobroAga-@Model.IdSuffix" id="modAgaInd-@Model.IdSuffix" value="INDIVIDUAL" @(modCobroAga == "INDIVIDUAL" ? "checked" : "") onchange="cambiarModalidadCertPorCertificado(@Model.Op.Id, 'aga', this.value)">
-                <label class="btn btn-outline-primary fw-bold" style="font-size:11px;" for="modAgaInd-@Model.IdSuffix">Por contenedor</label>
-                <input type="radio" class="btn-check" name="modCobroAga-@Model.IdSuffix" id="modAgaGrp-@Model.IdSuffix" value="GRUPAL" @(modCobroAga == "GRUPAL" ? "checked" : "") onchange="cambiarModalidadCertPorCertificado(@Model.Op.Id, 'aga', this.value)">
-                <label class="btn btn-outline-primary fw-bold" style="font-size:11px;" for="modAgaGrp-@Model.IdSuffix">Un solo cobro</label>
-            </div>
+    @* Cobro al cliente de Honorarios y DUS (nov-2026): visible siempre. Por contenedor = un
+       cobro por cada contenedor; Por booking = un solo cobro al valor de un contenedor. *@
+    <div class="doc-cobro-card mt-3">
+        <div class="doc-cobro-texto">
+            <span class="doc-cobro-titulo"><i class="bi bi-receipt"></i> Cobro al cliente · Honorarios y DUS</span>
+            <span class="doc-cobro-ayuda">
+                @if (nContenedoresAga > 1)
+                {
+                    <text>La agencia cobra a Atilson por cada contenedor (@nContenedoresAga). <strong>Por contenedor</strong> cobra @nContenedoresAga veces al cliente; <strong>Por booking</strong> cobra una sola vez.</text>
+                }
+                else
+                {
+                    <text>Con un contenedor ambas opciones cobran lo mismo. La elección se mantiene si se agregan contenedores.</text>
+                }
+            </span>
+        </div>
+        <div class="doc-segmento" role="group" aria-label="Cobro al cliente">
+            <input type="radio" class="btn-check" name="modCobroAga-@Model.IdSuffix" id="modAgaInd-@Model.IdSuffix" value="INDIVIDUAL" @(modCobroAga == "INDIVIDUAL" ? "checked" : "") onchange="cambiarModalidadCertPorCertificado(@Model.Op.Id, 'aga', this.value)">
+            <label for="modAgaInd-@Model.IdSuffix"><i class="bi bi-boxes"></i> Por contenedor@(nContenedoresAga > 1 ? $" (×{nContenedoresAga})" : "")</label>
+            <input type="radio" class="btn-check" name="modCobroAga-@Model.IdSuffix" id="modAgaGrp-@Model.IdSuffix" value="GRUPAL" @(modCobroAga == "GRUPAL" ? "checked" : "") onchange="cambiarModalidadCertPorCertificado(@Model.Op.Id, 'aga', this.value)">
+            <label for="modAgaGrp-@Model.IdSuffix"><i class="bi bi-journal-check"></i> Por booking (×1)</label>
+        </div>
+        <div class="doc-cobro-resp d-flex">
+            <span class="doc-cobro-resp-lbl">Honorarios agencia</span>
+            <select class="form-select form-select-sm resp-pagado border-0 bg-light" style="width:auto; font-size:10px; font-weight:700; padding:2px 6px; color:var(--doc-slate);" data-concepto="@estRespAduana.ConceptoReal" onchange="guardarResponsabilidad(@op.Id, this.getAttribute('data-concepto'), this, this.closest('.d-flex').querySelector('.resp-responsable'))">
+                <option value="ATILSON" selected="@(estRespAduana.PagadoPor == "ATILSON" || estRespAduana.PagadoPor == null ? "selected" : null)">Paga: Atilson</option>
+                <option value="AGENCIA" selected="@(estRespAduana.PagadoPor == "AGENCIA" ? "selected" : null)">Paga: Agencia</option>
+                <option value="PROVEEDOR" selected="@(estRespAduana.PagadoPor == "PROVEEDOR" ? "selected" : null)">Paga: Proveedor</option>
+            </select>
+            <span class="text-muted">→</span>
+            <select class="form-select form-select-sm resp-responsable border-0 bg-light" style="width:auto; font-size:10px; font-weight:700; color:var(--doc-danger-strong);" data-concepto="@estRespAduana.ConceptoReal" onchange="guardarResponsabilidad(@op.Id, this.getAttribute('data-concepto'), this.closest('.d-flex').querySelector('.resp-pagado'), this)">
+                <option value="CLIENTE" selected="@(estRespAduana.Responsable == "CLIENTE" || estRespAduana.Responsable == null ? "selected" : null)">Resp: Cliente</option>
+                <option value="ATILSON" selected="@(estRespAduana.Responsable == "ATILSON" ? "selected" : null)">Resp: Atilson</option>
+                <option value="PROVEEDOR" selected="@(estRespAduana.Responsable == "PROVEEDOR" ? "selected" : null)">Resp: Proveedor</option>
+                <option value="AGENCIA" selected="@(estRespAduana.Responsable == "AGENCIA" ? "selected" : null)">Resp: Agencia</option>
+            </select>
         </div>
     </div>
+    @{
+        // ISPS (nov-2026): cobro documental por contenedor que depende del terminal portuario.
+        // Con Marítimo o Terrestre el terminal sale de esas pestañas; si el servicio es solo
+        // documental se elige aquí (antes no había dónde y el ISPS no aparecía en Finanzas).
+        int servIspsDoc = Model.Op.IdTipoServicio ?? 0;
+        bool sinTerminalPropio = !new[] { 1, 2, 3, 5, 8, 9, 10, 12 }.Contains(servIspsDoc) && !new[] { 1, 2, 4, 6, 8, 9, 11, 13 }.Contains(servIspsDoc);
+        string terminalIspsDoc = (Model.Op.OperacionesTerrestres?.FirstOrDefault(t => t.IdUnidadTecnica == null)?.TerminalTerrestreStr
+                                  ?? Model.Op.TerminalPortuario ?? "").Trim().ToUpper();
+        if (terminalIspsDoc.Contains("DP WORLD")) terminalIspsDoc = "DPW";
+    }
+    @if (sinTerminalPropio && Model.IdUnidadTecnica == null)
+    {
+        <div class="doc-cobro-card mt-3">
+            <div class="doc-cobro-texto">
+                <span class="doc-cobro-titulo"><i class="bi bi-shield-check"></i> Terminal portuario · ISPS</span>
+                <span class="doc-cobro-ayuda">El ISPS (Seguridad de la Carga) se cobra una vez por cada contenedor según el terminal. Se guarda al elegirlo.</span>
+            </div>
+            <select class="form-select form-select-sm" style="max-width:260px;" aria-label="Terminal portuario del ISPS"
+                    onchange="guardarTerminalIspsDoc(@Model.Op.Id, this)">
+                <option value="" selected="@(terminalIspsDoc == "" ? "selected" : null)">Sin ISPS / no aplica</option>
+                <option value="TPS" selected="@(terminalIspsDoc.Contains("TPS") ? "selected" : null)">TPS · Valparaíso</option>
+                <option value="STI" selected="@(terminalIspsDoc.Contains("STI") ? "selected" : null)">STI · San Antonio</option>
+                <option value="DPW" selected="@(terminalIspsDoc.Contains("DPW") ? "selected" : null)">DP World · San Antonio</option>
+            </select>
+        </div>
     }
         </div>
 
@@ -255,13 +280,13 @@
 <div class="pro-pane-@Model.IdSuffix" id="pane-origen-@Model.IdSuffix" style="display: none;" data-tarifa-pendiente="@(estRespOrigen.PendienteTarifa ? "true" : "false")">
     @if (Model.Contenedores.Any(c => c.IdUnidad.HasValue))
     {
-        <div class="d-flex align-items-center gap-3 p-2 px-3 mb-3 rounded" style="background:var(--bg-soft); border:1px solid var(--doc-gray-border);">
-            <span class="mod-label m-0" style="font-size:10px;"><i class="bi bi-boxes me-1"></i> Modalidad</span>
+        <div class="doc-modalidad-cert d-flex flex-wrap align-items-center gap-3 p-2 px-3 mb-3 rounded" aria-label="Modalidad de cobro del certificado">
+            <span class="mod-label m-0" style="font-size:10px;"><i class="bi bi-receipt me-1"></i> Cobro al cliente</span>
             <div class="btn-group" role="group">
                                 <input type="radio" class="btn-check modalidad-cert-radio" name="modCertOri-@Model.IdSuffix" id="modOriGrupal-@Model.IdSuffix" value="GRUPAL" @(modalidadOri == "GRUPAL" ? "checked" : "") @(oriBloqueadaModalidad ? "disabled" : "") onchange="cambiarModalidadCertPorCertificado(@Model.Op.Id, 'ori', this.value)">
-                <label class="btn btn-outline-secondary btn-sm fw-bold" for="modOriGrupal-@Model.IdSuffix" style="font-size:10px;">GRUPAL</label>
+                <label class="btn btn-outline-secondary btn-sm fw-bold" for="modOriGrupal-@Model.IdSuffix" style="font-size:10px;">Por booking</label>
                                 <input type="radio" class="btn-check modalidad-cert-radio" name="modCertOri-@Model.IdSuffix" id="modOriIndividual-@Model.IdSuffix" value="INDIVIDUAL" @(modalidadOri == "INDIVIDUAL" ? "checked" : "") @(oriBloqueadaModalidad ? "disabled" : "") onchange="cambiarModalidadCertPorCertificado(@Model.Op.Id, 'ori', this.value)">
-                <label class="btn btn-outline-secondary btn-sm fw-bold" for="modOriIndividual-@Model.IdSuffix" style="font-size:10px;">INDIVIDUAL</label>
+                <label class="btn btn-outline-secondary btn-sm fw-bold" for="modOriIndividual-@Model.IdSuffix" style="font-size:10px;">Por contenedor</label>
             </div>
             @if (oriBloqueadaModalidad)
             {
@@ -269,6 +294,7 @@
             }
         </div>
     }
+    <p class="doc-modalidad-ayuda"><i class="bi bi-info-circle" aria-hidden="true"></i> Egresos: un costo por contenedor. Ingresos: por booking (una vez) o por contenedor (según selección).</p>
     @if (!oriEsIndividual)
     {
             <div class="d-flex justify-content-between align-items-center mb-4 pb-3 border-bottom border-light">
@@ -501,16 +527,16 @@
     else
     {
         <div class="mb-3">
-            <h3 class="pro-title"><i class="bi bi-globe me-2 text-purple"></i>Certificado Origen / TLC <span class="badge bg-secondary bg-opacity-10 text-secondary border ms-2" style="font-size:9px;">INDIVIDUAL POR CONTENEDOR</span></h3>
+            <h3 class="pro-title"><i class="bi bi-globe me-2 text-purple"></i>Certificado Origen / TLC <span class="badge bg-secondary bg-opacity-10 text-secondary border ms-2" style="font-size:9px;">POR CONTENEDOR</span></h3>
             <p class="pro-subtitle m-0">Cada contenedor gestiona su propio N° de certificado.</p>
         </div>
-        @foreach (var cOri in Model.Contenedores.Where(c => c.IdUnidad.HasValue))
+        @foreach (var cOri in Model.Contenedores)
         {
-            var estRespOriU = Model.PageModel.ObtenerEstadoConceptoExacto(op, $"Certificado de Origen (U{cOri.IdUnidad})");
+            var estRespOriU = Model.PageModel.ObtenerEstadoConceptoExacto(op, cOri.IdUnidad.HasValue ? $"Certificado de Origen (U{cOri.IdUnidad.Value})" : $"Certificado de Origen");
             <div class="p-3 mb-3 rounded border" style="background:var(--doc-bg-faint);">
                 <div class="d-flex justify-content-between align-items-center mb-2">
                     <span class="fw-bold text-dark" style="font-size:12px;"><i class="bi bi-box me-1"></i>@cOri.Label</span>
-                    <button type="button" class="btn btn-sm btn-dark py-1 px-3" style="font-size:10px;" onclick="guardarCertOrigenContenedor(@op.Id, @cOri.IdUnidad, 'ori-u-@cOri.IdUnidad-@Model.IdSuffix')">
+                    <button type="button" class="btn btn-sm btn-dark py-1 px-3" style="font-size:10px;" onclick="guardarCertOrigenContenedor(@op.Id, @(cOri.IdUnidad?.ToString() ?? "null"), 'ori-u-@cOri.IdUnidad-@Model.IdSuffix')">
                         <i class="bi bi-save me-1"></i> Guardar
                     </button>
                 </div>
@@ -557,13 +583,13 @@
 <div class="pro-pane-@Model.IdSuffix" id="pane-fito-@Model.IdSuffix" style="display: none;" data-tarifa-pendiente="@(estRespFito.PendienteTarifa ? "true" : "false")">
     @if (Model.Contenedores.Any(c => c.IdUnidad.HasValue))
     {
-        <div class="d-flex align-items-center gap-3 p-2 px-3 mb-3 rounded" style="background:var(--bg-soft); border:1px solid var(--doc-gray-border);">
-            <span class="mod-label m-0" style="font-size:10px;"><i class="bi bi-boxes me-1"></i> Modalidad</span>
+        <div class="doc-modalidad-cert d-flex flex-wrap align-items-center gap-3 p-2 px-3 mb-3 rounded" aria-label="Modalidad de cobro del certificado">
+            <span class="mod-label m-0" style="font-size:10px;"><i class="bi bi-receipt me-1"></i> Cobro al cliente</span>
             <div class="btn-group" role="group">
                                 <input type="radio" class="btn-check modalidad-cert-radio" name="modCertFit-@Model.IdSuffix" id="modFitGrupal-@Model.IdSuffix" value="GRUPAL" @(modalidadFit == "GRUPAL" ? "checked" : "") @(fitBloqueadaModalidad ? "disabled" : "") onchange="cambiarModalidadCertPorCertificado(@Model.Op.Id, 'fit', this.value)">
-                <label class="btn btn-outline-secondary btn-sm fw-bold" for="modFitGrupal-@Model.IdSuffix" style="font-size:10px;">GRUPAL</label>
+                <label class="btn btn-outline-secondary btn-sm fw-bold" for="modFitGrupal-@Model.IdSuffix" style="font-size:10px;">Por booking</label>
                                 <input type="radio" class="btn-check modalidad-cert-radio" name="modCertFit-@Model.IdSuffix" id="modFitIndividual-@Model.IdSuffix" value="INDIVIDUAL" @(modalidadFit == "INDIVIDUAL" ? "checked" : "") @(fitBloqueadaModalidad ? "disabled" : "") onchange="cambiarModalidadCertPorCertificado(@Model.Op.Id, 'fit', this.value)">
-                <label class="btn btn-outline-secondary btn-sm fw-bold" for="modFitIndividual-@Model.IdSuffix" style="font-size:10px;">INDIVIDUAL</label>
+                <label class="btn btn-outline-secondary btn-sm fw-bold" for="modFitIndividual-@Model.IdSuffix" style="font-size:10px;">Por contenedor</label>
             </div>
             @if (fitBloqueadaModalidad)
             {
@@ -571,6 +597,7 @@
             }
         </div>
     }
+    <p class="doc-modalidad-ayuda"><i class="bi bi-info-circle" aria-hidden="true"></i> Egresos: un costo por contenedor. Ingresos: por booking (una vez) o por contenedor (según selección).</p>
     @if (!fitEsIndividual)
     {
             <div class="d-flex justify-content-between align-items-center mb-4 pb-3 border-bottom border-light">
@@ -818,16 +845,16 @@
     else
     {
         <div class="mb-3">
-            <h3 class="pro-title"><i class="bi bi-tree-fill me-2 text-success"></i>Fitosanitario (SAG) <span class="badge bg-secondary bg-opacity-10 text-secondary border ms-2" style="font-size:9px;">INDIVIDUAL POR CONTENEDOR</span></h3>
+            <h3 class="pro-title"><i class="bi bi-tree-fill me-2 text-success"></i>Fitosanitario (SAG) <span class="badge bg-secondary bg-opacity-10 text-secondary border ms-2" style="font-size:9px;">POR CONTENEDOR</span></h3>
             <p class="pro-subtitle m-0">Cada contenedor gestiona su propio N° de certificado.</p>
         </div>
-        @foreach (var cFit in Model.Contenedores.Where(c => c.IdUnidad.HasValue))
+        @foreach (var cFit in Model.Contenedores)
         {
-            var estRespFitU = Model.PageModel.ObtenerEstadoConceptoExacto(op, $"Certificado Fitosanitario (U{cFit.IdUnidad})");
+            var estRespFitU = Model.PageModel.ObtenerEstadoConceptoExacto(op, cFit.IdUnidad.HasValue ? $"Certificado Fitosanitario (U{cFit.IdUnidad.Value})" : $"Certificado Fitosanitario");
             <div class="p-3 mb-3 rounded border" style="background:var(--doc-bg-faint);">
                 <div class="d-flex justify-content-between align-items-center mb-2">
                     <span class="fw-bold text-dark" style="font-size:12px;"><i class="bi bi-box me-1"></i>@cFit.Label</span>
-                    <button type="button" class="btn btn-sm btn-dark py-1 px-3" style="font-size:10px;" onclick="guardarCertContenedor(@op.Id, @cFit.IdUnidad, 'fit', 'fit-u-@cFit.IdUnidad-@Model.IdSuffix')">
+                    <button type="button" class="btn btn-sm btn-dark py-1 px-3" style="font-size:10px;" onclick="guardarCertContenedor(@op.Id, @(cFit.IdUnidad?.ToString() ?? "null"), 'fit', 'fit-u-@cFit.IdUnidad-@Model.IdSuffix')">
                         <i class="bi bi-save me-1"></i> Guardar
                     </button>
                 </div>
@@ -864,13 +891,13 @@
 <div class="pro-pane-@Model.IdSuffix" id="pane-sani-@Model.IdSuffix" style="display: none;" data-tarifa-pendiente="@(estRespSani.PendienteTarifa ? "true" : "false")">
     @if (Model.Contenedores.Any(c => c.IdUnidad.HasValue))
     {
-        <div class="d-flex align-items-center gap-3 p-2 px-3 mb-3 rounded" style="background:var(--bg-soft); border:1px solid var(--doc-gray-border);">
-            <span class="mod-label m-0" style="font-size:10px;"><i class="bi bi-boxes me-1"></i> Modalidad</span>
+        <div class="doc-modalidad-cert d-flex flex-wrap align-items-center gap-3 p-2 px-3 mb-3 rounded" aria-label="Modalidad de cobro del certificado">
+            <span class="mod-label m-0" style="font-size:10px;"><i class="bi bi-receipt me-1"></i> Cobro al cliente</span>
             <div class="btn-group" role="group">
                                 <input type="radio" class="btn-check modalidad-cert-radio" name="modCertSan-@Model.IdSuffix" id="modSanGrupal-@Model.IdSuffix" value="GRUPAL" @(modalidadSan == "GRUPAL" ? "checked" : "") @(sanBloqueadaModalidad ? "disabled" : "") onchange="cambiarModalidadCertPorCertificado(@Model.Op.Id, 'san', this.value)">
-                <label class="btn btn-outline-secondary btn-sm fw-bold" for="modSanGrupal-@Model.IdSuffix" style="font-size:10px;">GRUPAL</label>
+                <label class="btn btn-outline-secondary btn-sm fw-bold" for="modSanGrupal-@Model.IdSuffix" style="font-size:10px;">Por booking</label>
                                 <input type="radio" class="btn-check modalidad-cert-radio" name="modCertSan-@Model.IdSuffix" id="modSanIndividual-@Model.IdSuffix" value="INDIVIDUAL" @(modalidadSan == "INDIVIDUAL" ? "checked" : "") @(sanBloqueadaModalidad ? "disabled" : "") onchange="cambiarModalidadCertPorCertificado(@Model.Op.Id, 'san', this.value)">
-                <label class="btn btn-outline-secondary btn-sm fw-bold" for="modSanIndividual-@Model.IdSuffix" style="font-size:10px;">INDIVIDUAL</label>
+                <label class="btn btn-outline-secondary btn-sm fw-bold" for="modSanIndividual-@Model.IdSuffix" style="font-size:10px;">Por contenedor</label>
             </div>
             @if (sanBloqueadaModalidad)
             {
@@ -878,6 +905,7 @@
             }
         </div>
     }
+    <p class="doc-modalidad-ayuda"><i class="bi bi-info-circle" aria-hidden="true"></i> Egresos: un costo por contenedor. Ingresos: por booking (una vez) o por contenedor (según selección).</p>
     @if (!sanEsIndividual)
     {
             <div class="d-flex justify-content-between align-items-center mb-4 pb-3 border-bottom border-light">
@@ -961,13 +989,23 @@ bool certFinalSanV3 = !string.IsNullOrEmpty(d?.EvidenciaSanitario1) || !string.I
     <div class="pro-step @(certFinalSanV3 ? "completed" : "")" id="step-aprob-san-v3-@Model.IdSuffix"><div class="pro-step-icon"><i class="bi bi-check-lg"></i></div><div class="pro-step-text">Certificado Final</div></div>
 </div>
 
-      <div class="d-flex gap-2 mb-4 edit-only-flex pb-3 border-bottom border-light flex-wrap">
-    <button type="button" class="pro-btn" id="btn-enviar-cli-san-v3-@Model.IdSuffix" style="background:var(--doc-accent-orange); color:var(--bg-main); display: @(!string.IsNullOrEmpty(d?.EvidenciaSanitario1) || !string.IsNullOrEmpty(d?.EvidenciaSanitario2) || !string.IsNullOrEmpty(d?.EvidenciaSanitario3) || !string.IsNullOrEmpty(d?.EvidenciaSanitario4) ? "inline-flex" : "none") !important;" onclick="enviarCertificadoCliente('v3-@Model.IdSuffix', 'san', '@op.NumeroBooking')"><i class="bi bi-send me-1"></i> Enviar a Cliente</button>
-    <button type="button" class="pro-btn" style="background:var(--doc-success); color:var(--bg-main);" title="Registrar aprobación del cliente recibida por WhatsApp u otro medio (no por correo)" onclick="registrarRespuestaClienteManual('aprobado', 'san', 'v3-@Model.IdSuffix', this)"><i class="bi bi-check-circle me-1"></i> Aprobó Cliente</button>
-    <button type="button" class="pro-btn" style="background:var(--doc-danger); color:var(--bg-main);" title="Registrar rechazo del cliente recibido por WhatsApp u otro medio (no por correo)" onclick="document.getElementById('v3-rechazo-san-@Model.IdSuffix').classList.remove('d-none')"><i class="bi bi-x-circle me-1"></i> Rechazó Cliente</button>
-    <button type="button" class="pro-btn" style="background:var(--doc-info); color:var(--bg-main);" onclick="enviarSanitarioAgencia('v3-@Model.IdSuffix', '@op.NumeroBooking')"><i class="bi bi-envelope me-1"></i> Enviar a Sernapesca</button>
-    <button type="button" class="pro-btn ms-auto" style="background:var(--atilson-purple); color:var(--bg-main);" onclick="document.getElementById('file-certfinal-san-v3-@Model.IdSuffix').click()"><i class="bi bi-paperclip me-1"></i> Adjuntar Certificado Final</button>
-</div>
+      <div class="doc-acciones-cert edit-only-flex mb-4" aria-label="Acciones del certificado sanitario">
+        <div class="doc-accion-grupo">
+            <span class="doc-accion-titulo"><i class="bi bi-person-check me-1"></i> Revisión del cliente</span>
+            <div class="doc-accion-botones">
+                <button type="button" class="pro-btn" id="btn-enviar-cli-san-v3-@Model.IdSuffix" style="background:var(--doc-info); color:var(--bg-main); display: @(!string.IsNullOrEmpty(d?.EvidenciaSanitario1) || !string.IsNullOrEmpty(d?.EvidenciaSanitario2) || !string.IsNullOrEmpty(d?.EvidenciaSanitario3) || !string.IsNullOrEmpty(d?.EvidenciaSanitario4) ? "inline-flex" : "none") !important;" onclick="enviarCertificadoCliente('v3-@Model.IdSuffix', 'san', '@op.NumeroBooking')"><i class="bi bi-send me-1"></i> Enviar a cliente</button>
+                <button type="button" class="pro-btn" style="background:var(--doc-success); color:var(--bg-main);" title="Registrar aprobación del cliente recibida por WhatsApp u otro medio (no por correo)" onclick="registrarRespuestaClienteManual('aprobado', 'san', 'v3-@Model.IdSuffix', this)"><i class="bi bi-check-circle me-1"></i> Aprobado</button>
+                <button type="button" class="pro-btn" style="background:var(--doc-danger); color:var(--bg-main);" title="Registrar rechazo del cliente recibido por WhatsApp u otro medio (no por correo)" onclick="document.getElementById('v3-rechazo-san-@Model.IdSuffix').classList.remove('d-none')"><i class="bi bi-x-circle me-1"></i> Rechazado</button>
+            </div>
+        </div>
+        <div class="doc-accion-grupo">
+            <span class="doc-accion-titulo"><i class="bi bi-file-earmark-check me-1"></i> Trámite Sernapesca</span>
+            <div class="doc-accion-botones">
+                <button type="button" class="pro-btn" style="background:var(--doc-info); color:var(--bg-main);" onclick="enviarSanitarioAgencia('v3-@Model.IdSuffix', '@op.NumeroBooking')"><i class="bi bi-envelope me-1"></i> Enviar a Sernapesca</button>
+                <button type="button" class="pro-btn" style="background:var(--atilson-purple); color:var(--bg-main);" onclick="document.getElementById('file-certfinal-san-v3-@Model.IdSuffix').click()"><i class="bi bi-paperclip me-1"></i> Adjuntar certificado final</button>
+            </div>
+        </div>
+      </div>
 <div id="v3-rechazo-san-@Model.IdSuffix" class="d-none mb-4 d-flex gap-2">
     <input type="text" class="pro-input" id="txt-obs-san-v3-@Model.IdSuffix" placeholder="Escriba el motivo del rechazo...">
     <button type="button" class="pro-btn" style="background:var(--doc-ink); color:var(--bg-main);" onclick="confirmarRespuestaClienteManualRechazo('san', 'v3-@Model.IdSuffix')">Confirmar</button>
@@ -1141,16 +1179,16 @@ bool certFinalSanV3 = !string.IsNullOrEmpty(d?.EvidenciaSanitario1) || !string.I
     else
     {
         <div class="mb-3">
-            <h3 class="pro-title"><i class="bi bi-droplet-fill me-2 text-info"></i>Sanitario (Sernapesca) <span class="badge bg-secondary bg-opacity-10 text-secondary border ms-2" style="font-size:9px;">INDIVIDUAL POR CONTENEDOR</span></h3>
+            <h3 class="pro-title"><i class="bi bi-droplet-fill me-2 text-info"></i>Sanitario (Sernapesca) <span class="badge bg-secondary bg-opacity-10 text-secondary border ms-2" style="font-size:9px;">POR CONTENEDOR</span></h3>
             <p class="pro-subtitle m-0">Cada contenedor gestiona su propio N° de certificado.</p>
         </div>
-        @foreach (var cSan in Model.Contenedores.Where(c => c.IdUnidad.HasValue))
+        @foreach (var cSan in Model.Contenedores)
         {
-            var estRespSanU = Model.PageModel.ObtenerEstadoConceptoExacto(op, $"Certificado Sanitario (U{cSan.IdUnidad})");
+            var estRespSanU = Model.PageModel.ObtenerEstadoConceptoExacto(op, cSan.IdUnidad.HasValue ? $"Certificado Sanitario (U{cSan.IdUnidad.Value})" : $"Certificado Sanitario");
             <div class="p-3 mb-3 rounded border" style="background:var(--doc-bg-faint);">
                 <div class="d-flex justify-content-between align-items-center mb-2">
                     <span class="fw-bold text-dark" style="font-size:12px;"><i class="bi bi-box me-1"></i>@cSan.Label</span>
-                    <button type="button" class="btn btn-sm btn-dark py-1 px-3" style="font-size:10px;" onclick="guardarCertContenedor(@op.Id, @cSan.IdUnidad, 'san', 'san-u-@cSan.IdUnidad-@Model.IdSuffix')">
+                    <button type="button" class="btn btn-sm btn-dark py-1 px-3" style="font-size:10px;" onclick="guardarCertContenedor(@op.Id, @(cSan.IdUnidad?.ToString() ?? "null"), 'san', 'san-u-@cSan.IdUnidad-@Model.IdSuffix')">
                         <i class="bi bi-save me-1"></i> Guardar
                     </button>
                 </div>
@@ -1187,13 +1225,13 @@ bool certFinalSanV3 = !string.IsNullOrEmpty(d?.EvidenciaSanitario1) || !string.I
             <div class="pro-pane-@Model.IdSuffix" id="pane-cap-@Model.IdSuffix" style="display: none;" data-tarifa-pendiente="@(estRespCap.PendienteTarifa ? "true" : "false")">
     @if (Model.Contenedores.Any(c => c.IdUnidad.HasValue))
     {
-        <div class="d-flex align-items-center gap-3 p-2 px-3 mb-3 rounded" style="background:var(--bg-soft); border:1px solid var(--doc-gray-border);">
-            <span class="mod-label m-0" style="font-size:10px;"><i class="bi bi-boxes me-1"></i> Modalidad</span>
+        <div class="doc-modalidad-cert d-flex flex-wrap align-items-center gap-3 p-2 px-3 mb-3 rounded" aria-label="Modalidad de cobro del certificado">
+            <span class="mod-label m-0" style="font-size:10px;"><i class="bi bi-receipt me-1"></i> Cobro al cliente</span>
             <div class="btn-group" role="group">
                                 <input type="radio" class="btn-check modalidad-cert-radio" name="modCertCap-@Model.IdSuffix" id="modCapGrupal-@Model.IdSuffix" value="GRUPAL" @(modalidadCap == "GRUPAL" ? "checked" : "") @(capBloqueadaModalidad ? "disabled" : "") onchange="cambiarModalidadCertPorCertificado(@Model.Op.Id, 'cap', this.value)">
-                <label class="btn btn-outline-secondary btn-sm fw-bold" for="modCapGrupal-@Model.IdSuffix" style="font-size:10px;">GRUPAL</label>
+                <label class="btn btn-outline-secondary btn-sm fw-bold" for="modCapGrupal-@Model.IdSuffix" style="font-size:10px;">Por booking</label>
                                 <input type="radio" class="btn-check modalidad-cert-radio" name="modCertCap-@Model.IdSuffix" id="modCapIndividual-@Model.IdSuffix" value="INDIVIDUAL" @(modalidadCap == "INDIVIDUAL" ? "checked" : "") @(capBloqueadaModalidad ? "disabled" : "") onchange="cambiarModalidadCertPorCertificado(@Model.Op.Id, 'cap', this.value)">
-                <label class="btn btn-outline-secondary btn-sm fw-bold" for="modCapIndividual-@Model.IdSuffix" style="font-size:10px;">INDIVIDUAL</label>
+                <label class="btn btn-outline-secondary btn-sm fw-bold" for="modCapIndividual-@Model.IdSuffix" style="font-size:10px;">Por contenedor</label>
             </div>
             @if (capBloqueadaModalidad)
             {
@@ -1201,6 +1239,7 @@ bool certFinalSanV3 = !string.IsNullOrEmpty(d?.EvidenciaSanitario1) || !string.I
             }
         </div>
     }
+    <p class="doc-modalidad-ayuda"><i class="bi bi-info-circle" aria-hidden="true"></i> Egresos: un costo por contenedor. Ingresos: por booking (una vez) o por contenedor (según selección).</p>
     @if (!capEsIndividual)
     {
                 <div class="d-flex justify-content-between align-items-center mb-4 pb-3 border-bottom border-light">
@@ -1463,16 +1502,16 @@ bool certFinalSanV3 = !string.IsNullOrEmpty(d?.EvidenciaSanitario1) || !string.I
     else
     {
         <div class="mb-3">
-            <h3 class="pro-title"><i class="bi bi-bezier2 me-2 text-danger"></i>Certificado de Captura <span class="badge bg-secondary bg-opacity-10 text-secondary border ms-2" style="font-size:9px;">INDIVIDUAL POR CONTENEDOR</span></h3>
+            <h3 class="pro-title"><i class="bi bi-bezier2 me-2 text-danger"></i>Certificado de Captura <span class="badge bg-secondary bg-opacity-10 text-secondary border ms-2" style="font-size:9px;">POR CONTENEDOR</span></h3>
             <p class="pro-subtitle m-0">Cada contenedor gestiona su propio N° de certificado.</p>
         </div>
-        @foreach (var cCap in Model.Contenedores.Where(c => c.IdUnidad.HasValue))
+        @foreach (var cCap in Model.Contenedores)
         {
-            var estRespCapU = Model.PageModel.ObtenerEstadoConceptoExacto(op, $"Certificado de Captura (U{cCap.IdUnidad})");
+            var estRespCapU = Model.PageModel.ObtenerEstadoConceptoExacto(op, cCap.IdUnidad.HasValue ? $"Certificado de Captura (U{cCap.IdUnidad.Value})" : $"Certificado de Captura");
             <div class="p-3 mb-3 rounded border" style="background:var(--doc-bg-faint);">
                 <div class="d-flex justify-content-between align-items-center mb-2">
                     <span class="fw-bold text-dark" style="font-size:12px;"><i class="bi bi-box me-1"></i>@cCap.Label</span>
-                    <button type="button" class="btn btn-sm btn-dark py-1 px-3" style="font-size:10px;" onclick="guardarCertContenedor(@op.Id, @cCap.IdUnidad, 'cap', 'cap-u-@cCap.IdUnidad-@Model.IdSuffix')">
+                    <button type="button" class="btn btn-sm btn-dark py-1 px-3" style="font-size:10px;" onclick="guardarCertContenedor(@op.Id, @(cCap.IdUnidad?.ToString() ?? "null"), 'cap', 'cap-u-@cCap.IdUnidad-@Model.IdSuffix')">
                         <i class="bi bi-save me-1"></i> Guardar
                     </button>
                 </div>
@@ -1505,14 +1544,14 @@ bool certFinalSanV3 = !string.IsNullOrEmpty(d?.EvidenciaSanitario1) || !string.I
                         <p class="pro-subtitle m-0">Consolidación de documentos internos, certificados de agencia y despachos al cliente.</p>
                     </div>
                     <div class="section-title-actions">
-                        <a class="btn-edit-inline" style="font-size:11px;" onclick="toggleEditMode('pane-base-@Model.IdSuffix', this)"><i class="bi bi-pencil me-1"></i> Editar Panel</a>
-                        <button type="button" class="btn-cancel-inline edit-only-inline" onclick="cancelEditMode('pane-base-@Model.IdSuffix')">Cancelar</button>
+                        <a class="btn-edit-inline" style="font-size:11px;" onclick="toggleEditCert('base', 'v3-@Model.IdSuffix', this)"><i class="bi bi-pencil me-1"></i> Editar</a>
+                        <button type="button" class="btn-cancel-inline edit-only-inline" onclick="descartarCert('base', 'v3-@Model.IdSuffix')">Descartar</button>
                         <button type="button" class="btn-save-inline edit-only-inline" onclick="guardarFormularioDetalle(this.closest('form'), this)"><i class="bi bi-save me-1"></i> Guardar</button>
                     </div>
                 </div>
 
-                <div class="pro-card mb-4" style="border-top: 4px solid var(--doc-info); background-color: var(--doc-info-soft);">
-                    <h6 class="fw-bold text-info mb-4" style="font-size: 13px; text-transform: uppercase;"><i class="bi bi-bank text-info me-2"></i> 1. Certificados Agencia (AGA) y Operativos</h6>
+                <div class="pro-card mb-4 doc-grupo">
+                    <h6 class="doc-grupo-titulo"><span class="doc-grupo-num">1</span> Certificados de agencia (AGA) y operativos</h6>
 
                     <div class="row g-4">
                         <div class="col-md-6">
@@ -1726,8 +1765,8 @@ bool certFinalSanV3 = !string.IsNullOrEmpty(d?.EvidenciaSanitario1) || !string.I
                     </div>
                 </div>
 
-                <div class="pro-card mb-4" style="border-top: 4px solid var(--doc-warning); background-color: var(--doc-warning-soft);">
-                    <h6 class="fw-bold mb-4" style="font-size: 13px; text-transform: uppercase; color:var(--doc-warning-deep);"><i class="bi bi-person-badge text-warning me-2"></i> 2. Certificados Cliente</h6>
+                <div class="pro-card mb-4 doc-grupo">
+                    <h6 class="doc-grupo-titulo"><span class="doc-grupo-num">2</span> Certificados del cliente</h6>
                     <div class="row g-4">
                         <div class="col-md-6">
                             <div class="p-3 bg-white rounded border border-warning border-opacity-25 h-100">
@@ -1797,26 +1836,33 @@ bool certFinalSanV3 = !string.IsNullOrEmpty(d?.EvidenciaSanitario1) || !string.I
                 <h3 class="pro-title"><i class="bi bi-diagram-3 me-2 text-secondary"></i>Subcertificados Asociados</h3>
                 <p class="pro-subtitle m-0 mb-4">COA, DT, CODAUT, CLAVE, NEPPEX.</p>
 
-                <div class="d-flex gap-4 flex-wrap mb-4 pb-3 border-bottom border-light">
+                @{
+                    bool tieneCoa = !string.IsNullOrEmpty(d?.NumCoa1) || !string.IsNullOrEmpty(d?.EvidenciaCoa1) || !string.IsNullOrEmpty(d?.LogCoa);
+                    bool tieneDt = !string.IsNullOrEmpty(d?.NumDt1) || !string.IsNullOrEmpty(d?.EvidenciaDt1) || !string.IsNullOrEmpty(d?.LogDt);
+                    bool tieneCod = !string.IsNullOrEmpty(d?.NumCod1) || !string.IsNullOrEmpty(d?.EvidenciaCod1) || !string.IsNullOrEmpty(d?.LogCodaut);
+                    bool tieneCla = !string.IsNullOrEmpty(d?.NumCla1) || !string.IsNullOrEmpty(d?.EvidenciaCla1) || !string.IsNullOrEmpty(d?.LogClave);
+                    bool tieneNep = !string.IsNullOrEmpty(d?.NumNep1) || !string.IsNullOrEmpty(d?.EvidenciaNep1) || !string.IsNullOrEmpty(d?.LogNeppex);
+                }
+                <div class="d-flex gap-4 flex-wrap mb-4 pb-3 border-bottom border-light doc-sub-toggles">
                     <label class="d-flex align-items-center gap-2 m-0" style="cursor:pointer;">
-                        <input class="pro-check" type="checkbox" id="chkCoa-v3-@Model.IdSuffix" onchange="toggleSubCert('row-coa-v3-@Model.IdSuffix', this)">
-                        <span class="fw-bold text-warning" style="font-size:12px; text-transform:uppercase;">COA</span>
+                        <input class="pro-check" type="checkbox" id="chkCoa-v3-@Model.IdSuffix" @(tieneCoa ? "checked" : "") onchange="toggleSubCert('row-coa-v3-@Model.IdSuffix', this)">
+                        <span class="doc-sub-txt">COA</span>
                     </label>
                     <label class="d-flex align-items-center gap-2 m-0" style="cursor:pointer;">
-                        <input class="pro-check" type="checkbox" id="chkDt-v3-@Model.IdSuffix" onchange="toggleSubCert('row-dt-v3-@Model.IdSuffix', this)">
-                        <span class="fw-bold text-secondary" style="font-size:12px; text-transform:uppercase;">DT</span>
+                        <input class="pro-check" type="checkbox" id="chkDt-v3-@Model.IdSuffix" @(tieneDt ? "checked" : "") onchange="toggleSubCert('row-dt-v3-@Model.IdSuffix', this)">
+                        <span class="doc-sub-txt">DT</span>
                     </label>
                     <label class="d-flex align-items-center gap-2 m-0" style="cursor:pointer;">
-                        <input class="pro-check" type="checkbox" id="chkCod-v3-@Model.IdSuffix" onchange="toggleSubCert('row-cod-v3-@Model.IdSuffix', this)">
-                        <span class="fw-bold text-danger" style="font-size:12px; text-transform:uppercase;">CODAUT</span>
+                        <input class="pro-check" type="checkbox" id="chkCod-v3-@Model.IdSuffix" @(tieneCod ? "checked" : "") onchange="toggleSubCert('row-cod-v3-@Model.IdSuffix', this)">
+                        <span class="doc-sub-txt">CODAUT</span>
                     </label>
                     <label class="d-flex align-items-center gap-2 m-0" style="cursor:pointer;">
-                        <input class="pro-check" type="checkbox" id="chkCla-v3-@Model.IdSuffix" onchange="toggleSubCert('row-cla-v3-@Model.IdSuffix', this)">
-                        <span class="fw-bold text-danger" style="font-size:12px; text-transform:uppercase;">CLAVE</span>
+                        <input class="pro-check" type="checkbox" id="chkCla-v3-@Model.IdSuffix" @(tieneCla ? "checked" : "") onchange="toggleSubCert('row-cla-v3-@Model.IdSuffix', this)">
+                        <span class="doc-sub-txt">CLAVE</span>
                     </label>
                     <label class="d-flex align-items-center gap-2 m-0" style="cursor:pointer;">
-                        <input class="pro-check" type="checkbox" id="chkNep-v3-@Model.IdSuffix" onchange="toggleSubCert('row-nep-v3-@Model.IdSuffix', this)">
-                        <span class="fw-bold text-danger" style="font-size:12px; text-transform:uppercase;">NEPPEX</span>
+                        <input class="pro-check" type="checkbox" id="chkNep-v3-@Model.IdSuffix" @(tieneNep ? "checked" : "") onchange="toggleSubCert('row-nep-v3-@Model.IdSuffix', this)">
+                        <span class="doc-sub-txt">NEPPEX</span>
                     </label>
                 </div>
 
@@ -1829,7 +1875,7 @@ bool certFinalSanV3 = !string.IsNullOrEmpty(d?.EvidenciaSanitario1) || !string.I
                         bool bloqueadoNep = (d?.CertsBloqueados ?? "").Split(',').Contains("nep");
                     }
 
-                    <div id="row-coa-v3-@Model.IdSuffix" style="display:none;">
+                    <div id="row-coa-v3-@Model.IdSuffix" style="display:@(tieneCoa ? "block" : "none");">
                         <div class="subcert-row d-flex align-items-center gap-3 py-3 border-bottom" style="border-color:var(--surface-raised) !important;">
                             <div style="width:4px; height:34px; background:var(--doc-accent-orange); border-radius:3px; flex-shrink:0;"></div>
                             <div style="width:85px; flex-shrink:0;">
@@ -1866,7 +1912,7 @@ bool certFinalSanV3 = !string.IsNullOrEmpty(d?.EvidenciaSanitario1) || !string.I
                         </div>
                     </div>
 
-                    <div id="row-dt-v3-@Model.IdSuffix" style="display:none;">
+                    <div id="row-dt-v3-@Model.IdSuffix" style="display:@(tieneDt ? "block" : "none");">
                         <div class="subcert-row d-flex align-items-center gap-3 py-3 border-bottom" style="border-color:var(--surface-raised) !important;">
                             <div style="width:4px; height:34px; background:var(--doc-gray-deep); border-radius:3px; flex-shrink:0;"></div>
                             <div style="width:85px; flex-shrink:0;">
@@ -1903,7 +1949,7 @@ bool certFinalSanV3 = !string.IsNullOrEmpty(d?.EvidenciaSanitario1) || !string.I
                         </div>
                     </div>
 
-                    <div id="row-cod-v3-@Model.IdSuffix" style="display:none;">
+                    <div id="row-cod-v3-@Model.IdSuffix" style="display:@(tieneCod ? "block" : "none");">
                         <div class="subcert-row d-flex align-items-center gap-3 py-3 border-bottom" style="border-color:var(--surface-raised) !important;">
                             <div style="width:4px; height:34px; background:var(--danger); border-radius:3px; flex-shrink:0;"></div>
                             <div style="width:85px; flex-shrink:0;">
@@ -1940,7 +1986,7 @@ bool certFinalSanV3 = !string.IsNullOrEmpty(d?.EvidenciaSanitario1) || !string.I
                         </div>
                     </div>
 
-                    <div id="row-cla-v3-@Model.IdSuffix" style="display:none;">
+                    <div id="row-cla-v3-@Model.IdSuffix" style="display:@(tieneCla ? "block" : "none");">
                         <div class="subcert-row d-flex align-items-center gap-3 py-3 border-bottom" style="border-color:var(--surface-raised) !important;">
                             <div style="width:4px; height:34px; background:var(--danger); border-radius:3px; flex-shrink:0;"></div>
                             <div style="width:85px; flex-shrink:0;">
@@ -1977,7 +2023,7 @@ bool certFinalSanV3 = !string.IsNullOrEmpty(d?.EvidenciaSanitario1) || !string.I
                         </div>
                     </div>
 
-                    <div id="row-nep-v3-@Model.IdSuffix" style="display:none;">
+                    <div id="row-nep-v3-@Model.IdSuffix" style="display:@(tieneNep ? "block" : "none");">
                         <div class="subcert-row d-flex align-items-center gap-3 py-3" style="border-color:var(--surface-raised) !important;">
                             <div style="width:4px; height:34px; background:var(--danger); border-radius:3px; flex-shrink:0;"></div>
                             <div style="width:85px; flex-shrink:0;">

@@ -231,6 +231,17 @@ window.cancelEditMode = function(formId) {
         window.registrarRoleoCancelacionDetalle = function (idOp, tipoTarifaActual, nombreNaviera, diasUmbral, siempreAplica, totalContenedores, etdIso, montoNavieraUsd) {
             const umbral = parseInt(diasUmbral, 10) || 7;
             const navSiempre = siempreAplica === 'true';
+            // nov-2026: tarifas de Comercial para Roleo / Cancelación / No-Show (por contenedor).
+            // Llegan como JSON en data-penalidades; antes solo venía el monto de la naviera.
+            let tarifasPen = {};
+            try { tarifasPen = JSON.parse(montoNavieraUsd || '{}') || {}; } catch (e) { tarifasPen = {}; }
+            if (typeof tarifasPen === 'number') tarifasPen = { naviera: tarifasPen };
+            const tarifaPara = (tipo, dentro) => {
+                const t = tipo === 'ROLEO' ? tarifasPen.roleo : tipo === 'NO_SHOW' ? tarifasPen.noShow : tarifasPen.cancelacion;
+                if (t && t.Monto != null) return { monto: t.Monto, moneda: t.Moneda || 'USD', aplicaIva: t.AplicaIva === true, nombre: tipo === 'ROLEO' ? 'Roleo' : tipo === 'NO_SHOW' ? 'No Show' : 'Cancelación' };
+                if (tarifasPen.naviera != null) return { monto: tarifasPen.naviera, moneda: 'USD', aplicaIva: false, nombre: 'monto de la naviera en Maestros' };
+                return null;
+            };
             let diasAlZarpe = null;
             if (etdIso) {
                 const etd = new Date(etdIso);
@@ -240,7 +251,7 @@ window.cancelEditMode = function(formId) {
             const lblSm = 'font-size:9px; font-weight:800; color:#94a3b8;';
 
             Swal.fire({
-                title: 'Registrar Roleo / Cancelación / No Show',
+                title: 'Registrar Roleo, Cancelación o No Show',
                 width: 600,
                 html: `
                     <div style="text-align:left; font-size:13px;">
@@ -252,7 +263,8 @@ window.cancelEditMode = function(formId) {
                                 <label style="${lbl}">Tipo</label>
                                 <select id="swal-roleo-tipo" class="swal2-select" style="margin:0; width:100%; font-weight:700;">
                                     <option value="ROLEO">Roleo</option>
-                                    <option value="CANCELACION_NOSHOW">Cancelación / No Show</option>
+                                    <option value="CANCELACION">Cancelación</option>
+                                    <option value="NO_SHOW">No Show</option>
                                 </select>
                             </div>
                             <div class="col-6">
@@ -266,7 +278,7 @@ window.cancelEditMode = function(formId) {
                         </div>
                         <div id="swal-roleo-estado" class="px-3 py-2 mb-3 rounded" style="font-size:11px; font-weight:700;"></div>
                         <div id="swal-roleo-spot" class="row g-2 mb-3">
-                            <div class="col-6">
+                            <div class="col-12">
                                 <label style="${lbl}">Penalidad</label>
                                 <select id="swal-roleo-penalidad" class="swal2-select" style="margin:0; width:100%; font-weight:700;">
                                     <option value="AUTOMATICO" selected>Automático (regla de ${umbral} días)</option>
@@ -275,15 +287,11 @@ window.cancelEditMode = function(formId) {
                                     <option value="POR_DETERMINAR">Por determinar</option>
                                 </select>
                             </div>
-                            <div class="col-6">
-                                <label style="${lbl}">Monto por contenedor (USD)</label>
-                                <input type="number" id="swal-roleo-monto" class="swal2-input" style="margin:0; width:100%;" min="0" step="0.01" value="${montoNavieraUsd || ''}" placeholder="Ej: 150" />
-                            </div>
-                        </div>
+                         </div>
                         <div class="row g-2 mb-3">
                             <div class="col-6">
                                 <label style="${lbl}">N° Contenedores Afectados</label>
-                                <input type="number" id="swal-roleo-cant" class="swal2-input" style="margin:0; width:100%;" value="${totalContenedores}" min="1" />
+                                <input type="number" id="swal-roleo-cant" class="swal2-input" style="margin:0; width:100%;" value="${totalContenedores}" min="1" max="${totalContenedores}" />
                             </div>
                         </div>
                         <label style="${lbl}">Comentario (opcional)</label>
@@ -323,7 +331,11 @@ window.cancelEditMode = function(formId) {
                         else if (dentroUmbral) { txt = `Spot a ${diasAlZarpe} día(s) del zarpe (≤ ${umbral}): se genera la penalidad automáticamente.`; bg = '#fef2f2'; color = '#b91c1c'; }
                         else { txt = `Spot a ${diasAlZarpe} día(s) del zarpe (> ${umbral}): sin penalidad.`; bg = '#f0fdf4'; color = '#15803d'; }
                         estado.textContent = txt; estado.style.background = bg; estado.style.color = color;
+
+                        // El monto se determina en el backend según el tipo exacto
+                        // y su tarifa de Comercial. No duplicar importes en el modal.
                     };
+                    $('swal-roleo-cant').addEventListener('input', refrescar);
                     $('swal-roleo-tarifa').addEventListener('change', refrescar);
                     $('swal-roleo-tipo').addEventListener('change', refrescar);
                     $('swal-roleo-pendiente').addEventListener('change', function () {
@@ -335,12 +347,10 @@ window.cancelEditMode = function(formId) {
                     const $ = (id) => document.getElementById(id);
                     const tarifa = $('swal-roleo-tarifa').value;
                     if (!tarifa) { Swal.showValidationMessage('Selecciona la condición de tarifa (Spot / Contrato).'); return false; }
-                    const monto = $('swal-roleo-monto').value;
-                    if (monto && (isNaN(parseFloat(monto)) || parseFloat(monto) < 0)) { Swal.showValidationMessage('El monto debe ser un número positivo.'); return false; }
                     const tipo = $('swal-roleo-tipo').value;
                     const pendiente = tipo !== 'ROLEO' || $('swal-roleo-pendiente').checked;
                     return {
-                        tipo, tarifa, monto,
+                        tipo, tarifa,
                         penalidad: $('swal-roleo-penalidad').value,
                         cantidad: $('swal-roleo-cant').value || 1,
                         comentario: $('swal-roleo-comentario').value,
@@ -360,7 +370,6 @@ window.cancelEditMode = function(formId) {
                 formData.append('tipo', result.value.tipo);
                 formData.append('tipoTarifa', result.value.tarifa);
                 formData.append('penalidadOverride', result.value.penalidad);
-                formData.append('montoPenalidadUsd', result.value.monto || '');
                 formData.append('cantidadContenedoresAfectados', result.value.cantidad);
                 formData.append('comentario', result.value.comentario);
                 formData.append('datosNuevosPendientes', result.value.pendiente);
@@ -423,9 +432,8 @@ window.cancelEditMode = function(formId) {
                         <option value="SI">Sí, genera penalidad</option>
                         <option value="NO">No genera penalidad</option>
                     </select>
-                    <div id="swal-pen-monto-wrap" style="display:none;">
-                        <label style="font-size:10px; font-weight:800; color:#94a3b8; text-transform:uppercase; display:block; margin-bottom:6px;">Monto por contenedor (USD)</label>
-                        <input type="number" id="swal-pen-monto" class="swal2-input" style="margin:0; width:100%;" min="0" step="0.01" value="${montoSugeridoUsd || ''}" />
+                    <div id="swal-pen-monto-wrap" style="display:none; font-size:11px; color:#64748b;">
+                        El monto sale de la tarifa de Comercial (Roleo / Cancelación / No-Show) por cada contenedor afectado.
                     </div>
                 </div>`,
                 showCancelButton: true, confirmButtonText: 'Actualizar', confirmButtonColor: '#0f172a',
@@ -437,7 +445,7 @@ window.cancelEditMode = function(formId) {
                 preConfirm: () => {
                     const val = document.getElementById('swal-pen-sel').value;
                     if (!val) { Swal.showValidationMessage('Selecciona una opción.'); return false; }
-                    return { penalidad: val, monto: document.getElementById('swal-pen-monto').value };
+                    return { penalidad: val };
                 }
             }).then((result) => {
                 if (!result.isConfirmed || !result.value) return;
@@ -445,7 +453,6 @@ window.cancelEditMode = function(formId) {
                 const formData = new FormData();
                 formData.append('idRegistro', idRegistro);
                 formData.append('penalidad', result.value.penalidad);
-                formData.append('montoPenalidadUsd', result.value.monto || '');
                 fetch('?handler=ActualizarPenalidadRoleo', { method: 'POST', headers: { 'RequestVerificationToken': token }, body: formData })
                     .then(res => res.json()).then(data => {
                         if (data.success) { Swal.fire({ icon: 'success', title: 'Actualizado', timer: 1500, showConfirmButton: false }); setTimeout(() => window.location.reload(), 800); }
@@ -553,25 +560,35 @@ window.cancelEditMode = function(formId) {
             let patente = obtenerValor("Patente") || "[PATENTE]";
             let planta = obtenerValor("PlantaCarga", "view-only-planta") || "[PLANTA]";
             let deposito = obtenerValor("DepositoRetiro", "view-only-depositoretiro") || "[DEPÓSITO]";
-            let terminal = obtenerValor(null, "view-only-terminalterrestre") || "[TERMINAL]";
-            let puerto = obtenerValor("PuertoEntrega", "view-only-puertoentrega") || "[PUERTO]";
+            let terminal = obtenerValor(null, "view-only-terminalterrestre") || "NO INFORMADO";
+            let puerto = obtenerValor("PuertoEntrega", "view-only-puertoentrega") || "NO INFORMADO";
 
             let inputFecha = formTerrestre ? formTerrestre.querySelector('input[name="FechaCarga"]') : null;
-            let fecha = (inputFecha && inputFecha.value) ? inputFecha.value.replace("T", " ") : "[FECHA]";
+            let fecha = (inputFecha && inputFecha.value) ? inputFecha.value.replace("T", " ") : "PENDIENTE";
             let booking = detalleOpData().booking;
 
-            let correoCliente = detalleOpData().correoCliente;
+            let correoCliente = detalleOpData().correoCliente || "";
+            let correoAgencia = detalleOpData().correoAgencia || "";
+            let puertoPod = detalleOpData().puertoDestino || "";
             let to = "", cc = "", asunto = "", cuerpo = "";
 
             if (tipo === 'solicitud') {
                 document.getElementById('tipoCorreoTxt').innerText = "Enviando Solicitud al Proveedor";
-                to = correoProv !== "" ? correoProv : "proveedor@transporte.cl";
-                cc = "usuario@atilson.cl; finanzas@atilson.cl";
+                to = correoProv;
+                cc = "";
+                if (!to) {
+                    Swal.fire('Falta correo del proveedor', 'Guarda el correo operativo de la empresa de transporte antes de enviar.', 'warning');
+                    return;
+                }
                 asunto = `SOLICITUD DE SERVICIO TRANSPORTE // BKG: ${booking}`;
                 cuerpo = `Estimado equipo de ${empresa}, buenos días:\n\nFavor confirmar servicio de transporte para la siguiente carga:\n\nBooking: N° ${booking}\nDepósito Retiro Vacío: ${deposito}\nFecha de Presentación: ${fecha} Hrs.\nPlanta: ${planta}\nPuerto: ${puerto} - ${terminal}\n\nQuedamos atentos a su confirmación y datos del conductor.\n\nSaludos Cordiales,\nOperaciones Atilson Cargo`;
             } else if (tipo === 'preliminar') {
                 document.getElementById('tipoCorreoTxt').innerText = "Enviando Asignación Preliminar al Cliente";
-                to = correoCliente; cc = "operaciones@atilson.cl";
+                to = correoCliente; cc = "";
+                if (!to) {
+                    Swal.fire('Falta correo del cliente', 'El cliente no tiene correo registrado. Agrégalo en el maestro de Clientes antes de enviar.', 'warning');
+                    return;
+                }
                 asunto = `ASIGNACIÓN PRELIMINAR // BKG: ${booking}`;
                 cuerpo = `Estimado Cliente, buenos días:\n\nLe enviamos los datos del conductor asignado (Booking: N° ${booking}):\n\nConductor: ${conductor}\nRUT: ${rutCond}\nTeléfono: ${telefono}\nPatente: ${patente}\nFecha de Presentación: ${fecha}\nDepósito Retiro Vacío: ${deposito}\nPuerto: ${puerto} - ${terminal}\n\n*El N° de contenedor se enviará en la asignación completa.*\n\nSaludos Cordiales,\nOperaciones Atilson Cargo`;
                         } else if (tipo === 'completa') {
@@ -579,28 +596,28 @@ window.cancelEditMode = function(formId) {
                 let sello = obtenerValor("NumeroSello", "") || detalleOpData().numeroSello || "[S/N SELLO]";
                 if (contenedor === "[S/N CONTENEDOR]" || sello === "[S/N SELLO]") { Swal.fire('Datos Faltantes', 'Debes guardar primero el N° de Contenedor y Sello antes de generar el envío definitivo.', 'error'); return; }
                 document.getElementById('tipoCorreoTxt').innerText = "Enviando Asignación Completa al Cliente";
-                to = correoCliente; cc = "operaciones@atilson.cl";
+                to = correoCliente; cc = "";
+                if (!to) {
+                    Swal.fire('Falta correo del cliente', 'El cliente no tiene correo registrado. Agrégalo en el maestro de Clientes antes de enviar.', 'warning');
+                    return;
+                }
                 asunto = `ASIGNACIÓN COMPLETA // BKG: ${booking} // CONTENEDOR: ${contenedor}`;
                 cuerpo = `Estimado Cliente, buenos días:\n\nLe enviamos la asignación completa para su embarque:\n\nBooking: N° ${booking}\nContenedor: ${contenedor}\nSello: ${sello}\n\nDatos de Transporte:\nConductor: ${conductor}\nRUT: ${rutCond}\nTeléfono: ${telefono}\nPatente: ${patente}\nFecha de Presentación: ${fecha}\nDepósito Retiro Vacío: ${deposito}\nPuerto: ${puerto} - ${terminal}\n\nSaludos Cordiales,\nOperaciones Atilson Cargo`;
             } else if (tipo === 'guiaAgencia' || tipo === 'instructivoAgencia' || tipo === 'bookingAgencia' || tipo === 'capturaAgencia' || tipo === 'librevenAgencia') {
                 const aplicaSerna = detalleOpData().aplicaSernapesca === 'true';
-                let destStembex = aplicaSerna ? "a.barrera@stembex.cl; javier.traverso@stembex.cl" : "agencia@aduanas.cl";
-                const polUpper = (detalleOpData().puertoOrigen || '').toUpperCase();
-                if (polUpper.includes("SAN ANTONIO")) destStembex += "; stembexsai@stembex.cl; manuel.vera@stembex.cl; francisco.roman@stembex.cl; renata.aguilar@stembex.cl";
-                else if (polUpper.includes("VALPARAISO") || polUpper.includes("VALPARAÍSO")) destStembex += "; Zeal@stembex.cl";
+                let destStembex = correoAgencia;
+                to = destStembex; cc = "";
+                const naveStr = detalleOpData().nave || "NO INFORMADA";
+                const navieraStr = detalleOpData().naviera || "NO INFORMADA";
+                const tipoCont = detalleOpData().tipoContenedor || "NO INFORMADO";
+                const clienteAsociado = detalleOpData().clienteRazonSocial || "NO INFORMADO";
+                const puertoPol = detalleOpData().puertoOrigen || "NO INFORMADO";
 
-                to = destStembex; cc = "operaciones@atilson.cl";
-                const naveStr = detalleOpData().nave || "[NAVE]";
-                const navieraStr = detalleOpData().naviera || "[NAVIERA]";
-                const tipoCont = detalleOpData().tipoContenedor || "[TIPO CONTENEDOR]";
-                const clienteAsociado = detalleOpData().clienteRazonSocial || "[CLIENTE]";
-                const puertoPol = detalleOpData().puertoOrigen || "[POL]";
-
-                if (tipo === 'guiaAgencia') { document.getElementById('tipoCorreoTxt').innerText = 'Enviando Guía de Despacho a Agencia'; asunto = `GUÍA DE DESPACHO N°BOOKING ${booking} // ${naveStr} // ${tipoCont} // ${puertoPol} - [POD] // ${clienteAsociado} // ${navieraStr} // CARGOFLOW DEMO SPA`; cuerpo = `Buenas tardes, equipo Stembex Zeal\n\nSe adjunta Guía de Despacho.\nPor favor proceder con visado de unidad.\n\nGracias!`; }
-                else if (tipo === 'instructivoAgencia') { document.getElementById('tipoCorreoTxt').innerText = 'Enviando Instructivo a Agencia'; const numInst = document.getElementById('docbase-val-instructivo')?.value || 'XXXXX'; asunto = `INSTRUCTIVO N°${numInst} // ${naveStr} // ${booking} // ${clienteAsociado} // ${puertoPol} - [POD] // ${navieraStr} // CARGOFLOW DEMO SPA`; cuerpo = `Buenas tardes,\n\nSe adjunta instructivo de embarque en mención del asunto para proceder con la coordinación del respectivo proceso documental del embarque.\n\nINST: ${numInst}`; }
-                else if (tipo === 'bookingAgencia') { document.getElementById('tipoCorreoTxt').innerText = 'Enviando Booking a Agencia'; asunto = `CONFIRMACIÓN N°BOOKING ${booking} // ${naveStr} // ${tipoCont} // ${puertoPol} - [POD] // ${clienteAsociado} // ${navieraStr} // CARGOFLOW DEMO SPA`; cuerpo = `Estimado Cliente, junto con saludar se adjunta confirmación de embarque, notar detalle:\n\nBOOKING: ${booking}\nNAVIERA: ${navieraStr}\nNAVE: ${naveStr}\nTIPO CONTENEDOR: ${tipoCont}\nPOL: ${puertoPol}\nPOD: [POD]`; }
-                else if (tipo === 'capturaAgencia') { document.getElementById('tipoCorreoTxt').innerText = 'Enviando Captura AGA a Agencia'; asunto = `CAPTURA AGA N°${booking} // ${naveStr} // ${tipoCont} // ${puertoPol} - [POD] // ${clienteAsociado} // ${navieraStr} // CARGOFLOW DEMO SPA`; cuerpo = `Buenas tardes,\n\nSe adjunta captura AGA en mención del asunto para proceder con la coordinación del respectivo proceso documental del embarque.\n\nCAPTURA: ${booking}`; }
-                else if (tipo === 'librevenAgencia') { document.getElementById('tipoCorreoTxt').innerText = 'Enviando Libre Venta a Agencia'; asunto = `LIBRE VENTA N°BOOKING ${booking} // ${naveStr} // ${tipoCont} // ${puertoPol} - [POD] // ${clienteAsociado} // ${navieraStr} // CARGOFLOW DEMO SPA`; cuerpo = `Buenas tardes, equipo Stembex Zeal\n\nSe adjunta Certificado de Libre Venta.\nPor favor proceder con su revisión e ingreso.\n\nGracias!`; }
+                if (tipo === 'guiaAgencia') { document.getElementById('tipoCorreoTxt').innerText = 'Enviando Guía de Despacho a Agencia'; asunto = `GUÍA DE DESPACHO N°BOOKING ${booking} // ${naveStr} // ${tipoCont} // ${puertoPol} - ${puertoPod || 'POD PENDIENTE'} // ${clienteAsociado} // ${navieraStr} // CARGOFLOW DEMO SPA`; cuerpo = `Buenas tardes, equipo Stembex Zeal\n\nSe adjunta Guía de Despacho.\nPor favor proceder con visado de unidad.\n\nGracias!`; }
+                else if (tipo === 'instructivoAgencia') { document.getElementById('tipoCorreoTxt').innerText = 'Enviando Instructivo a Agencia'; const numInst = document.getElementById('docbase-val-instructivo')?.value?.trim() || ''; if (!numInst) { Swal.fire('Falta N° de instructivo', 'Guarda el número de instructivo antes de enviar este correo.', 'warning'); return; } asunto = `INSTRUCTIVO N°${numInst} // ${naveStr} // ${booking} // ${clienteAsociado} // ${puertoPol} - ${puertoPod || 'POD PENDIENTE'} // ${navieraStr} // CARGOFLOW DEMO SPA`; cuerpo = `Buenas tardes,\n\nSe adjunta instructivo de embarque en mención del asunto para proceder con la coordinación del respectivo proceso documental del embarque.\n\nINST: ${numInst}`; }
+                else if (tipo === 'bookingAgencia') { document.getElementById('tipoCorreoTxt').innerText = 'Enviando Booking a Agencia'; asunto = `CONFIRMACIÓN N°BOOKING ${booking} // ${naveStr} // ${tipoCont} // ${puertoPol} - ${puertoPod || 'POD PENDIENTE'} // ${clienteAsociado} // ${navieraStr} // CARGOFLOW DEMO SPA`; cuerpo = `Estimado Cliente, junto con saludar se adjunta confirmación de embarque, notar detalle:\n\nBOOKING: ${booking}\nNAVIERA: ${navieraStr}\nNAVE: ${naveStr}\nTIPO CONTENEDOR: ${tipoCont}\nPOL: ${puertoPol}\nPOD: ${puertoPod || 'POD PENDIENTE'}`; }
+                else if (tipo === 'capturaAgencia') { document.getElementById('tipoCorreoTxt').innerText = 'Enviando Captura AGA a Agencia'; asunto = `CAPTURA AGA N°${booking} // ${naveStr} // ${tipoCont} // ${puertoPol} - ${puertoPod || 'POD PENDIENTE'} // ${clienteAsociado} // ${navieraStr} // CARGOFLOW DEMO SPA`; cuerpo = `Buenas tardes,\n\nSe adjunta captura AGA en mención del asunto para proceder con la coordinación del respectivo proceso documental del embarque.\n\nCAPTURA: ${booking}`; }
+                else if (tipo === 'librevenAgencia') { document.getElementById('tipoCorreoTxt').innerText = 'Enviando Libre Venta a Agencia'; asunto = `LIBRE VENTA N°BOOKING ${booking} // ${naveStr} // ${tipoCont} // ${puertoPol} - ${puertoPod || 'POD PENDIENTE'} // ${clienteAsociado} // ${navieraStr} // CARGOFLOW DEMO SPA`; cuerpo = `Buenas tardes, equipo Stembex Zeal\n\nSe adjunta Certificado de Libre Venta.\nPor favor proceder con su revisión e ingreso.\n\nGracias!`; }
             }
 
                     document.getElementById('emailToPreview').value = to;
@@ -625,6 +642,7 @@ window.cancelEditMode = function(formId) {
             let to = document.getElementById('emailToPreview').value;
             let cc = document.getElementById('emailCcPreview').value;
             let asunto = document.getElementById('emailAsuntoPreview').value;
+            if (!to || !to.trim()) { Swal.fire('Falta destinatario', 'Ingresa un correo real antes de enviar.', 'warning'); return; }
             let cuerpo = document.getElementById('emailCuerpoPreview').value;
             let token = document.querySelector('input[name="__RequestVerificationToken"]').value;
 
@@ -777,16 +795,10 @@ window.cancelEditMode = function(formId) {
                     if (!err && motivos.includes(MOTIVO_OTROS) && obs && !obs.value.trim()) { obs.classList.add('is-invalid'); err = 'Con el motivo "Otros" debes escribir las observaciones.'; }
                     if (err) { aviso(err); return; }
 
-                    const monto = document.getElementById(`montoCorrBl-${idOp}`);
-                    const moneda = document.getElementById(`monedaCorrBl-${idOp}`);
+                    // El costo sale de la tarifa de Comercial (nov-2026): solo se muestra.
                     const esc = (v) => String(v || '').replace(/&/g, '&amp;').replace(/</g, '&lt;');
-                    const valorCosto = monto ? parseFloat(monto.value) : NaN;
-                    const monedaCosto = moneda ? moneda.value : 'USD';
-                    const textoCosto = !isNaN(valorCosto) && valorCosto > 0
-                        ? (monedaCosto === 'CLP'
-                            ? `$ ${valorCosto.toLocaleString('es-CL', { maximumFractionDigits: 0 })} CLP + IVA`
-                            : `${monedaCosto} ${valorCosto.toLocaleString('es-CL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} + IVA`)
-                        : (monto && monto.value.trim() === '0' ? 'Sin costo' : 'Por valorizar en Finanzas');
+                    const costoEl = document.getElementById(`costoCorrBl-${idOp}`);
+                    const textoCosto = (costoEl && costoEl.getAttribute('data-costo-texto')) || 'Por valorizar en Finanzas';
                     const titulo = (card && card.getAttribute('data-siguiente')) || 'Corrección de BL';
                     Swal.fire({
                         icon: 'question',
@@ -873,13 +885,13 @@ window.cancelEditMode = function(formId) {
                     const esc = (v) => (v || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
                     Swal.fire({
                         title: 'Datos del embarque',
-                        width: 560,
+                        width: 640,
                         html: `<div style="text-align:left;">
                             <div class="row g-2">
                                 <div class="col-6"><label style="${lbl}">Booking *</label><input id="swal-emb-booking" class="swal2-input" style="margin:0; width:100%; text-transform:uppercase;" value="${esc(d.booking)}" /></div>
                                 <div class="col-6"><label style="${lbl}">N° instructivo de embarque</label><input id="swal-emb-instructivo" class="swal2-input" style="margin:0; width:100%; text-transform:uppercase;" maxlength="60" placeholder="Ej: INS-2026-0412" value="${esc(d.instructivo)}" /></div>
                                 <div class="col-6"><label style="${lbl}">Naviera *</label><select id="swal-emb-naviera" class="swal2-select" style="margin:0; width:100%;"><option value="">-- Seleccionar --</option>${tplNav ? tplNav.innerHTML : ''}</select></div>
-                                <div class="col-6"><label style="${lbl}">Nave / Viaje</label><input id="swal-emb-nave" class="swal2-input" style="margin:0; width:100%; text-transform:uppercase;" value="${esc(d.nave)}" /></div>
+                                <div class="col-12"><label style="${lbl}">Nave / Viaje</label><select id="swal-emb-nave" class="swal2-select" style="margin:0; width:100%; font-size:13px;"><option value="">-- Seleccionar nave / viaje --</option></select><input type="hidden" id="swal-emb-iditinerario" value="${esc(d.idItinerario)}" /><div class="naves-hint" id="swal-emb-nave-hint" style="font-size:11px; color:#64748b; margin-top:4px;"></div></div>
                                 <div class="col-6"><label style="${lbl}">Propietario de Contrato *</label><select id="swal-emb-prop" class="swal2-select" style="margin:0; width:100%;"><option value="">-- Seleccionar --</option>${tplProp ? tplProp.innerHTML : ''}</select></div>
                                 <div class="col-12" id="swal-emb-otro-wrap" style="display:none;"><label style="${lbl}">Cliente / recibidor (opcional)</label><input id="swal-emb-otro" class="swal2-input" style="margin:0; width:100%; text-transform:uppercase;" maxlength="100" value="${esc(d.propOtro)}" /></div>
                                 <div class="col-6"><label style="${lbl}">Commodity</label><select id="swal-emb-commodity" class="swal2-select" style="margin:0; width:100%;"><option value="">-- Seleccionar --</option>${tplCom ? tplCom.innerHTML : ''}</select></div>
@@ -895,13 +907,26 @@ window.cancelEditMode = function(formId) {
                             document.getElementById('swal-emb-condpago').value = d.condPago || '';
                             const sync = () => { document.getElementById('swal-emb-otro-wrap').style.display = prop.value === 'OTROS' ? '' : 'none'; };
                             prop.addEventListener('change', sync); sync();
+                            // Nave / Viaje del maestro de itinerarios (nov-2026): naviera del modal y
+                            // POL / POD del booking. Conserva la nave actual aunque no esté en el maestro.
+                            const selNave = document.getElementById('swal-emb-nave');
+                            if (d.nave) { const o = document.createElement('option'); o.value = d.nave; o.textContent = d.nave; o.selected = true; selNave.appendChild(o); }
+                            if (window.NavesItinerario) {
+                                const polFijo = { value: d.pol || '' }, podFijo = { value: d.pod || '' };
+                                window.NavesItinerario.enlazar({
+                                    select: selNave,
+                                    idInput: document.getElementById('swal-emb-iditinerario'),
+                                    naviera: nav, pol: polFijo, pod: podFijo,
+                                    hint: document.getElementById('swal-emb-nave-hint')
+                                });
+                            }
                         },
                         preConfirm: () => {
                             const v = (id) => document.getElementById(id).value.trim();
                             if (!v('swal-emb-booking')) { Swal.showValidationMessage('El Booking es obligatorio.'); return false; }
                             if (!v('swal-emb-naviera')) { Swal.showValidationMessage('Selecciona la Naviera.'); return false; }
                             if (!v('swal-emb-prop')) { Swal.showValidationMessage('Selecciona el Propietario de Contrato.'); return false; }
-                            return { booking: v('swal-emb-booking'), instructivo: v('swal-emb-instructivo'), naviera: v('swal-emb-naviera'), nave: v('swal-emb-nave'), prop: v('swal-emb-prop'), otro: v('swal-emb-otro'), commodity: v('swal-emb-commodity'), condPago: v('swal-emb-condpago') };
+                            return { booking: v('swal-emb-booking'), instructivo: v('swal-emb-instructivo'), naviera: v('swal-emb-naviera'), nave: v('swal-emb-nave'), idItinerario: v('swal-emb-iditinerario'), prop: v('swal-emb-prop'), otro: v('swal-emb-otro'), commodity: v('swal-emb-commodity'), condPago: v('swal-emb-condpago') };
                         }
                     }).then((r) => {
                         if (!r.isConfirmed) return;
@@ -912,6 +937,7 @@ window.cancelEditMode = function(formId) {
                         fd.append('numeroInstructivo', r.value.instructivo);
                         fd.append('idNaviera', r.value.naviera);
                         fd.append('nave', r.value.nave);
+                        fd.append('idItinerario', r.value.idItinerario || '');
                         fd.append('propietarioContrato', r.value.prop);
                         fd.append('propietarioContratoOtro', r.value.otro);
                         fd.append('commodity', r.value.commodity);
@@ -937,8 +963,8 @@ window.cancelEditMode = function(formId) {
             const booking = detalleOpData().booking;
             const navieraUpper = (detalleOpData().naviera || '').toUpperCase();
             const navieras = [
-                { nombre: 'Wan Hai', email: 'jcovarrubia@navepac.com,docexpo@navepac.com', detectar: ['WAN HAI', 'WAN-HAI'] },
-                { nombre: 'Yang Ming', email: 'digcentral@agunsa.cl,luis.sotoc@agunsa.com', detectar: ['YANG MING', 'YM'] },
+                { nombre: 'Wan Hai', email: 'wanhai.docs1@demo.cl,wanhai.docs2@demo.cl', detectar: ['WAN HAI', 'WAN-HAI'] },
+                { nombre: 'Yang Ming', email: 'yangming.docs1@demo.cl,yangming.docs2@demo.cl', detectar: ['YANG MING', 'YM'] },
             ];
             let emailAutodetectado = ''; navieras.forEach(n => { if (n.detectar.some(k => navieraUpper.includes(k))) emailAutodetectado = n.email; });
             const opcionesHtml = navieras.map(n => `<option value="${n.email}" ${emailAutodetectado === n.email ? 'selected' : ''}>${n.nombre} — ${n.email}</option>`).join('') + `<option value="custom">Otro destinatario...</option>`;
@@ -966,7 +992,7 @@ window.cancelEditMode = function(formId) {
             const cuerpoHtml = `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;"><div style="background:linear-gradient(135deg,#0f172a 0%,#6d2d9e 100%);padding:25px;text-align:center;border-radius:8px 8px 0 0;"><h2 style="color:#fff;margin:0;">Envío de Documentos</h2><p style="color:#cbd5e1;margin:6px 0 0;">Booking: <strong style="color:#fff;">${booking}</strong></p></div><div style="background:#fff;padding:28px;border:1px solid #e2e8f0;border-top:none;border-radius:0 0 8px 8px;"><p style="font-size:14px;color:#475569;line-height:1.6;">Estimado equipo,<br><br>Adjuntamos la evidencia de envío de documentos correspondiente al Booking <strong>${booking}</strong>.</p>${mensajeExtra ? `<p style="font-size:13px;color:#475569;border-left:3px solid #6d2d9e;padding-left:12px;margin-top:16px;">${escapeHtmlAtilson(mensajeExtra)}</p>` : ''}<hr style="border:0;border-top:1px solid #e2e8f0;margin:24px 0;"><p style="font-size:11px;color:#94a3b8;text-align:center;margin:0;">Atilson Cargo SpA · Operaciones Logísticas</p></div></div>`;
 
             const formData = new FormData();
-            formData.append('id', idOp); formData.append('correoDestino', correoDestino); formData.append('copiaCc', 'operaciones@atilson.cl');
+            formData.append('id', idOp); formData.append('correoDestino', correoDestino); formData.append('copiaCc', '');
             formData.append('asunto', asunto); formData.append('cuerpoHtml', cuerpoHtml); formData.append('tipoCorreo', 'evidenciaNaviera');
 
             Swal.fire({ title: 'Enviando...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
@@ -1047,12 +1073,107 @@ window.validarBloqueoAgencia = function(idBase) {
         fit: id => `pane-fito-${id.replace(/^v3-/, '').replace(/^sub-/, '')}`,
         san: id => `pane-sani-${id.replace(/^v3-/, '').replace(/^sub-/, '')}`,
         cap: id => `pane-cap-${id.replace(/^v3-/, '').replace(/^sub-/, '')}`,
+        base: id => `pane-base-${id.replace(/^v3-/, '').replace(/^sub-/, '')}`,
         coa: id => `row-coa-${id}`, dt:  id => `row-dt-${id}`, cod: id => `row-cod-${id}`, cla: id => `row-cla-${id}`, nep: id => `row-nep-${id}`
     };
     const SUFIJO_CAMPO = { ori:'Ori', fit:'Fit', san:'San', cap:'Cap', coa:'Coa', dt:'Dt', cod:'Cod', cla:'Cla', nep:'Nep' };
 
-    window.toggleEditCert = function(certKey, idBase, btn) { toggleEditMode(PANE_ID_MAP[certKey](idBase), btn); };
-    window.descartarCert = function(certKey, idBase) { cancelEditMode(PANE_ID_MAP[certKey](idBase)); };
+    // Documental (nov-2026): "Descartar" ahora devuelve cada campo al valor que tenía al
+    // pulsar "Editar" (antes solo bloqueaba los campos y lo escrito/marcado quedaba a la
+    // vista como si estuviera guardado, aunque no lo estaba).
+    const FOTO_EDICION_DOC = new WeakMap();
+    function tomarFotoEdicionDoc(cont) {
+        const foto = [];
+        cont.querySelectorAll('input, select, textarea').forEach(el => {
+            if (el.classList.contains('btn-check')) return; // se guardan al instante (modalidad / cobro)
+            foto.push([el, (el.type === 'checkbox' || el.type === 'radio') ? el.checked : el.value]);
+        });
+        FOTO_EDICION_DOC.set(cont, foto);
+    }
+    function restaurarFotoEdicionDoc(cont) {
+        const foto = FOTO_EDICION_DOC.get(cont);
+        if (!foto) return;
+        // Primero las casillas (su onchange puede limpiar campos) y después los valores.
+        foto.forEach(([el, v]) => {
+            if ((el.type === 'checkbox' || el.type === 'radio') && el.checked !== v) {
+                el.checked = v; el.dispatchEvent(new Event('change', { bubbles: true }));
+            }
+        });
+        foto.forEach(([el, v]) => {
+            if (el.type === 'checkbox' || el.type === 'radio') return;
+            if (el.type === 'file') { if (el.value) el.value = ''; return; }
+            if (el.value !== v) {
+                el.value = v;
+                if (el.tagName === 'SELECT') el.dispatchEvent(new Event('change', { bubbles: true }));
+            }
+        });
+        FOTO_EDICION_DOC.delete(cont);
+    }
+
+    window.toggleEditCert = function(certKey, idBase, btn) {
+        const cont = document.getElementById(PANE_ID_MAP[certKey](idBase));
+        if (cont && !cont.classList.contains('edit-mode')) tomarFotoEdicionDoc(cont);
+        toggleEditMode(PANE_ID_MAP[certKey](idBase), btn);
+    };
+    window.descartarCert = function(certKey, idBase) {
+        const cont = document.getElementById(PANE_ID_MAP[certKey](idBase));
+        if (cont) restaurarFotoEdicionDoc(cont);
+        cancelEditMode(PANE_ID_MAP[certKey](idBase));
+    };
+
+    // Documental (nov-2026): en modo vista las casillas de cada sección están bloqueadas y
+    // un clic sobre ellas no hacía nada (o, en las que no estaban bloqueadas, marcaba sin
+    // guardar). Ahora el clic abre la edición de esa sección y la casilla se marca de
+    // inmediato; "Guardar" y "Descartar" quedan a la vista como en cualquier edición.
+    function editorDocumentalDe(el) {
+        let mejor = null;
+        document.querySelectorAll('.doc-corp .btn-edit-inline[onclick]').forEach(btn => {
+            const oc = btn.getAttribute('onclick') || '';
+            let m = oc.match(/toggleEditCert\('(\w+)',\s*'([^']+)'/);
+            let id = (m && PANE_ID_MAP[m[1]]) ? PANE_ID_MAP[m[1]](m[2]) : null;
+            if (!id && (m = oc.match(/toggleEditMode\('([^']+)'/))) id = m[1];
+            const cont = id ? document.getElementById(id) : null;
+            if (cont && cont.contains(el) && (!mejor || mejor.cont.contains(cont))) mejor = { btn, cont };
+        });
+        return mejor;
+    }
+    function casillaDesdeClic(target) {
+        if (!target || !target.closest) return null;
+        const esCasilla = el => el && el.matches && el.matches('input[type="checkbox"], input[type="radio"]');
+        if (esCasilla(target)) return target;
+        const lab = target.closest('label');
+        return (lab && esCasilla(lab.control)) ? lab.control : null;
+    }
+    document.addEventListener('pointerdown', function (e) {
+        if (e.button !== 0) return;
+        const casilla = casillaDesdeClic(e.target);
+        if (!casilla || casilla.classList.contains('btn-check') || !casilla.closest('.doc-corp')) return;
+        const ed = editorDocumentalDe(casilla);
+        if (!ed || ed.cont.classList.contains('edit-mode') || ed.btn.offsetParent === null) return;
+        ed.btn.click(); // abre la edición antes de que llegue el clic: la casilla ya está habilitada
+    }, true);
+
+    // Botón "Aplicar" del acuerdo comercial detectado (Certificado de Origen):
+    // abre el panel en modo edición (si estaba cerrado) y deja seleccionado el
+    // acuerdo sugerido. El usuario confirma con "Guardar" como siempre.
+    window.aplicarSugerenciaTlc = function(idBase, acuerdo) {
+        const pane = document.getElementById(PANE_ID_MAP.ori(idBase));
+        if (!pane || !acuerdo) return;
+        if (!pane.classList.contains('edit-mode')) {
+            const btnEditar = pane.querySelector('.btn-edit-inline');
+            toggleEditMode(pane.id, btnEditar);
+        }
+        const sel = pane.querySelector('select[name="docUpdates.AcuerdoOrigen"]');
+        if (!sel) return;
+        const opcion = Array.from(sel.options).find(o => o.value === acuerdo);
+        if (!opcion) {
+            Swal.fire('Atención', `El acuerdo "${acuerdo}" no está en la lista. Selecciónalo manualmente.`, 'warning');
+            return;
+        }
+        sel.disabled = false;
+        sel.value = acuerdo;
+        sel.dispatchEvent(new Event('change', { bubbles: true }));
+    };
 
     // ==========================================
     // 6. GUARDADO AJAX Y OPERACIONES
@@ -1871,7 +1992,7 @@ window.subirRespaldoAlmacen = function(input, idOp) {
                 let val = this.value; let form = this.closest('.tab-pane'); let oldList = form.querySelector('.autocomplete-items');
                 if (oldList) oldList.remove(); if (!val || val.length < 2) return;
                 try {
-                    let response = await fetch(`?handler=BuscarEmpresa&term=${encodeURIComponent(val)}`);
+                    let response = await fetch(`/Operaciones/Index?handler=BuscarEmpresa&term=${encodeURIComponent(val)}`);
                     if (response.ok) {
                         let data = await response.json(); if (data.length === 0) return;
                         let listNode = document.createElement("DIV"); listNode.setAttribute("class", "autocomplete-items shadow-sm border rounded"); listNode.style.cssText = "position:absolute; background:#fff; z-index:99; width:100%; max-height:200px; overflow-y:auto;"; container.appendChild(listNode);
@@ -1896,7 +2017,7 @@ window.subirRespaldoAlmacen = function(input, idOp) {
                 let val = this.value; let form = this.closest('.tab-pane'); let oldList = form.querySelector('.autocomplete-items');
                 if (oldList) oldList.remove(); if (!val || val.length < 2) return;
                 try {
-                    let response = await fetch(`?handler=BuscarConductor&term=${encodeURIComponent(val)}`);
+                    let response = await fetch(`/Operaciones/Index?handler=BuscarConductor&term=${encodeURIComponent(val)}`);
                     if (response.ok) {
                         let data = await response.json(); if (data.length === 0) return;
                         let listNode = document.createElement("DIV"); listNode.setAttribute("class", "autocomplete-items shadow-sm border rounded"); listNode.style.cssText = "position:absolute; background:#fff; z-index:99; width:100%; max-height:200px; overflow-y:auto;"; container.appendChild(listNode);
@@ -1977,7 +2098,7 @@ window.subirRespaldoAlmacen = function(input, idOp) {
 
             window.registrarRoleoCancelacion = function(idOp, tipoTarifaActual, nombreNaviera, diasUmbral, siempreAplica, totalContenedores) {
         Swal.fire({
-            title: 'Registrar Roleo / Cancelación',
+            title: 'Registrar Roleo, Cancelación o No Show',
             width: 560,
             html: `
                 <div style="text-align:left; font-size:13px;">
@@ -1987,7 +2108,8 @@ window.subirRespaldoAlmacen = function(input, idOp) {
                     <label style="font-size:10px; font-weight:800; color:#94a3b8; text-transform:uppercase; display:block; margin-bottom:6px;">Tipo</label>
                     <select id="swal-roleo-tipo" class="swal2-select" style="margin:0 0 14px; width:100%; font-weight:700;">
                         <option value="ROLEO">Roleo</option>
-                        <option value="CANCELACION_NOSHOW">Cancelación / No Show</option>
+                        <option value="CANCELACION">Cancelación</option>
+                        <option value="NO_SHOW">No Show</option>
                     </select>
                     <div class="row g-2 mb-3">
                         <div class="col-6">
@@ -2214,7 +2336,7 @@ window.subirRespaldoAlmacen = function(input, idOp) {
         if (otherCheckbox) { otherCheckbox.checked = false; }
         let token = document.querySelector('input[name="__RequestVerificationToken"]').value; let formData = new FormData(); formData.append('idCosto', idCosto); formData.append('responsable', responsable);
 
-        fetch('?handler=UpdateResponsableCosto', { method: 'POST', headers: { 'RequestVerificationToken': token }, body: formData }).then(res => res.json()).then(data => {
+        fetch('/Operaciones/Index?handler=UpdateResponsableCosto', { method: 'POST', headers: { 'RequestVerificationToken': token }, body: formData }).then(res => res.json()).then(data => {
             if(data.success) {
                 Swal.fire({ icon: 'success', title: 'Responsabilidad Actualizada', toast: true, position: 'top-end', timer: 1500, showConfirmButton: false });
                 checkbox.disabled = true; checkbox.nextElementSibling.style.pointerEvents = 'none';
@@ -2251,11 +2373,11 @@ window.subirRespaldoAlmacen = function(input, idOp) {
         let patente    = obtenerValor("Patente") || "[PATENTE]";
         let planta     = obtenerValor("PlantaCarga", "view-only-planta") || "[PLANTA]";
         let deposito   = obtenerValor("DepositoRetiro", "view-only-depositoretiro") || "[DEPÓSITO]";
-        let terminal   = obtenerValor(null, "view-only-terminalterrestre") || "[TERMINAL]"; 
-        let puerto     = obtenerValor("PuertoEntrega", "view-only-puertoentrega") || "[PUERTO]"; 
+        let terminal   = obtenerValor(null, "view-only-terminalterrestre") || "NO INFORMADO"; 
+        let puerto     = obtenerValor("PuertoEntrega", "view-only-puertoentrega") || "NO INFORMADO"; 
         
-        let inputFecha = formTerrestre.querySelector('input[name="FechaCarga"]'); let fecha = (inputFecha && inputFecha.value) ? inputFecha.value.replace("T", " ") : "[FECHA]";
-        let bookingEl  = ctx.querySelector('.atilson-banner .fw-bold'); let booking = bookingEl ? bookingEl.innerText.replace("N° BOOKING:", "").replace("BOOKING:", "").trim() : "[BOOKING]";
+        let inputFecha = formTerrestre.querySelector('input[name="FechaCarga"]'); let fecha = (inputFecha && inputFecha.value) ? inputFecha.value.replace("T", " ") : "PENDIENTE";
+        let bookingEl  = ctx.querySelector('.atilson-banner .fw-bold'); let booking = bookingEl ? bookingEl.innerText.replace("N° BOOKING:", "").replace("BOOKING:", "").trim() : "";
         
         let chkInter = formTerrestre.querySelector('input[name="AplicaInterplanta"]'); let aplicaInterplanta = chkInter ? chkInter.checked : false;
         let planta2 = formTerrestre.querySelector('select[name="PlantaCarga2"]')?.value || ""; let linkMaps2 = formTerrestre.querySelector('input[name="LinkMaps2"]')?.value || "";
@@ -2268,17 +2390,17 @@ window.subirRespaldoAlmacen = function(input, idOp) {
         }
 
         let clienteAsociado = ""; let clienteDiv = Array.from(ctx.querySelectorAll('.banner-label')).find(el => el.textContent.includes('Cliente'))?.nextElementSibling;
-        if(clienteDiv) clienteAsociado = clienteDiv.innerText.trim(); if(!clienteAsociado) clienteAsociado = "[CLIENTE]";
+        if(clienteDiv) clienteAsociado = clienteDiv.innerText.trim(); if(!clienteAsociado) clienteAsociado = "NO INFORMADO";
 
         let naveStr = ""; let navieraStr = "";
-        if(formGeneral) { let inpNave = formGeneral.querySelector('input[name="Nave"]'); if(inpNave) naveStr = inpNave.value; let selNav = formGeneral.querySelector('select[name="IdNaviera"]'); if(selNav && selNav.options.length > 0) navieraStr = selNav.options[selNav.selectedIndex].text; }
-        if(!naveStr) naveStr = "[NAVE]"; if(!navieraStr) navieraStr = "[NAVIERA]";
+        if(formGeneral) { let inpNave = formGeneral.querySelector('[name="Nave"]'); if(inpNave) naveStr = inpNave.value; let selNav = formGeneral.querySelector('select[name="IdNaviera"]'); if(selNav && selNav.options.length > 0) navieraStr = selNav.options[selNav.selectedIndex].text; }
+        if(!naveStr) naveStr = "NO INFORMADA"; if(!navieraStr) navieraStr = "NO INFORMADA";
 
-        let tipoCont = "[TIPO CONTENEDOR]"; let selCont = formGeneral ? formGeneral.querySelector('select[name="TipoContenedor"]') : null; if(selCont) tipoCont = selCont.value;
+        let tipoCont = "NO INFORMADO"; let selCont = formGeneral ? formGeneral.querySelector('select[name="TipoContenedor"]') : null; if(selCont) tipoCont = selCont.value;
 
-        let cutOffDate = formGeneral?.querySelector('input[name="CutOffMatriz"]')?.value?.replace("T", " ") || "[CORTE DOCUMENTAL]";
-        let stackingDate = formGeneral?.querySelector('input[name="FechaStacking"]')?.value?.replace("T", " ") || "[STACKING]";
-        let lateArrivalDate = formGeneral?.querySelector('input[name="LateArrival"]')?.value?.replace("T", " ") || "[LATE ARRIVAL]";
+        let cutOffDate = formGeneral?.querySelector('input[name="CutOffMatriz"]')?.value?.replace("T", " ") || "PENDIENTE";
+        let stackingDate = formGeneral?.querySelector('input[name="FechaStacking"]')?.value?.replace("T", " ") || "PENDIENTE";
+        let lateArrivalDate = formGeneral?.querySelector('input[name="LateArrival"]')?.value?.replace("T", " ") || "PENDIENTE";
         let tempReefer = formGeneral?.querySelector('input[name="Temperatura"]')?.value; let tempStr = tempReefer ? tempReefer + "°C" : "N/A (Dry)";
 
         let correoCliente = ctx.querySelector('input[name="CorreosCliente"]')?.value || "";
@@ -2286,15 +2408,23 @@ window.subirRespaldoAlmacen = function(input, idOp) {
 
         if (tipo === 'solicitud') {
             document.getElementById('tipoCorreoTxt').innerText = "Enviando Solicitud al Proveedor";
-            to = correoProv !== "" ? correoProv : "proveedor@transporte.cl"; 
-            cc = "usuario@atilson.cl; finanzas@atilson.cl";
+            to = correoProv;
+            cc = "";
+            if (!to) {
+                Swal.fire('Falta correo del proveedor', 'Guarda el correo operativo de la empresa de transporte antes de enviar.', 'warning');
+                return;
+            }
             asunto = `SOLICITUD DE SERVICIO TRANSPORTE // BKG: ${booking}`;
             cuerpo = `Estimado equipo de ${empresa}, buenos días:\n\nFavor confirmar servicio de transporte para la siguiente carga:\n\nBooking: N° ${booking}\nDepósito Retiro Vacío: ${deposito}\nFecha de Presentación: ${fecha} Hrs.\nPlanta: ${planta}${interplantaMsg}\nPuerto: ${puerto} - ${terminal}\n\nQuedamos atentos a su confirmación y datos del conductor.\n\nSaludos Cordiales,\nOperaciones Atilson Cargo`;
             
         } else if (tipo === 'preliminar') {
             document.getElementById('tipoCorreoTxt').innerText = "Enviando Asignación Preliminar al Cliente";
             to = correoCliente; 
-            cc = "operaciones@atilson.cl";
+            cc = "";
+            if (!to) {
+                Swal.fire('Falta correo del cliente', 'El cliente no tiene correo registrado. Agrégalo en el maestro de Clientes antes de enviar.', 'warning');
+                return;
+            }
             asunto = `ASIGNACIÓN PRELIMINAR // BKG: ${booking}`;
             cuerpo = `Estimado Cliente, buenos días:\n\nLe enviamos los datos del conductor asignado (Booking: N° ${booking}):\n\nConductor: ${conductor}\nRUT: ${rutCond}\nTeléfono: ${telefono}\nPatente: ${patente}\nFecha de Presentación: ${fecha}\nDepósito Retiro Vacío: ${deposito}\nPuerto: ${puerto} - ${terminal}\n\n*El N° de contenedor se enviará en la asignación completa.*\n\nSaludos Cordiales,\nOperaciones Atilson Cargo`;
             
@@ -2304,27 +2434,20 @@ window.subirRespaldoAlmacen = function(input, idOp) {
 
             if (contenedor === "[S/N CONTENEDOR]" || sello === "[S/N SELLO]") { Swal.fire('Datos Faltantes', 'Debes guardar primero el N° de Contenedor y Sello antes de generar el envío definitivo.', 'error'); return; }
             document.getElementById('tipoCorreoTxt').innerText = "Enviando Asignación Completa al Cliente";
-            to = correoCliente; cc = "operaciones@atilson.cl";
+            to = correoCliente; cc = "";
             asunto = `ASIGNACIÓN COMPLETA // BKG: ${booking} // CONTENEDOR: ${contenedor}`;
             cuerpo = `Estimado Cliente, buenos días:\n\nLe enviamos la asignación completa para su embarque:\n\nBooking: N° ${booking}\nContenedor: ${contenedor}\nSello: ${sello}\n\nDatos de Transporte:\nConductor: ${conductor}\nRUT: ${rutCond}\nTeléfono: ${telefono}\nPatente: ${patente}\nFecha de Presentación: ${fecha}\nDepósito Retiro Vacío: ${deposito}\nPuerto: ${puerto} - ${terminal}\n\nSaludos Cordiales,\nOperaciones Atilson Cargo`;
             
         } else if (tipo === 'guiaAgencia' || tipo === 'instructivoAgencia' || tipo === 'bookingAgencia' || tipo === 'capturaAgencia' || tipo === 'librevenAgencia') {
-            let destStembex = ""; let chkSerna = formDoc?.querySelector('input[name="docUpdates.AplicaSernapesca"]'); let isSernapesca = chkSerna ? chkSerna.checked : false;
-
-            if(isSernapesca) { destStembex = "a.barrera@stembex.cl; javier.traverso@stembex.cl"; } else { destStembex = "agencia@aduanas.cl"; }
-
-            let polUpper = puerto.toUpperCase();
-            if(polUpper.includes("SAN ANTONIO")) { destStembex += (destStembex ? "; " : "") + "stembexsai@stembex.cl; manuel.vera@stembex.cl; francisco.roman@stembex.cl; renata.aguilar@stembex.cl"; } 
-            else if(polUpper.includes("VALPARAISO") || polUpper.includes("VALPARAÍSO")) { destStembex += (destStembex ? "; " : "") + "Zeal@stembex.cl"; }
-            
-            to = destStembex; cc = "operaciones@atilson.cl";
+            let destStembex = correoAgencia;
+            to = destStembex; cc = "";
             let nombreDocEmail = ""; let docParam = "";
             
-            if (tipo === 'guiaAgencia') { nombreDocEmail = "Guía de Despacho"; docParam = "guia"; document.getElementById('tipoCorreoTxt').innerText = `Enviando Guía de Despacho a Agencia`; asunto = `GUÍA DE DESPACHO N°BOOKING ${booking} // ${naveStr} // ${tipoCont} // ${puerto} - [POD] // ${clienteAsociado} // ${navieraStr} // CARGOFLOW DEMO SPA`; cuerpo = `Buenas tardes, equipo Stembex Zeal\n\nSe adjunta Guía de Despacho.\nPor favor proceder con visado de unidad.\n\nGracias!`; }
-            else if (tipo === 'instructivoAgencia') { nombreDocEmail = "Instructivo de Embarque"; docParam = "instructivo"; document.getElementById('tipoCorreoTxt').innerText = `Enviando Instructivo a Agencia`; let numInst = formDoc?.querySelector('input[name="docUpdates.InstructivoCliente"]')?.value || "XXXXX"; asunto = `INSTRUCTIVO N°${numInst} // ${naveStr} // ${booking} // ${clienteAsociado} // ${puerto} - [POD] // ${navieraStr} // CARGOFLOW DEMO SPA`; cuerpo = `Buenas tardes,\n\nSe adjunta instructivo de embarque en mención del asunto para proceder con la coordinación del respectivo proceso documental del embarque.\n\nINST: ${numInst}`; }
-            else if (tipo === 'bookingAgencia') { nombreDocEmail = "Booking Atilson"; docParam = "booking"; document.getElementById('tipoCorreoTxt').innerText = `Enviando Booking a Agencia`; asunto = `CONFIRMACIÓN N°BOOKING ${booking} // ${naveStr} // ${tipoCont} // ${puerto} - [POD] // ${clienteAsociado} // ${navieraStr} // CARGOFLOW DEMO SPA`; cuerpo = `Estimado Cliente, junto con saludar se adjunta confirmación de embarque, notar detalle:\n\nBOOKING: ${booking}\nNAVIERA: ${navieraStr}\nNAVE: ${naveStr}\nTIPO CONTENEDOR: ${tipoCont}\nTEMP: ${tempStr}\nPOL: ${puerto}\nPOD: [POD]\nDEPÓSITO RETIRO VACÍO: ${deposito}\nTERMINAL: ${terminal}\n\nSTACKING: ${stackingDate}\nCORTE DOCUMENTAL: ${cutOffDate}\nLATE ARRIVAL: ${lateArrivalDate}`; }
-            else if (tipo === 'capturaAgencia') { nombreDocEmail = "Captura AGA"; docParam = "capturaAga"; document.getElementById('tipoCorreoTxt').innerText = `Enviando Captura AGA a Agencia`; asunto = `CAPTURA AGA N°${booking} // ${naveStr} // ${tipoCont} // ${puerto} - [POD] // ${clienteAsociado} // ${navieraStr} // CARGOFLOW DEMO SPA`; cuerpo = `Buenas tardes,\n\nSe adjunta captura AGA en mención del asunto para proceder con la coordinación del respectivo proceso documental del embarque.\n\nCAPTURA: ${booking}`; }
-            else if (tipo === 'librevenAgencia') { nombreDocEmail = "Certificado de Libre Venta"; docParam = "libreven"; document.getElementById('tipoCorreoTxt').innerText = `Enviando Libre Venta a Agencia`; asunto = `LIBRE VENTA N°BOOKING ${booking} // ${naveStr} // ${tipoCont} // ${puerto} - [POD] // ${clienteAsociado} // ${navieraStr} // CARGOFLOW DEMO SPA`; cuerpo = `Buenas tardes, equipo Stembex Zeal\n\nSe adjunta Certificado de Libre Venta.\nPor favor proceder con su revisión e ingreso.\n\nGracias!`; }
+            if (tipo === 'guiaAgencia') { nombreDocEmail = "Guía de Despacho"; docParam = "guia"; document.getElementById('tipoCorreoTxt').innerText = `Enviando Guía de Despacho a Agencia`; asunto = `GUÍA DE DESPACHO N°BOOKING ${booking} // ${naveStr} // ${tipoCont} // ${puerto} - ${puertoPod || 'POD PENDIENTE'} // ${clienteAsociado} // ${navieraStr} // CARGOFLOW DEMO SPA`; cuerpo = `Buenas tardes, equipo Stembex Zeal\n\nSe adjunta Guía de Despacho.\nPor favor proceder con visado de unidad.\n\nGracias!`; }
+            else if (tipo === 'instructivoAgencia') { nombreDocEmail = "Instructivo de Embarque"; docParam = "instructivo"; document.getElementById('tipoCorreoTxt').innerText = `Enviando Instructivo a Agencia`; let numInst = formDoc?.querySelector('input[name="docUpdates.InstructivoCliente"]')?.value?.trim() || ""; if (!numInst) { Swal.fire('Falta N° de instructivo', 'Guarda el número de instructivo antes de enviar este correo.', 'warning'); return; } asunto = `INSTRUCTIVO N°${numInst} // ${naveStr} // ${booking} // ${clienteAsociado} // ${puerto} - ${puertoPod || 'POD PENDIENTE'} // ${navieraStr} // CARGOFLOW DEMO SPA`; cuerpo = `Buenas tardes,\n\nSe adjunta instructivo de embarque en mención del asunto para proceder con la coordinación del respectivo proceso documental del embarque.\n\nINST: ${numInst}`; }
+            else if (tipo === 'bookingAgencia') { nombreDocEmail = "Booking Atilson"; docParam = "booking"; document.getElementById('tipoCorreoTxt').innerText = `Enviando Booking a Agencia`; asunto = `CONFIRMACIÓN N°BOOKING ${booking} // ${naveStr} // ${tipoCont} // ${puerto} - ${puertoPod || 'POD PENDIENTE'} // ${clienteAsociado} // ${navieraStr} // CARGOFLOW DEMO SPA`; cuerpo = `Estimado Cliente, junto con saludar se adjunta confirmación de embarque, notar detalle:\n\nBOOKING: ${booking}\nNAVIERA: ${navieraStr}\nNAVE: ${naveStr}\nTIPO CONTENEDOR: ${tipoCont}\nTEMP: ${tempStr}\nPOL: ${puerto}\nPOD: ${puertoPod || 'POD PENDIENTE'}\nDEPÓSITO RETIRO VACÍO: ${deposito}\nTERMINAL: ${terminal}\n\nSTACKING: ${stackingDate}\nCORTE DOCUMENTAL: ${cutOffDate}\nLATE ARRIVAL: ${lateArrivalDate}`; }
+            else if (tipo === 'capturaAgencia') { nombreDocEmail = "Captura AGA"; docParam = "capturaAga"; document.getElementById('tipoCorreoTxt').innerText = `Enviando Captura AGA a Agencia`; asunto = `CAPTURA AGA N°${booking} // ${naveStr} // ${tipoCont} // ${puerto} - ${puertoPod || 'POD PENDIENTE'} // ${clienteAsociado} // ${navieraStr} // CARGOFLOW DEMO SPA`; cuerpo = `Buenas tardes,\n\nSe adjunta captura AGA en mención del asunto para proceder con la coordinación del respectivo proceso documental del embarque.\n\nCAPTURA: ${booking}`; }
+            else if (tipo === 'librevenAgencia') { nombreDocEmail = "Certificado de Libre Venta"; docParam = "libreven"; document.getElementById('tipoCorreoTxt').innerText = `Enviando Libre Venta a Agencia`; asunto = `LIBRE VENTA N°BOOKING ${booking} // ${naveStr} // ${tipoCont} // ${puerto} - ${puertoPod || 'POD PENDIENTE'} // ${clienteAsociado} // ${navieraStr} // CARGOFLOW DEMO SPA`; cuerpo = `Buenas tardes, equipo Stembex Zeal\n\nSe adjunta Certificado de Libre Venta.\nPor favor proceder con su revisión e ingreso.\n\nGracias!`; }
 
             const baseOrigin = window.location.origin;
             const linkProceso = `${baseOrigin}/Operaciones/Index?handler=RespuestaAgencia&id=${idOperacionReal}&estado=proceso&tipoDoc=${docParam}`;
@@ -2374,13 +2497,13 @@ window.subirRespaldoAlmacen = function(input, idOp) {
             let patenteAlmacen = almacenForm?.querySelector(`input[name="Camion${prefAlmacen}Patente"]`)?.value || "S/N";
             let contenedorAlmacen = ctx.querySelector('input[name="NumeroContenedor"]')?.value || "Sin Asignar";
 
-            to = ""; cc = "operaciones@atilson.cl";
+            to = ""; cc = "";
             asunto = `Aviso de ${esIngresoAlmacen ? 'INGRESO' : 'RETIRO'} a Patio - Booking ${booking}`;
             cuerpo = `Estimados ${proveedorNombreAlmacen},\n\nJunto con saludar cordialmente, enviamos los datos del conductor y unidades para el proceso de ${esIngresoAlmacen ? 'INGRESO' : 'RETIRO'} de almacenamiento.\n\n-- DATOS DE OPERACIÓN --\nCliente: ${clienteAsociado}\nBooking / Reserva: ${booking}\nContenedor / Equipo: ${contenedorAlmacen}\n\n-- DATOS DEL CONDUCTOR Y TRANSPORTE --\nNombre Conductor: ${conductorNAlmacen}\nRUT Conductor: ${conductorRAlmacen}\nTeléfono de Contacto: ${conductorTAlmacen}\nPatente del Camión: ${patenteAlmacen}\n\nFecha y Hora Programada: ${fechaAlmacen}\n\nFavor gestionar recepción en sistema.\n\nSaludos cordiales.`;
         } else if (tipo === 'dhlCliente' || tipo === 'fullsetCliente') {
             let nombreDocEmail = tipo === 'dhlCliente' ? "DHL" : "Full Set";
             document.getElementById('tipoCorreoTxt').innerText = `Enviando ${nombreDocEmail} al Cliente`;
-            to = correoCliente; cc = "operaciones@atilson.cl";
+            to = correoCliente; cc = "";
             asunto = `ENVÍO ${nombreDocEmail.toUpperCase()} // BKG: ${booking}`;
             cuerpo = `Estimado Cliente, buenos días:\n\nJunto con saludar, le hacemos entrega de los documentos correspondientes a su embarque (Booking: ${booking}).\n\nQuedamos atentos a cualquier consulta.\n\nSaludos Cordiales,\nOperaciones Atilson Cargo`;
         }
@@ -2410,6 +2533,7 @@ window.subirRespaldoAlmacen = function(input, idOp) {
     document.getElementById('btnEnviarCorreoGenerado')?.addEventListener('click', function() {
         let idOp = this.getAttribute('data-id'); let tipo = this.getAttribute('data-tipo');
         let to = document.getElementById('emailToPreview').value; let cc = document.getElementById('emailCcPreview').value; let asunto = document.getElementById('emailAsuntoPreview').value;
+        if (!to || !to.trim()) { Swal.fire('Falta destinatario', 'Ingresa un correo real antes de enviar.', 'warning'); return; }
         let htmlAttr = document.getElementById('btnEnviarCorreoGenerado').getAttribute('data-html-body'); let cuerpo = htmlAttr || document.getElementById('emailCuerpoPreview').value;
         let token = document.querySelector('input[name="__RequestVerificationToken"]').value;
 
@@ -2541,7 +2665,7 @@ window.subirRespaldoAlmacen = function(input, idOp) {
     };
 
     window.enviarSanitarioAgencia = function(idOp, booking) {
-        const correoPredefinido = "a.barrera@stembex.cl; javier.traverso@stembex.cl";
+        const correoPredefinido = detalleOpData().correoAgencia || "";
         Swal.fire({
             title: 'Enviar Certificado Sanitario a Aga-Sern',
             html: `<div style="text-align:left; font-size:13px;"><p style="color:#64748b; margin:0 0 14px;"><strong style="color:#0f172a;">BKG: ${booking}</strong> — Se enviará el certificado sanitario a la agencia Sernapesca.</p><label style="font-size:10px; font-weight:800; color:#94a3b8; text-transform:uppercase; display:block; margin-bottom:5px;">Destinatario (Aga-Sern)</label><input type="text" id="swal-san-email" class="swal2-input" style="margin:0 0 12px; width:100%; font-size:12px;" value="${correoPredefinido}" /><label style="font-size:10px; font-weight:800; color:#94a3b8; text-transform:uppercase; display:block; margin-bottom:5px;">Asunto</label><input type="text" id="swal-san-asunto" class="swal2-input" style="margin:0 0 12px; width:100%; font-weight:700;" value="[ATILSON CARGO] Certificado Sanitario — BKG: ${booking}" /><label style="font-size:10px; font-weight:800; color:#94a3b8; text-transform:uppercase; display:block; margin-bottom:5px;">Mensaje adicional (opcional)</label><textarea id="swal-san-msg" class="swal2-textarea" style="margin:0; width:100%; font-size:12px; height:70px;" placeholder="Ej: Adjuntamos certificado sanitario para su revisión..."></textarea></div>`,
@@ -2560,7 +2684,7 @@ window.subirRespaldoAlmacen = function(input, idOp) {
             const htmlCuerpo = `<div style="font-family:Arial,sans-serif;max-width:580px;margin:0 auto;"><div style="background:linear-gradient(135deg,#0f172a 0%,#0ea5e9 100%);padding:24px 28px;border-radius:8px 8px 0 0;"><h2 style="color:#fff;margin:0;font-size:18px;">Envío Certificado Sanitario</h2><p style="color:#bae6fd;margin:6px 0 0;font-size:13px;">Booking: <strong style="color:#fff;">${booking}</strong></p></div><div style="background:#fff;padding:28px;border:1px solid #e2e8f0;border-top:none;border-radius:0 0 8px 8px;"><p style="font-size:14px;color:#475569;line-height:1.6;white-space:pre-wrap;">${result.value.mensaje || 'Junto con saludar, adjuntamos el Certificado Sanitario para su trámite ante Sernapesca.'}</p><div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:20px;margin:24px 0;"><p style="font-size:13px;font-weight:700;color:#0f172a;text-transform:uppercase;margin:0 0 14px;">Por favor confirme la recepción de este documento:</p><a href="${urlRecibido}" style="background:#0ea5e9;color:#fff;padding:14px 22px;text-decoration:none;border-radius:6px;font-weight:800;font-size:13px;display:inline-block;">📋 CONFIRMAR RECEPCIÓN</a></div><p style="font-size:11px;color:#94a3b8;text-align:center;margin:0;">Atilson Cargo SpA · Operaciones Logísticas</p></div></div>`;
 
             const token = document.querySelector('input[name="__RequestVerificationToken"]').value;
-            const formData = new FormData(); formData.append('id', idOperacionReal); formData.append('correoDestino', result.value.email); formData.append('copiaCc', 'operaciones@atilson.cl'); formData.append('asunto', result.value.asunto); formData.append('cuerpoHtml', htmlCuerpo); formData.append('tipoCorreo', 'sanitarioAgencia');
+            const formData = new FormData(); formData.append('id', idOperacionReal); formData.append('correoDestino', result.value.email); formData.append('copiaCc', ''); formData.append('asunto', result.value.asunto); formData.append('cuerpoHtml', htmlCuerpo); formData.append('tipoCorreo', 'sanitarioAgencia');
 
             Swal.fire({ title: 'Enviando...', allowOutsideClick: false, target: document.body, didOpen: () => Swal.showLoading() });
 
@@ -2575,7 +2699,7 @@ window.subirRespaldoAlmacen = function(input, idOp) {
                     const formEl = formContainer ? formContainer.closest('form') : null;
                     if (formEl) {
                         if (typeof window.sincronizarLogsAntesDeGuardar === 'function') { window.sincronizarLogsAntesDeGuardar(formEl); }
-                        const formDataSave = new FormData(formEl); fetch('/Operaciones/Index?handler=QuickEditDocumental', { method: 'POST', body: formDataSave, headers: { 'X-Requested-With': 'XMLHttpRequest' } }).catch(e => console.warn("Aviso auto-guardado Sernapesca:", e));
+                        const formDataSave = formDataDocumentalCompleto(formEl); fetch('/Operaciones/Index?handler=QuickEditDocumental', { method: 'POST', body: formDataSave, headers: { 'X-Requested-With': 'XMLHttpRequest' } }).catch(e => console.warn("Aviso auto-guardado Sernapesca:", e));
                     }
                     Swal.fire({ icon: 'success', title: '¡Enviado!', text: `Correo enviado a ${result.value.email}`, confirmButtonColor: '#10b981', target: document.body });
                 } else { Swal.fire({ icon: 'error', title: 'Error', text: data.message, target: document.body }); }
@@ -2586,8 +2710,8 @@ window.subirRespaldoAlmacen = function(input, idOp) {
     window.abrirModalEnvioNaviera = function(idOp, booking, naviera) {
         const navieraUpper = (naviera || '').toUpperCase();
         const navieras = [
-            { nombre: 'Wan Hai',  email: 'jcovarrubia@navepac.com,docexpo@navepac.com',         detectar: ['WAN HAI', 'WAN-HAI'] },
-            { nombre: 'Yang Ming',  email: 'digcentral@agunsa.cl,luis.sotoc@agunsa.com',      detectar: ['YANG MING', 'YM']    },
+            { nombre: 'Wan Hai',  email: 'wanhai.docs1@demo.cl,wanhai.docs2@demo.cl',         detectar: ['WAN HAI', 'WAN-HAI'] },
+            { nombre: 'Yang Ming',  email: 'yangming.docs1@demo.cl,yangming.docs2@demo.cl',      detectar: ['YANG MING', 'YM']    },
         ];
 
         let emailAutodetectado = ''; navieras.forEach(n => { if (n.detectar.some(k => navieraUpper.includes(k))) emailAutodetectado = n.email; });
@@ -2612,7 +2736,7 @@ window.subirRespaldoAlmacen = function(input, idOp) {
         const token = document.querySelector('input[name="__RequestVerificationToken"]').value;
         const cuerpoHtml = `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;"><div style="background:linear-gradient(135deg,#0f172a 0%,#6d2d9e 100%);padding:25px;text-align:center;border-radius:8px 8px 0 0;"><h2 style="color:#fff;margin:0;">Envío de Documentos</h2><p style="color:#cbd5e1;margin:6px 0 0;">Booking: <strong style="color:#fff;">${booking}</strong></p></div><div style="background:#fff;padding:28px;border:1px solid #e2e8f0;border-top:none;border-radius:0 0 8px 8px;"><p style="font-size:14px;color:#475569;line-height:1.6;">Estimado equipo,<br><br>Adjuntamos la evidencia de envío de documentos correspondiente al Booking <strong>${booking}</strong>.</p>${mensajeExtra ? `<p style="font-size:13px;color:#475569;border-left:3px solid #6d2d9e;padding-left:12px;margin-top:16px;">${escapeHtmlAtilson(mensajeExtra)}</p>` : ''}<hr style="border:0;border-top:1px solid #e2e8f0;margin:24px 0;"><p style="font-size:11px;color:#94a3b8;text-align:center;margin:0;">Atilson Cargo SpA · Operaciones Logísticas</p></div></div>`;
 
-        const formData = new FormData(); formData.append('id', idOp.toString().replace('sub-', '')); formData.append('correoDestino', correoDestino); formData.append('copiaCc', 'operaciones@atilson.cl'); formData.append('asunto', asunto); formData.append('cuerpoHtml', cuerpoHtml); formData.append('tipoCorreo', 'evidenciaNaviera');
+        const formData = new FormData(); formData.append('id', idOp.toString().replace('sub-', '')); formData.append('correoDestino', correoDestino); formData.append('copiaCc', ''); formData.append('asunto', asunto); formData.append('cuerpoHtml', cuerpoHtml); formData.append('tipoCorreo', 'evidenciaNaviera');
 
         Swal.fire({ title: 'Enviando...', allowOutsideClick: false, target: document.body, didOpen: () => Swal.showLoading() });
 
@@ -2653,6 +2777,14 @@ window.previsualizarSagModalidad = function(valor, idRef) {
     }
 };
 
+// (nov-2026) FormData omite los campos deshabilitados: en modo vista el <select> del
+// Acuerdo Comercial está deshabilitado y el auto-guardado lo dejaba vacío en la base.
+window.formDataDocumentalCompleto = function(formEl) {
+    const fd = new FormData(formEl);
+    formEl.querySelectorAll('select[name]:disabled').forEach(sel => { if (!fd.has(sel.name)) fd.append(sel.name, sel.value); });
+    return fd;
+};
+
 window.handleTipoTramite = function(idOp, tipoModificado) {
     const ctx = modalCtx() || document;
     let baseId = idOp.replace('v3-', '').replace('sub-', '');
@@ -2688,7 +2820,7 @@ window.handleTipoTramite = function(idOp, tipoModificado) {
         if (formContainer) {
             const formEl = formContainer.closest('form');
             if (formEl) {
-                const formDataSave = new FormData(formEl);
+                const formDataSave = formDataDocumentalCompleto(formEl);
                 fetch('/Operaciones/Index?handler=QuickEditDocumental', { method: 'POST', body: formDataSave, headers: { 'X-Requested-With': 'XMLHttpRequest' } })
                 .catch(e => console.warn("Aviso auto-guardado Trámites:", e));
             }
@@ -2722,33 +2854,53 @@ window.toggleDeclaracion = function(idOp) {
     const radioDin = document.getElementById(`radioDin_${idOp}`);
     if (!radioDus || !radioDin) return;
     const isDus = radioDus.checked;
-    document.getElementById(`container-dus-${idOp}`).style.display = isDus ? 'flex' : 'none';
-    document.getElementById(`container-din-${idOp}`).style.display = isDus ? 'none' : 'flex';
-    radioDus.closest('.form-check').style.opacity = isDus ? '1' : '0.4';
-    radioDin.closest('.form-check').style.opacity = isDus ? '0.4' : '1';
+    const contDus = document.getElementById(`container-dus-${idOp}`), contDin = document.getElementById(`container-din-${idOp}`);
+    if (contDus) contDus.style.display = isDus ? 'flex' : 'none';
+    if (contDin) contDin.style.display = isDus ? 'none' : 'flex';
+    // (nov-2026) las opciones están dentro de un <label>, no de .form-check: esto lanzaba
+    // "Cannot read properties of null (reading 'style')" y cortaba el cambio DUS ⇄ DIN.
+    const opDus = radioDus.closest('label, .form-check'), opDin = radioDin.closest('label, .form-check');
+    if (opDus) opDus.style.opacity = isDus ? '1' : '0.55';
+    if (opDin) opDin.style.opacity = isDus ? '0.55' : '1';
 };
 
-window.toggleExclusionTramites = function(idBase) {
+window.toggleExclusionTramites = function(idBase, origen) {
+    // Regla (nov-2026): Cancelación excluye a Aclaración y a Legalización, y viceversa.
+    // Al marcar una, las contrarias se desmarcan, bajan su opacidad y no se pueden
+    // marcar (en edición quedan deshabilitadas). Roleo es independiente y se combina
+    // con cualquiera (roleo + cancelación, roleo + legalización y aclaración).
+    // Antes no detectaba el modo edición (buscaba .edit-mode en la tarjeta y no en la
+    // sección), no deshabilitaba nada y la casilla clicada se desmarcaba sola.
     const ctx = modalCtx() || document;
-    const chkAcl = ctx.querySelector(`#chkAcl-${idBase}`);
     const chkCan = ctx.querySelector(`#chkCan-${idBase}`);
-    if (!chkAcl || !chkCan) return;
-    const formContainer = chkAcl.closest('.form-section') || chkAcl.closest('.pro-card-red');
-    const isEditMode = formContainer && formContainer.classList.contains('edit-mode');
-
-    if (chkCan.checked) {
-        chkAcl.checked = false;
-        chkAcl.closest('.d-flex').style.opacity = '0.4'; chkCan.closest('.d-flex').style.opacity = '1';
-        if (isEditMode) { chkAcl.disabled = true; chkCan.disabled = false; }
-    } else if (chkAcl.checked) {
-        chkCan.checked = false;
-        chkCan.closest('.d-flex').style.opacity = '0.4'; chkAcl.closest('.d-flex').style.opacity = '1';
-        if (isEditMode) { chkCan.disabled = true; chkAcl.disabled = false; }
-    } else {
-        chkAcl.closest('.d-flex').style.opacity = '1'; chkCan.closest('.d-flex').style.opacity = '1';
-        if (isEditMode) { chkAcl.disabled = false; chkCan.disabled = false; }
+    const otras = [ctx.querySelector(`#chkAcl-${idBase}`), ctx.querySelector(`#chkLeg-${idBase}`)].filter(Boolean);
+    if (!chkCan || !otras.length) return;
+    const seccion = chkCan.closest('[id^="pane-"]') || chkCan.closest('.form-section');
+    const enEdicion = !!(seccion && seccion.classList.contains('edit-mode'));
+    const fila = c => c.closest('label, .d-flex');
+    // Si llegan ambas marcadas (dato antiguo), manda la que se acaba de tocar.
+    if (chkCan.checked && otras.some(o => o.checked)) {
+        if (origen && origen !== chkCan && origen.checked) chkCan.checked = false;
+        else otras.forEach(o => { o.checked = false; });
     }
+    const canActiva = chkCan.checked, otraActiva = otras.some(o => o.checked);
+    const bloquear = (c, b) => { const f = fila(c); if (f) f.style.opacity = b ? '0.4' : '1'; if (enEdicion) c.disabled = b; };
+    bloquear(chkCan, otraActiva);
+    otras.forEach(o => bloquear(o, canActiva));
 };
+        // Terminal del ISPS en servicios solo documentales (nov-2026).
+        window.guardarTerminalIspsDoc = function(idOp, sel) {
+            const token = document.querySelector('input[name="__RequestVerificationToken"]').value;
+            const fd = new FormData();
+            fd.append('idOperacion', idOp);
+            fd.append('terminal', sel.value);
+            fetch('?handler=GuardarTerminalIsps', { method: 'POST', headers: { 'RequestVerificationToken': token }, body: fd })
+                .then(res => res.json()).then(data => {
+                    if (data.success) Swal.fire({ icon: 'success', title: sel.value ? 'Terminal guardado: el ISPS se calcula por contenedor' : 'Sin ISPS', toast: true, position: 'top-end', timer: 1800, showConfirmButton: false });
+                    else Swal.fire('No se pudo guardar', data.message || 'Error desconocido.', 'warning');
+                }).catch(() => Swal.fire('Error', 'Fallo de conexión.', 'error'));
+        };
+
         window.cambiarModalidadCertPorCertificado = function(idOp, certKey, modalidad) {
             let token = document.querySelector('input[name="__RequestVerificationToken"]').value;
             let formData = new FormData();
@@ -2773,7 +2925,9 @@ window.toggleExclusionTramites = function(idBase) {
             if (!container) return;
             const token = document.querySelector('input[name="__RequestVerificationToken"]').value;
             const formData = new FormData();
-            formData.append('IdOperacion', idOp); formData.append('IdUnidadTecnica', idUnidad);
+            formData.append('IdOperacion', idOp);
+            // Principal = null: omitir el campo permite el binding int? de Razor.
+            if (idUnidad !== null && idUnidad !== undefined && idUnidad !== '') formData.append('IdUnidadTecnica', idUnidad);
             formData.append('CertKey', 'ori'); formData.append('EnviarFinanzas', 'true'); formData.append('SinNumero', 'false');
             container.querySelectorAll('[data-field]').forEach(el => formData.append(`docUpdates.${el.getAttribute('data-field')}`, el.value));
             const fileEl = container.querySelector('[data-field-file]');
@@ -2792,7 +2946,9 @@ window.toggleExclusionTramites = function(idBase) {
             if (!container) return;
             const token = document.querySelector('input[name="__RequestVerificationToken"]').value;
             const formData = new FormData();
-            formData.append('IdOperacion', idOp); formData.append('IdUnidadTecnica', idUnidad);
+            formData.append('IdOperacion', idOp);
+            // Principal = null: omitir el campo permite el binding int? de Razor.
+            if (idUnidad !== null && idUnidad !== undefined && idUnidad !== '') formData.append('IdUnidadTecnica', idUnidad);
             formData.append('CertKey', certKey); formData.append('EnviarFinanzas', 'true'); formData.append('SinNumero', 'false');
             container.querySelectorAll('[data-field]').forEach(el => formData.append(`docUpdates.${el.getAttribute('data-field')}`, el.value));
             const fileEl = container.querySelector('[data-field-file]');
@@ -2920,7 +3076,7 @@ window.toggleExclusionTramites = function(idBase) {
                 if (formContainer) {
                     const formEl = formContainer.closest('form');
                     if (formEl) {
-                        const formDataSave = new FormData(formEl);
+                        const formDataSave = formDataDocumentalCompleto(formEl);
                         fetch('?handler=QuickEditDocumental', { method: 'POST', body: formDataSave, headers: { 'X-Requested-With': 'XMLHttpRequest' } })
                         .catch(e => console.warn("Aviso auto-guardado Trámites:", e));
                     }
@@ -3023,10 +3179,12 @@ window.toggleExclusionTramites = function(idBase) {
             const radioDin = document.getElementById(`radioDin_${idOp}`);
             if (!radioDus || !radioDin) return;
             const isDus = radioDus.checked;
-            document.getElementById(`container-dus-${idOp}`).style.display = isDus ? 'flex' : 'none';
-            document.getElementById(`container-din-${idOp}`).style.display = isDus ? 'none' : 'flex';
-            radioDus.closest('.form-check').style.opacity = isDus ? '1' : '0.4';
-            radioDin.closest('.form-check').style.opacity = isDus ? '0.4' : '1';
+            const contDus = document.getElementById(`container-dus-${idOp}`), contDin = document.getElementById(`container-din-${idOp}`);
+            if (contDus) contDus.style.display = isDus ? 'flex' : 'none';
+            if (contDin) contDin.style.display = isDus ? 'none' : 'flex';
+            const opDus = radioDus.closest('label, .form-check'), opDin = radioDin.closest('label, .form-check');
+            if (opDus) opDus.style.opacity = isDus ? '1' : '0.55';
+            if (opDin) opDin.style.opacity = isDus ? '0.55' : '1';
         };
 
         window.toggleSubcertsDependientes = function(idOp, isChecked) {
@@ -3096,7 +3254,7 @@ window.toggleExclusionTramites = function(idBase) {
                 };
 
                 window.enviarSanitarioAgencia = function(idOp, booking) {
-                    const correoPredefinido = "a.barrera@stembex.cl; javier.traverso@stembex.cl";
+                    const correoPredefinido = detalleOpData().correoAgencia || "";
                     Swal.fire({
                         title: 'Enviar Certificado Sanitario a Aga-Sern',
                         html: `<div style="text-align:left; font-size:13px;"><p style="color:#64748b; margin:0 0 14px;"><strong style="color:#0f172a;">BKG: ${booking}</strong> — Se enviará el certificado sanitario a la agencia Sernapesca.</p><label style="font-size:10px; font-weight:800; color:#94a3b8; text-transform:uppercase; display:block; margin-bottom:5px;">Destinatario (Aga-Sern)</label><input type="text" id="swal-san-email-det" class="swal2-input" style="margin:0 0 12px; width:100%; font-size:12px;" value="${correoPredefinido}" /><label style="font-size:10px; font-weight:800; color:#94a3b8; text-transform:uppercase; display:block; margin-bottom:5px;">Asunto</label><input type="text" id="swal-san-asunto-det" class="swal2-input" style="margin:0 0 12px; width:100%; font-weight:700;" value="[ATILSON CARGO] Certificado Sanitario — BKG: ${booking}" /><label style="font-size:10px; font-weight:800; color:#94a3b8; text-transform:uppercase; display:block; margin-bottom:5px;">Mensaje adicional (opcional)</label><textarea id="swal-san-msg-det" class="swal2-textarea" style="margin:0; width:100%; font-size:12px; height:70px;" placeholder="Ej: Adjuntamos certificado sanitario para su revisión..."></textarea></div>`,
@@ -3115,7 +3273,7 @@ window.toggleExclusionTramites = function(idBase) {
                         const htmlCuerpo = `<div style="font-family:Arial,sans-serif;max-width:580px;margin:0 auto;"><div style="background:linear-gradient(135deg,#0f172a 0%,#0ea5e9 100%);padding:24px 28px;border-radius:8px 8px 0 0;"><h2 style="color:#fff;margin:0;font-size:18px;">Envío Certificado Sanitario</h2><p style="color:#bae6fd;margin:6px 0 0;font-size:13px;">Booking: <strong style="color:#fff;">${booking}</strong></p></div><div style="background:#fff;padding:28px;border:1px solid #e2e8f0;border-top:none;border-radius:0 0 8px 8px;"><p style="font-size:14px;color:#475569;line-height:1.6;white-space:pre-wrap;">${result.value.mensaje || 'Junto con saludar, adjuntamos el Certificado Sanitario para su trámite ante Sernapesca.'}</p><div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:20px;margin:24px 0;"><p style="font-size:13px;font-weight:700;color:#0f172a;text-transform:uppercase;margin:0 0 14px;">Por favor confirme la recepción de este documento:</p><a href="${urlRecibido}" style="background:#0ea5e9;color:#fff;padding:14px 22px;text-decoration:none;border-radius:6px;font-weight:800;font-size:13px;display:inline-block;">📋 CONFIRMAR RECEPCIÓN</a></div><p style="font-size:11px;color:#94a3b8;text-align:center;margin:0;">Atilson Cargo SpA · Operaciones Logísticas</p></div></div>`;
 
                         const token = document.querySelector('input[name="__RequestVerificationToken"]').value;
-                        const formData = new FormData(); formData.append('id', idOperacionReal); formData.append('correoDestino', result.value.email); formData.append('copiaCc', 'operaciones@atilson.cl'); formData.append('asunto', result.value.asunto); formData.append('cuerpoHtml', htmlCuerpo); formData.append('tipoCorreo', 'sanitarioAgencia');
+                        const formData = new FormData(); formData.append('id', idOperacionReal); formData.append('correoDestino', result.value.email); formData.append('copiaCc', ''); formData.append('asunto', result.value.asunto); formData.append('cuerpoHtml', htmlCuerpo); formData.append('tipoCorreo', 'sanitarioAgencia');
 
                         Swal.fire({ title: 'Enviando...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
 
@@ -3130,7 +3288,7 @@ window.toggleExclusionTramites = function(idBase) {
                                 const formEl = formContainer ? formContainer.closest('form') : null;
                                 if (formEl) {
                                     if (typeof window.sincronizarLogsAntesDeGuardar === 'function') window.sincronizarLogsAntesDeGuardar(formEl);
-                                    const formDataSave = new FormData(formEl);
+                                    const formDataSave = formDataDocumentalCompleto(formEl);
                                     fetch('?handler=QuickEditDocumental', { method: 'POST', body: formDataSave, headers: { 'X-Requested-With': 'XMLHttpRequest' } }).catch(e => console.warn("Aviso auto-guardado Sernapesca:", e));
                                 }
                                 Swal.fire({ icon: 'success', title: '¡Enviado!', text: `Correo enviado a ${result.value.email}`, confirmButtonColor: '#10b981' });
@@ -3174,7 +3332,7 @@ window.toggleExclusionTramites = function(idBase) {
                     let hechos = 0; const total = 8;
                     const v = sel => { const el = pane.querySelector(sel); return el && el.value && el.value.trim() !== '' && el.value !== '0'; };
                     if (v('select[name="IdNaviera"]')) hechos++;
-                    if (v('input[name="Nave"]')) hechos++;
+                    if (v('[name="Nave"]')) hechos++;
                     if (v('select[name="IdPuertoOrigen"]')) hechos++;
                     if (v('select[name="IdPuertoDestino"]')) hechos++;
                     if (v('input[name="EtdPol"]')) hechos++;
@@ -3210,3 +3368,33 @@ window.toggleExclusionTramites = function(idBase) {
                     });
                 });
 
+
+// Al cargar: aplicar la exclusión Cancelación ⇄ Aclaración/Legalización a lo guardado
+// (opacidad de las contrarias), sin esperar a que el usuario toque una casilla.
+(function () {
+    const aplicar = () => document.querySelectorAll('.doc-corp input[id^="chkCan-"]').forEach(c => toggleExclusionTramites(c.id.replace('chkCan-', '')));
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', aplicar); else aplicar();
+})();
+
+// Nave / Viaje de la pestaña Marítimo (nov-2026): select del maestro de itinerarios,
+// filtrado por la naviera, el POL y el POD del mismo formulario.
+(function () {
+    const enlazar = () => {
+        if (!window.NavesItinerario) return;
+        document.querySelectorAll('select.js-nave-itinerario').forEach(sel => {
+            const form = sel.closest('form') || document;
+            const opId = (sel.id || '').replace('detNave-', '');
+            window.NavesItinerario.enlazar({
+                select: sel,
+                idInput: document.getElementById(sel.dataset.idItinerario),
+                naviera: form.querySelector('select[name="IdNaviera"]'),
+                pol: form.querySelector('select[name="IdPuertoOrigen"]'),
+                pod: form.querySelector('select[name="IdPuertoDestino"]'),
+                etd: form.querySelector('input[name="EtdPol"]'),
+                eta: form.querySelector('input[name="EtaPod"]'),
+                hint: document.getElementById('detNaveHint-' + opId)
+            });
+        });
+    };
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', enlazar); else enlazar();
+})();

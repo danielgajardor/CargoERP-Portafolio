@@ -97,6 +97,17 @@ namespace AtilsonCargoSpa.Pages.App.Agencias
                     ModelState.AddModelError("Form.Correo", "Revisa el correo (si son varios, sepáralos con punto y coma).");
             }
 
+            // 13-nov-2026 (minuta de maestros): un registro existente no se renombra (p. ej. CMA CGM → MSC):
+
+            // las reglas de negocio están ligadas a él. Solo se corrigen mayúsculas o tildes; si es otra
+
+            // empresa, se inactiva este registro y se crea uno nuevo. Todo cambio queda en el historial.
+
+            if (a != null && !string.IsNullOrEmpty(Form.Nombre) && MaestrosAuditoria.Normalizar(a.NombreAgencia) != MaestrosAuditoria.Normalizar(Form.Nombre))
+
+                ModelState.AddModelError("Form.Nombre", $"No se puede renombrar la agencia «{a.NombreAgencia}». Si es otra empresa, inactiva este registro y crea uno nuevo.");
+
+
             if (!string.IsNullOrEmpty(Form.Nombre) && (a == null || MaestrosAuditoria.Normalizar(a.NombreAgencia) != MaestrosAuditoria.Normalizar(Form.Nombre)))
             {
                 var otros = await _context.AgenciasAduanas.AsNoTracking().Where(x => x.Id != Form.Id).Select(x => new { x.NombreAgencia, x.Activo }).ToListAsync();

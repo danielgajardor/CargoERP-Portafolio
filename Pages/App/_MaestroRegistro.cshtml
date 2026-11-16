@@ -77,6 +77,11 @@
                             </div>
                         }
                         <div class="mx-hist-meta">@h.Usuario · @MaestrosAuditoria.FormatoFecha(h.FechaCambio)</div>
+                        @* Origen del cambio (p. ej. "Desde el booking … (Mainboard)", "Carga masiva"). *@
+                        @if (!string.IsNullOrWhiteSpace(h.Comentario) && h.Comentario != h.Campo)
+                        {
+                            <div class="mx-hist-origen">@h.Comentario</div>
+                        }
                     </li>
                 }
             </ul>

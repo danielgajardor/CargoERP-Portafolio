@@ -10,7 +10,7 @@ namespace AtilsonCargoSpa.Models
         [Key] public int Id { get; set; }
         public int IdOperacion { get; set; }
         public int? IdUnidadTecnica { get; set; }
-        public string Tipo { get; set; } = string.Empty; // ROLEO / CANCELACION_NOSHOW
+        public string Tipo { get; set; } = string.Empty; // ROLEO / CANCELACION / NO_SHOW; CANCELACION_NOSHOW solo legado
 
         public DateTime FechaSolicitud { get; set; }
         public DateTime? EtdOriginal { get; set; }

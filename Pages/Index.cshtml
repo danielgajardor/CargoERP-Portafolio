@@ -391,6 +391,7 @@
         </div>
     </section>
 
+    @* Vitrina pública de la plataforma: ilustración interactiva, NO datos reales de clientes. *@
     <partial name="_VitrinaPortal" model='"landing"' />
 
     <section class="section-padding news-section" id="noticias" style="--iso: url('@isotipo')">
@@ -431,20 +432,7 @@
             <div class="reveal stats-box">
                 <h2 class="titular section-title">Conectando origen y destino</h2>
                 <p class="section-subtitle">Desde San Antonio a Yantian, desde Valparaíso a Rotterdam. Coordinamos transbordos y rutas directas con la precisión que exige cada embarque.</p>
-                <div class="stat-box">
-                    <div>
-                        <h4>+<span class="counter" data-target="50">0</span></h4>
-                        <p>puertos activos</p>
-                    </div>
-                    <div>
-                        <h4><span class="counter" data-target="24">0</span>/7</h4>
-                        <p>monitoreo continuo</p>
-                    </div>
-                    <div>
-                        <h4><span class="counter" data-target="100">0</span>%</h4>
-                        <p>operaciones digitalizadas</p>
-                    </div>
-                </div>
+
             </div>
             <ul class="rutas" aria-label="Rutas frecuentes">
                 <li class="ruta">
@@ -469,7 +457,7 @@
 
                 <div class="contacto-dato">
                     <i class="bi bi-geo-alt"></i>
-                    <div><strong>Oficina central</strong><a href="https://www.google.com/maps/search/?api=1&query=Arturo+Prat+814%2C+Valpara%C3%ADso%2C+Chile" target="_blank" rel="noopener">A Prat 814 Of. 503, Valparaíso, V Región</a></div>
+                    <div><strong>Oficina central</strong><a href="https://www.google.com/maps/search/?api=1&query=Avenida+Demo+1234%2C+Valpara%C3%ADso%2C+Chile" target="_blank" rel="noopener">Av. Demo 1234 Of. 101, Valparaíso, V Región</a></div>
                 </div>
                 <div class="contacto-dato">
                     <i class="bi bi-envelope"></i>
@@ -503,7 +491,6 @@
     </section>
 
 @section Scripts {
-    <script src="~/js/vitrina-portal.js" asp-append-version="true"></script>
     <script>
         document.addEventListener("DOMContentLoaded", function () {
 
@@ -516,19 +503,7 @@
                 });
             }
 
-            // 2. CONTADORES: se animan al entrar en pantalla
-            function animateValue(obj, start, end, duration) {
-                let startTimestamp = null;
-                const step = (timestamp) => {
-                    if (!startTimestamp) startTimestamp = timestamp;
-                    const progress = Math.min((timestamp - startTimestamp) / duration, 1);
-                    obj.innerHTML = Math.floor(progress * (end - start) + start);
-                    if (progress < 1) window.requestAnimationFrame(step);
-                    else obj.innerHTML = end;
-                };
-                window.requestAnimationFrame(step);
-            }
-
+            // 2. Aparición suave de secciones al entrar en pantalla
             function reveal() {
                 var reveals = document.querySelectorAll(".reveal");
                 for (var i = 0; i < reveals.length; i++) {
@@ -537,10 +512,7 @@
                     if (elementTop < windowHeight - 100) {
                         if (!reveals[i].classList.contains("active")) {
                             reveals[i].classList.add("active");
-                            if (reveals[i].classList.contains("stats-box")) {
-                                let counters = reveals[i].querySelectorAll(".counter");
-                                counters.forEach(c => animateValue(c, 0, parseInt(c.getAttribute("data-target")), 2500));
-                            }
+
                         }
                     }
                 }
@@ -650,4 +622,5 @@
             });
         });
     </script>
+    <script src="~/js/vitrina-portal.js" asp-append-version="true"></script>
 }

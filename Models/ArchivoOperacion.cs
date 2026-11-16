@@ -3,6 +3,10 @@ using System.Collections.Generic;
 
 namespace AtilsonCargoSpa.Models
 {
+    // Gestor Documental (Operaciones › Documental › "Gestor Documental"). nov-2026: la clase
+    // no estaba en el modelo de EF y la página respondía error 500. Tabla creada por
+    // Sql/2026-11_archivos_operaciones.sql (idempotente).
+    [System.ComponentModel.DataAnnotations.Schema.Table("ArchivosOperaciones")]
     public partial class ArchivoOperacion
     {
         public int Id { get; set; }

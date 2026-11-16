@@ -167,16 +167,16 @@
         }
 </style>
 <link rel="stylesheet" href="~/css/ordenes-compra-premium.css" asp-append-version="true" />
+<link rel="stylesheet" href="~/css/finanzas-modulo.css" asp-append-version="true" />
 
-<div class="container-fluid px-4 py-4 oc-premium">
+<div class="container-fluid px-4 py-4 oc-premium fin-modulo">
 
-    <!-- HEADER DE LA PÁGINA -->
-    <div class="d-flex justify-content-between align-items-center mb-4">
-        <div class="d-flex align-items-center gap-3">
-            <div class="oc-header-icon"><i class="bi bi-receipt"></i></div>
+    <div class="page-header">
+        <div class="page-header__title-row">
+            <div class="page-header__icon"><i class="bi bi-receipt"></i></div>
             <div>
-                <h1 style="font-size: 24px; font-weight: 900; color: var(--atilson-slate-900); margin: 0; letter-spacing: -0.5px;">EMISIÓN DE ÓRDENES DE COMPRA (OC)</h1>
-                <p class="text-muted small m-0 fw-medium mt-1">Generación de respaldos para pago de proveedores terrestres y extracostos.</p>
+                <h1>Órdenes de Compra</h1>
+                <p class="page-header__subtitle">Generación de respaldos para pago de proveedores terrestres y extracostos.</p>
             </div>
         </div>
     </div>
@@ -190,7 +190,7 @@
             <h6 class="m-0 fw-bold text-dark" style="font-size: 13px;"><i class="bi bi-truck me-2 text-warning"></i> OPERACIONES CON COSTOS TERRESTRES</h6>
             <form method="get" class="input-group input-group-sm shadow-sm" style="width: 300px;">
                 <button type="submit" class="input-group-text bg-light border-end-0"><i class="bi bi-search text-muted"></i></button>
-                <input type="text" asp-for="SearchString" class="form-control border-start-0 bg-light" placeholder="Buscar Booking o Proveedor..." style="font-size: 12px; font-weight: 600;">
+                <input type="text" asp-for="SearchString" class="form-control border-start-0 bg-light" placeholder="Booking, cliente, proveedor u OC..." style="font-size: 12px; font-weight: 600;">
             </form>
         </div>
 
@@ -255,38 +255,47 @@
                                         </thead>
                                         <tbody>
                                             @{
-                                                var gruposProv = txTerrestres.GroupBy(t => t.IdProveedorNavigation?.NombreProveedor ?? "PROVEEDOR SIN ASIGNAR");
+                                                var gruposProv = txTerrestres
+                                                    .GroupBy(t => new
+                                                    {
+                                                        Proveedor = Model.ResolverProveedor(op, t),
+                                                        Moneda = string.IsNullOrWhiteSpace(t.Moneda) ? "CLP" : t.Moneda.ToUpperInvariant()
+                                                    })
+                                                    .OrderBy(g => g.Key.Proveedor)
+                                                    .ThenBy(g => g.Key.Moneda);
                                             }
 
                                             @foreach (var prov in gruposProv)
                                             {
-                                                decimal sumNeto = 0m;
+                                                decimal sumNeto = prov.Sum(x => x.MontoNeto);
+                                                decimal sumIva = prov.Sum(x => x.IvaExento == true ? 0m : System.Math.Round(x.MontoNeto * 0.19m, x.Moneda == "CLP" ? 0 : 2));
+                                                decimal sumTotal = sumNeto + sumIva;
+                                                string simbolo = prov.Key.Moneda == "CLP" ? "$" : prov.Key.Moneda;
 
                                                 <tr class="row-group-header">
-                                                    <td colspan="5" class="ps-4"><i class="bi bi-truck text-warning me-2"></i> @prov.Key</td>
+                                                    <td colspan="5" class="ps-4"><i class="bi bi-truck text-warning me-2"></i> @prov.Key.Proveedor <span class="badge bg-light text-dark border ms-2">@prov.Key.Moneda</span></td>
                                                 </tr>
 
                                                 foreach (var tx in prov)
                                                 {
-                                                    sumNeto += tx.MontoNeto;
-                                                    decimal ivaItem = tx.MontoNeto * 0.19m;
+                                                    decimal ivaItem = tx.IvaExento == true ? 0m : System.Math.Round(tx.MontoNeto * 0.19m, tx.Moneda == "CLP" ? 0 : 2);
                                                     decimal totalItem = tx.MontoNeto + ivaItem;
 
                                                     <tr>
                                                         <td class="fw-bold text-dark ps-4">@tx.Concepto</td>
-                                                        <td class="text-end font-monospace text-muted">@(tx.Moneda == "CLP" ? "$" : "USD") @tx.MontoNeto.ToString("N0")</td>
-                                                        <td class="text-end font-monospace text-muted">@(tx.Moneda == "CLP" ? "$" : "USD") @ivaItem.ToString("N0")</td>
-                                                        <td class="text-end font-monospace fw-bold text-dark">@(tx.Moneda == "CLP" ? "$" : "USD") @totalItem.ToString("N0")</td>
+                                                        <td class="text-end font-monospace text-muted">@(tx.Moneda == "CLP" ? "$" : tx.Moneda) @tx.MontoNeto.ToString(tx.Moneda == "CLP" ? "N0" : "N2")</td>
+                                                        <td class="text-end font-monospace text-muted">@(tx.Moneda == "CLP" ? "$" : tx.Moneda) @ivaItem.ToString(tx.Moneda == "CLP" ? "N0" : "N2")</td>
+                                                        <td class="text-end font-monospace fw-bold text-dark">@(tx.Moneda == "CLP" ? "$" : tx.Moneda) @totalItem.ToString(tx.Moneda == "CLP" ? "N0" : "N2")</td>
                                                         <td class="text-center pe-4"></td>
                                                     </tr>
                                                 }
 
                                                                                                 // --- FILA TOTALIZADORA Y GENERADOR DE OC ---
-                                                decimal sumIva = sumNeto * 0.19m;
-                                                decimal sumTotal = sumNeto + sumIva;
                                                 // Obtenemos los IDs y verificamos si ya existe un N° de OC
                                                 string txIds = string.Join(",", prov.Select(x => x.Id));
-                                                string ocActual = prov.FirstOrDefault(x => !string.IsNullOrWhiteSpace(x.NumeroOrdenCompra))?.NumeroOrdenCompra;
+                                                var ocsGrupo = prov.Where(x => !string.IsNullOrWhiteSpace(x.NumeroOrdenCompra)).Select(x => x.NumeroOrdenCompra!).Distinct().ToList();
+                                                string? ocActual = ocsGrupo.Count == 1 && prov.All(x => x.NumeroOrdenCompra == ocsGrupo[0]) ? ocsGrupo[0] : null;
+                                                bool ocParcialOInconsistente = ocsGrupo.Any() && ocActual == null;
                                                 // Bloqueo: no se puede emitir OC si el valor del flete terrestre aún
                                                 // está "Por asignar" (Comercial no ha cerrado la tarifa). Se excluyen
                                                 // los ajustes manuales de Comercial (TarifaManual), que sí son un
@@ -295,12 +304,18 @@
 
                                                 <tr style="background-color: #f1f5f9; border-top: 2px solid #cbd5e1;">
                                                     <td class="ps-4 fw-black text-dark" style="font-size: 10px;">TOTAL PROVEEDOR</td>
-                                                    <td class="text-end font-monospace fw-bold" style="color: #475569;">$ @sumNeto.ToString("N0")</td>
-                                                    <td class="text-end font-monospace fw-bold" style="color: #475569;">$ @sumIva.ToString("N0")</td>
-                                                    <td class="text-end font-monospace fw-black" style="color: #dc2626; font-size: 13px;">$ @sumTotal.ToString("N0")</td>
+                                                    <td class="text-end font-monospace fw-bold" style="color: #475569;">@simbolo @sumNeto.ToString(prov.Key.Moneda == "CLP" ? "N0" : "N2")</td>
+                                                    <td class="text-end font-monospace fw-bold" style="color: #475569;">@simbolo @sumIva.ToString(prov.Key.Moneda == "CLP" ? "N0" : "N2")</td>
+                                                    <td class="text-end font-monospace fw-black" style="color: #dc2626; font-size: 13px;">@simbolo @sumTotal.ToString(prov.Key.Moneda == "CLP" ? "N0" : "N2")</td>
                                                     <!-- Reemplaza la celda del formulario en la fila totalizadora con esto: -->
                                                                                                         <td class="text-center pe-4">
-                                                        @if (string.IsNullOrWhiteSpace(ocActual) && tieneValorPendiente)
+                                                        @if (ocParcialOInconsistente)
+                                                        {
+                                                            <span class="badge bg-danger-subtle text-danger border border-danger-subtle px-2 py-2" title="Hay conceptos de este grupo con OC y otros sin OC. Revisa el historial antes de generar otra.">
+                                                                <i class="bi bi-exclamation-triangle-fill me-1"></i> OC INCONSISTENTE
+                                                            </span>
+                                                        }
+                                                        else if (string.IsNullOrWhiteSpace(ocActual) && tieneValorPendiente)
                                                         {
                                                             <!-- BLOQUEADO: falta el valor de transporte (Comercial no ha cerrado tarifa) -->
                                                             <button type="button" class="btn btn-outline-secondary shadow-sm d-flex align-items-center justify-content-center w-100" style="height: 26px; padding: 0 10px; font-size: 10px; font-weight: 800; border-width: 2px; opacity: 0.6; cursor: not-allowed;" disabled title="No se puede generar la OC: falta el valor de transporte. Comercial debe cerrar la tarifa primero.">
@@ -350,4 +365,22 @@
             </table>
         </div>
     </div>
+
+    @if (Model.TotalPaginas > 1)
+    {
+        <div class="d-flex justify-content-between align-items-center mt-3 flex-wrap gap-2">
+            <span class="text-muted" style="font-size:10.5px;font-weight:700;">@Model.TotalOperaciones bookings · página @Model.Pagina de @Model.TotalPaginas</span>
+            <nav aria-label="Paginación Órdenes de Compra">
+                <ul class="pagination pagination-sm mb-0">
+                    <li class="page-item @(Model.Pagina <= 1 ? "disabled" : "")">
+                        <a class="page-link" asp-page="./OrdenesCompra" asp-route-Pagina="@(Model.Pagina - 1)" asp-route-SearchString="@Model.SearchString"><i class="bi bi-chevron-left"></i></a>
+                    </li>
+                    <li class="page-item disabled"><span class="page-link">@Model.Pagina / @Model.TotalPaginas</span></li>
+                    <li class="page-item @(Model.Pagina >= Model.TotalPaginas ? "disabled" : "")">
+                        <a class="page-link" asp-page="./OrdenesCompra" asp-route-Pagina="@(Model.Pagina + 1)" asp-route-SearchString="@Model.SearchString"><i class="bi bi-chevron-right"></i></a>
+                    </li>
+                </ul>
+            </nav>
+        </div>
+    }
 </div>

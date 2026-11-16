@@ -51,9 +51,13 @@ namespace AtilsonCargoSpa.Pages.App.Proveedores
         [BindProperty]
         public Formulario Form { get; set; } = new();
 
+        [BindProperty(SupportsGet = true, Name = "tipo")]
+        public string TipoVista { get; set; } = "transporte";
         public bool EsNuevo => Form.Id == 0;
+        public string NombreTipo => Form.EsDeposito ? "depósito de almacenamiento" : "transportista";
         public string? NombreOriginal { get; set; }
         public int TarifasTransporte { get; set; }
+        public int TarifasAlmacenamiento { get; set; }
         public List<SelectListItem> Ciudades { get; set; } = new();
         public MaestroAuditoriaVm Registro { get; set; } = new();
 
@@ -70,6 +74,8 @@ namespace AtilsonCargoSpa.Pages.App.Proveedores
 
         public async Task<IActionResult> OnGetAsync(int? id)
         {
+            TipoVista = TipoVista == "deposito" ? "deposito" : "transporte";
+            if (!id.HasValue) Form.EsDeposito = TipoVista == "deposito";
             if (id.HasValue)
             {
                 var p = await _context.Proveedores.AsNoTracking().FirstOrDefaultAsync(x => x.Id == id.Value);
@@ -90,6 +96,7 @@ namespace AtilsonCargoSpa.Pages.App.Proveedores
                     Activo = p.Activo == 1,
                     Version = await VersionAsync(p.Id)
                 };
+                TipoVista = Form.EsDeposito ? "deposito" : "transporte";
             }
             await CargarAsync();
             return Page();
@@ -99,6 +106,7 @@ namespace AtilsonCargoSpa.Pages.App.Proveedores
 
         public async Task<IActionResult> OnPostAsync()
         {
+            TipoVista = Form.EsDeposito ? "deposito" : "transporte";
             Form.Nombre = MaestrosAuditoria.Limpio(Form.Nombre);
             Form.Rut = MaestrosAuditoria.Limpio(Form.Rut)?.ToUpperInvariant();
             Form.Contacto = MaestrosAuditoria.Limpio(Form.Contacto);
@@ -125,16 +133,25 @@ namespace AtilsonCargoSpa.Pages.App.Proveedores
             }
 
             var otros = await _context.Proveedores.AsNoTracking().Where(x => x.Id != Form.Id)
-                .Select(x => new { x.Id, x.NombreProveedor, x.Rut, x.Activo }).ToListAsync();
-            if (!string.IsNullOrEmpty(Form.Nombre) && (p == null || MaestrosAuditoria.Normalizar(p.NombreProveedor) != MaestrosAuditoria.Normalizar(Form.Nombre)))
+                .Select(x => new { x.Id, x.NombreProveedor, x.Rut, x.Activo, x.IdTipoProveedor }).ToListAsync();
+            // Un transportista y un depósito pueden compartir razón social: son funciones
+            // diferentes y se mantienen sus registros e IDs (por ejemplo SOTO).
+            var otrosMismoTipo = otros.Where(x => (x.IdTipoProveedor == TransportistaHelper.TipoDeposito) == Form.EsDeposito).ToList();
+            // 13-nov-2026 (minuta de maestros): un registro existente no se renombra (p. ej. CMA CGM → MSC):
+            // las reglas de negocio están ligadas a él. Solo se corrigen mayúsculas o tildes; si es otra
+            // empresa, se inactiva este registro y se crea uno nuevo. Todo cambio queda en el historial.
+            if (p != null && !string.IsNullOrEmpty(Form.Nombre) && MaestrosAuditoria.Normalizar(p.NombreProveedor) != MaestrosAuditoria.Normalizar(Form.Nombre))
+                ModelState.AddModelError("Form.Nombre", $"No se puede renombrar el proveedor «{p.NombreProveedor}». Si es otra empresa, inactiva este registro y crea uno nuevo.");
+
+            if (!string.IsNullOrEmpty(Form.Nombre) && (p == null || MaestrosAuditoria.Normalizar(p.NombreProveedor) != MaestrosAuditoria.Normalizar(Form.Nombre) || (p.IdTipoProveedor == TransportistaHelper.TipoDeposito) != Form.EsDeposito))
             {
-                var dup = otros.FirstOrDefault(x => MaestrosAuditoria.Normalizar(x.NombreProveedor) == MaestrosAuditoria.Normalizar(Form.Nombre));
+                var dup = otrosMismoTipo.FirstOrDefault(x => MaestrosAuditoria.Normalizar(x.NombreProveedor) == MaestrosAuditoria.Normalizar(Form.Nombre));
                 if (dup != null)
                     ModelState.AddModelError("Form.Nombre", $"Ya existe el proveedor «{dup.NombreProveedor}»{(dup.Activo == 1 ? "" : " (inactivo: reactívalo desde la lista)")}.");
             }
-            if (Form.Rut != null && ClaveRut(Form.Rut).Length > 0 && (p == null || ClaveRut(p.Rut) != ClaveRut(Form.Rut)))
+            if (Form.Rut != null && ClaveRut(Form.Rut).Length > 0 && (p == null || ClaveRut(p.Rut) != ClaveRut(Form.Rut) || (p.IdTipoProveedor == TransportistaHelper.TipoDeposito) != Form.EsDeposito))
             {
-                var dup = otros.FirstOrDefault(x => ClaveRut(x.Rut) == ClaveRut(Form.Rut));
+                var dup = otrosMismoTipo.FirstOrDefault(x => ClaveRut(x.Rut) == ClaveRut(Form.Rut));
                 if (dup != null)
                     ModelState.AddModelError("Form.Rut", $"El RUT ya está registrado para «{dup.NombreProveedor}».");
             }
@@ -177,8 +194,8 @@ namespace AtilsonCargoSpa.Pages.App.Proveedores
                 MaestrosAuditoria.RegistrarEvento(_context, MaestrosAuditoria.EntProveedor, p.Id, "Registro creado", usuario,
                     $"{p.NombreProveedor} · {(Form.EsDeposito ? "Depósito" : "Transporte")}");
                 await _context.SaveChangesAsync();
-                TempData["ToastOk"] = $"Proveedor «{p.NombreProveedor}» creado por {usuario}.";
-                return RedirectToPage("./Index", new { resaltar = p.Id });
+                TempData["ToastOk"] = $"{(Form.EsDeposito ? "Depósito" : "Transportista")} «{p.NombreProveedor}» creado por {usuario}.";
+                return RedirectToPage("./Index", new { tipo = TipoVista, resaltar = p.Id });
             }
 
             bool eraDeposito = p.IdTipoProveedor == TransportistaHelper.TipoDeposito;
@@ -194,7 +211,7 @@ namespace AtilsonCargoSpa.Pages.App.Proveedores
             if (!cambios.Hay)
             {
                 TempData["ToastInfo"] = $"No había cambios que guardar en «{p.NombreProveedor}».";
-                return RedirectToPage("./Index", new { resaltar = p.Id, estado = p.Activo == 1 ? "activos" : "inactivos" });
+                return RedirectToPage("./Index", new { tipo = TipoVista, resaltar = p.Id, estado = p.Activo == 1 ? "activos" : "inactivos" });
             }
 
             p.NombreProveedor = Form.Nombre!;
@@ -210,7 +227,7 @@ namespace AtilsonCargoSpa.Pages.App.Proveedores
             await _context.SaveChangesAsync();
 
             TempData["ToastOk"] = $"Proveedor «{p.NombreProveedor}» actualizado ({cambios.Lista.Count} cambio{(cambios.Lista.Count == 1 ? "" : "s")}). Queda registrado a nombre de {usuario}, {MaestrosAuditoria.FormatoFecha(ahora)}.";
-            return RedirectToPage("./Index", new { resaltar = p.Id, estado = Form.Activo ? "activos" : "inactivos" });
+            return RedirectToPage("./Index", new { tipo = TipoVista, resaltar = p.Id, estado = Form.Activo ? "activos" : "inactivos" });
         }
 
         private async Task CargarAsync(Proveedore? actual = null)
@@ -221,6 +238,8 @@ namespace AtilsonCargoSpa.Pages.App.Proveedores
             if (actual == null) return;
             NombreOriginal = actual.NombreProveedor;
             TarifasTransporte = await _context.Tarifasterrestres.AsNoTracking().CountAsync(t => t.IdProveedor == Form.Id && t.EsActiva);
+            TarifasAlmacenamiento = await _context.TarifasAlmacenamientos.AsNoTracking().CountAsync(t => t.IdProveedor == Form.Id && t.EsActiva)
+                + await _context.TarifasAlmacenamientoDetalles.AsNoTracking().CountAsync(t => t.IdProveedor == Form.Id && t.EsActiva);
             var historial = await MaestrosAuditoria.HistorialAsync(_context, MaestrosAuditoria.EntProveedor, Form.Id);
             var creado = historial.LastOrDefault(h => h.Campo == "Registro creado");
             var ultimo = historial.FirstOrDefault();

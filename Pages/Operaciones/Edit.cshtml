@@ -24,7 +24,7 @@
         --bg-body: #f1f5f9;
     }
     
-    body { background-color: var(--bg-body); font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; }
+    body { background-color: var(--bg-body); font-family: var(--font-sans, 'Plus Jakarta Sans', system-ui, sans-serif); }
 
     /* TIPOGRAFÍA E INPUTS */
     .erp-label { font-size: 10px; font-weight: 800; color: var(--txt-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; display: block; }
@@ -404,7 +404,7 @@
                                             </div>
                                             <div class="col-md-4">
                                                 <label class="erp-label">Humedad (%)</label>
-                                                <input type="number" class="form-control erp-input" name="Humedad" value="@Model.Operacione.Humedad" placeholder="Ej: 80" />
+                                                <input type="number" class="form-control erp-input" name="Humedad" value="@(Model.Operacione.Humedad?.ToString(System.Globalization.CultureInfo.InvariantCulture))" placeholder="Ej: 80" />
                                             </div>
                                         </div>
                                         <div class="col-md-9 row g-2 m-0 div-ac" style="display: none;">
@@ -651,13 +651,13 @@
                     <div class="row g-4 mb-5">
                         <div class="col-md-4">
                             <label class="erp-label">POL (Puerto Origen)</label>
-                            <select asp-for="Operacione.IdPuertoOrigen" class="form-select erp-input" id="inpPol" asp-items="ViewBag.IdPuertoOrigen">
+                            <select asp-for="Operacione.IdPuertoOrigen" class="form-select erp-input" id="inpPol" data-ruta="pol" asp-items="ViewBag.IdPuertoOrigen">
                                 <option value="">-- Seleccionar --</option>
                             </select>
                         </div>
                         <div class="col-md-4">
                             <label class="erp-label">POD (Puerto Destino)</label>
-                            <select asp-for="Operacione.IdPuertoDestino" class="form-select erp-input" id="inpPod" asp-items="ViewBag.IdPuertoDestino">
+                            <select asp-for="Operacione.IdPuertoDestino" class="form-select erp-input" id="inpPod" data-ruta="pod" asp-items="ViewBag.IdPuertoDestino">
                                 <option value="">-- Seleccionar --</option>
                             </select>
                         </div>
@@ -706,7 +706,9 @@
                                 <label class="erp-label text-dark"><i class="bi bi-calendar-check"></i> Plazos de Stacking</label>
                                 <div class="row g-3 mt-1">
                                     <div class="col-12"><label class="erp-label" style="font-size:8px;">Apertura (In)</label><input asp-for="Operacione.FechaStacking" type="datetime-local" class="form-control erp-input" /></div>
-                                    <div class="col-12"><label class="erp-label text-danger" style="font-size:8px;">Cierre Original (Out)</label><input asp-for="Operacione.CutOffMatriz" type="datetime-local" class="form-control erp-input border-danger text-danger fw-bold" /></div>
+                                    <div class="col-12"><label class="erp-label text-danger" style="font-size:8px;">Cierre (Out)</label><input name="StackingCierre" type="datetime-local" value="@(Model.Operacione.LateArrival?.ToString("yyyy-MM-ddTHH:mm"))" class="form-control erp-input border-danger text-danger fw-bold" title="Con LAR autorizado, el cierre es la fecha del LAR (abajo)." /></div>
+                                    <div class="col-12"><label class="erp-label" style="font-size:8px;">Corte documental (Cut-Off Matriz)</label><input asp-for="Operacione.CutOffMatriz" type="datetime-local" class="form-control erp-input" /></div>
+                                    <div class="col-12 text-muted" style="font-size:10.5px;"><i class="bi bi-info-circle me-1"></i>Estas fechas son de la nave: al cambiarlas se actualizan en la salida y en todos sus bookings.</div>
                                 </div>
                             </div>
                         </div>
@@ -985,6 +987,7 @@
 <button type="submit" id="realSubmitBtn" form="frmOperacion" style="display: none;"></button>
 
 @section Scripts {
+    <partial name="_PuertosPais" />
     
     @if (TempData["ErrorBooking"] != null)
     {
@@ -1016,8 +1019,10 @@
             
             // --- MOTOR DEL WIZARD ---
             const ddlServicio = document.getElementById('ddlServicio');
-            const tabs = document.querySelectorAll('.nav-link');
-            const panes = document.querySelectorAll('.tab-pane');
+            // Solo las pestañas del asistente: con '.nav-link' a secas también se tomaban los enlaces del
+            // menú lateral del layout (el clic quedaba anulado y perdían la marca de página activa).
+            const tabs = document.querySelectorAll('#wizardTabs .nav-link');
+            const panes = document.querySelectorAll('.wizard-container .tab-pane');
             const btnPrev = document.getElementById('btnPrev');
             const btnNext = document.getElementById('btnNext');
             const btnResumen = document.getElementById('btnResumen');

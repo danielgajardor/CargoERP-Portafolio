@@ -60,18 +60,22 @@
 }
 
 <link rel="stylesheet" href="~/css/finanzas-mainboard.css" asp-append-version="true" />
+<link rel="stylesheet" href="~/css/finanzas-modulo.css" asp-append-version="true" />
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 
-<div class="container-fluid px-4 py-4 fmb">
+<div class="container-fluid px-4 py-4 fmb fin-modulo">
     <form id="antiForgeryForm">@Html.AntiForgeryToken()</form>
 
-    <div class="fmb-head">
-        <div>
-            <h1>Main Board Financiero</h1>
-            <p>Lo que Finanzas tiene que atender hoy y cómo va la rentabilidad del período.</p>
-            <partial name="/Pages/Finanzas/_Indicadores.cshtml" />
+    <div class="page-header">
+        <div class="page-header__title-row">
+            <div class="page-header__icon"><i class="bi bi-grid-1x2-fill"></i></div>
+            <div>
+                <h1>Main Board Financiero</h1>
+                <p class="page-header__subtitle">Lo que Finanzas tiene que atender hoy y cómo va la rentabilidad del período.</p>
+                <partial name="/Pages/Finanzas/_Indicadores.cshtml" />
+            </div>
         </div>
-        <form method="get" class="fmb-periodo">
+        <form method="get" class="fmb-periodo fin-header-actions">
             <label for="fmbPeriodo">Período</label>
             <select id="fmbPeriodo" name="Periodo" class="form-select form-select-sm" onchange="this.form.submit()">
                 @foreach (var o in AtilsonCargoSpa.Pages.Finanzas.IndexModel.OpcionesPeriodo)
@@ -346,12 +350,16 @@
                         <tbody>
                             @foreach (var f in Model.FilasOperaciones)
                             {
-                                <tr data-buscar="@((f.Booking + " " + f.Cliente).ToLowerInvariant())">
-                                    <td><a class="fmb-booking" href="/Finanzas/ControlFinanciero?abrir=@f.Id">@f.Booking</a></td>
+                                <tr class="@(f.Op.EsHistorica ? "fmb-historico" : "")" data-buscar="@((f.Booking + " " + f.Cliente).ToLowerInvariant())">
+                                    <td><a class="fmb-booking" href="/Finanzas/ControlFinanciero?abrir=@f.Id">@f.Booking</a>@if(f.Op.EsHistorica){<span class="fmb-hist-chip"><i class="bi bi-archive-fill"></i> Histórico</span>}</td>
                                     <td class="fmb-cliente">@f.Cliente</td>
                                     <td class="fmb-fecha">@(f.Fecha?.ToString("dd/MM/yyyy") ?? "—")</td>
                                     <td>
-                                        @if (TraspasoFinanzas.EsNuevaParaFinanzas(f.Op))
+                                        @if (f.Op.EsHistorica)
+                                        {
+                                            <span class="fmb-badge fmb-badge--muted"><i class="bi bi-lock-fill"></i> Solo lectura</span>
+                                        }
+                                        else if (TraspasoFinanzas.EsNuevaParaFinanzas(f.Op))
                                         {
                                             <span class="tarea-chip tarea-chip--nuevo">Nuevo</span>
                                         }

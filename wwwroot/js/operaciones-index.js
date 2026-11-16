@@ -1,3 +1,62 @@
+    // Limpia avisos antiguos del usuario, nunca solicitudes originales.
+    window.descartarTodasNotificacionesPortal = async function () {
+        if (!window.confirm('¿Descartar todos los avisos pendientes de tu bandeja? Las solicitudes originales seguirán disponibles en sus módulos.')) return;
+        const token = document.querySelector('#antiForgeryForm input[name="__RequestVerificationToken"]')?.value;
+        if (!token) { alert('No se pudo validar la sesión. Recarga la página.'); return; }
+        try {
+            const res = await fetch('/Operaciones/Index?handler=DescartarTodasNotificaciones', {
+                method: 'POST', headers: { 'RequestVerificationToken': token }
+            });
+            if (!res.ok) throw new Error('No se pudieron descartar los avisos.');
+            window.location.reload();
+        } catch (error) {
+            alert(error.message || 'Error al descartar.');
+        }
+    };
+
+    // Si llegó un aviso nuevo mientras el panel estaba abierto, actualizar el
+    // contenido Razor del modal antes de mostrarlo (no abrir datos obsoletos).
+    document.addEventListener('click', function (e) {
+        const btn = e.target.closest('#btnNotificacionesPortal');
+        if (!btn || btn.dataset.desactualizado !== '1') return;
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        try { sessionStorage.setItem('atilson-reabrir-notificaciones', '1'); } catch (_) {}
+        location.reload();
+    }, true);
+    document.addEventListener('DOMContentLoaded', function () {
+        try {
+            if (sessionStorage.getItem('atilson-reabrir-notificaciones') !== '1') return;
+            sessionStorage.removeItem('atilson-reabrir-notificaciones');
+            const modal = document.getElementById('modalNotificacionesUnificadas');
+            if (modal && window.bootstrap) bootstrap.Modal.getOrCreateInstance(modal).show();
+        } catch (_) {}
+    });
+
+
+    // El descarte sólo afecta la notificación visible de este usuario.
+    window.descartarAvisoPortal = async function (boton) {
+        const tipo = boton.dataset.tipo;
+        const idReferencia = Number(boton.dataset.id);
+        if (!tipo || !idReferencia) return;
+        const token = document.querySelector('#antiForgeryForm input[name="__RequestVerificationToken"]')?.value;
+        if (!token) { alert('No se pudo validar la sesión. Recarga la página.'); return; }
+        boton.disabled = true;
+        try {
+            const data = new URLSearchParams({ tipo, idReferencia: String(idReferencia) });
+            const res = await fetch('/Operaciones/Index?handler=DescartarNotificacion', {
+                method: 'POST',
+                headers: { 'RequestVerificationToken': token, 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: data.toString()
+            });
+            if (!res.ok) throw new Error('No se pudo guardar el descarte.');
+            window.location.reload();
+        } catch (error) {
+            boton.disabled = false;
+            alert(error.message || 'Error al descartar el aviso.');
+        }
+    };
+
     // ==========================================
     // 0. HELPERS (Contexto del Modal)
     // ==========================================
@@ -146,9 +205,9 @@
                 sel.style.fontWeight = "bold";
             }
         });
-        checkMatrizAlerts();
+        // Las alertas de Matriz se generan únicamente en el backend para evitar
+        // duplicados y para usar siempre la fecha vigente del booking.
         actualizarTooltipsAlertas();
-        setInterval(checkMatrizAlerts, 60000);
 
         document.addEventListener('click', function (e) {
             document.querySelectorAll('.autocomplete-items').forEach(list => {
@@ -157,9 +216,28 @@
         });
 
         document.getElementById('liveSearchInput')?.addEventListener('keyup', doFilters);
-        document.getElementById('filterMatriz')?.addEventListener('change', doFilters);
-        document.getElementById('filterStacking')?.addEventListener('change', doFilters);
+        function aplicarFiltrosRapidosServidor() {
+            const url = new URL(window.location.href);
+            const fm = document.getElementById('filterMatriz')?.value || 'all';
+            const fs = document.getElementById('filterStacking')?.value || 'all';
+            if (fm === 'all') url.searchParams.delete('FiltroMatriz'); else url.searchParams.set('FiltroMatriz', fm);
+            if (fs === 'all') url.searchParams.delete('FiltroStacking'); else url.searchParams.set('FiltroStacking', fs);
+            url.searchParams.delete('Pagina');
+            window.location.href = url.toString();
+        }
+        document.getElementById('filterMatriz')?.addEventListener('change', aplicarFiltrosRapidosServidor);
+        document.getElementById('filterStacking')?.addEventListener('change', aplicarFiltrosRapidosServidor);
         document.getElementById('btnResetFilters')?.addEventListener('click', function() {
+            const url = new URL(window.location.href);
+            const tieneServidor = url.searchParams.has('Buscar') || url.searchParams.has('FiltroMatriz') || url.searchParams.has('FiltroStacking') || url.searchParams.has('Pagina');
+            if (tieneServidor) {
+                url.searchParams.delete('Buscar');
+                url.searchParams.delete('FiltroMatriz');
+                url.searchParams.delete('FiltroStacking');
+                url.searchParams.delete('Pagina');
+                window.location.href = url.toString();
+                return;
+            }
             document.getElementById('liveSearchInput').value = '';
             document.getElementById('filterMatriz').value = 'all';
             document.getElementById('filterStacking').value = 'all';
@@ -216,34 +294,6 @@
         });
     };
 
-    function checkMatrizAlerts() {
-        let now = new Date();
-        document.querySelectorAll('.cut-off-txt').forEach(span => {
-            let cutOffStr = span.getAttribute('data-cutoff');
-            if (!cutOffStr) return;
-            let cutOff = new Date(cutOffStr);
-            let diffHrs = (cutOff - now) / 3600000;
-            let row = span.closest('tr');
-            let isPend = row && row.getAttribute('data-matriz-pend') === "true";
-            let alertContainer = row ? row.querySelector('.dynamic-matriz-alert') : null;
-
-            if (isPend && diffHrs <= 24 && alertContainer) {
-                let msg = "", bg = "";
-                if (diffHrs > 12)      { msg = `[INFO] MATRIZ Vence en ${Math.round(diffHrs)} hrs.`; bg = "bg-info text-info border-info"; }
-                else if (diffHrs > 3)  { msg = `[ALERTA] MATRIZ Vence en ${Math.round(diffHrs)} hrs.`; bg = "bg-warning text-warning border-warning"; }
-                else if (diffHrs > 1)  { msg = `[CRÍTICO] MATRIZ Vence en menos de 3 hrs.`; bg = "bg-warning text-warning border-warning"; }
-                else if (diffHrs > 0)  { msg = `[PELIGRO] MATRIZ Vence en menos de 1 HR.`; bg = "bg-danger text-danger border-danger"; }
-                else                   { msg = `[VENCIDO] MATRIZ ATRASADA.`; bg = "bg-danger text-white border-danger"; }
-
-                alertContainer.innerHTML = `<div class='p-2 mb-2 rounded bg-opacity-10 border border-opacity-25 ${bg}' style='font-size: 11px;'><strong><i class='bi bi-clock-history me-1'></i>${msg}</strong></div>`;
-                let iconAlert = row.querySelector('.alert-icon-main');
-                if (iconAlert) { iconAlert.style.display = 'inline-block'; row.classList.add('row-alert'); }
-            } else if (alertContainer) {
-                alertContainer.innerHTML = "";
-            }
-        });
-        actualizarTooltipsAlertas();
-    }
 
         window.mostrarAlertaHover = function(icon) {
         const row = icon.closest('tr');
@@ -304,92 +354,75 @@
         const row = element.closest('tr');
         if (!row) return;
 
-        let idOp = row.getAttribute('data-op-id');
-        if (!idOp) return;
-
+        const idOp = row.getAttribute('data-op-id');
         const booking = row.getAttribute('data-booking') || 'S/N';
         const dataSource = row.querySelector('.alert-data-source');
         const alertBody = document.getElementById('alertDynamicBody');
-        if (!dataSource || !alertBody) return;
+        if (!idOp || !dataSource || !alertBody) return;
 
         const config = [
-            { selector: '.hover-matriz',     label: 'Matriz Documental',   tab: `quick-matriz-${idOp}`, icon: 'bi-file-earmark-text' },
-            { selector: '.hover-stacking',   label: 'Tránsito a Puerto',   tab: `maritimo-${idOp}`,     icon: 'bi-water' },
-            { selector: '.hover-transporte', label: 'Logística Terrestre', tab: `terrestre-${idOp}`,    icon: 'bi-truck' }
+            { selector: '.hover-matriz',     label: 'Matriz documental',       icon: 'bi-file-earmark-text', actionIcon:'bi-arrow-right', action:'Ir a Matriz', kind:'tab', target:`quick-matriz-${idOp}` },
+            { selector: '.hover-stacking',   label: 'Tránsito a puerto',       icon: 'bi-water',              actionIcon:'bi-arrow-right', action:'Ir a Marítimo', kind:'tab', target:`maritimo-${idOp}` },
+            { selector: '.hover-transporte', label: 'Logística terrestre',     icon: 'bi-truck',              actionIcon:'bi-arrow-right', action:'Ir a Transporte', kind:'tab', target:`terrestre-${idOp}` },
+            { selector: '.hover-dhl',        label: 'Documentos post-zarpe',   icon: 'bi-send-check',         actionIcon:'bi-arrow-right', action:'Ir a Documental', kind:'tab', target:`quick-matriz-${idOp}` },
+            { selector: '.hover-transbordo', label: 'Transbordo',              icon: 'bi-arrow-left-right',   actionIcon:'bi-box-arrow-up-right', action:'Gestionar transbordo', kind:'detail' },
+            { selector: '.hover-arribo',     label: 'Arribo / retiro',         icon: 'bi-box-seam',           actionIcon:'bi-box-arrow-up-right', action:'Gestionar retiro', kind:'detail' },
+            { selector: '.hover-devolucion', label: 'Devolución de vacío',     icon: 'bi-arrow-return-left',  actionIcon:'bi-box-arrow-up-right', action:'Confirmar devolución', kind:'detail' },
+            // 13-nov: ciclo de la nave (ciclo-nave.js).
+            { selector: '.hover-nave-zarpe',     label: 'Zarpe de la nave',  icon: 'bi-water',          actionIcon:'bi-pencil-square', action:'Registrar Zarpe Real',      kind:'fn', fn:`cicloNaveDesdeAlerta('${idOp}', 'zarpe')` },
+            { selector: '.hover-nave-aviso',     label: 'Aviso de llegada',  icon: 'bi-envelope-paper', actionIcon:'bi-send',          action:'Enviar aviso de llegada',   kind:'fn', fn:`cicloNaveAvisoLlegada('${idOp}')` },
+            { selector: '.hover-nave-revision5', label: 'Revisión de la nave', icon: 'bi-binoculars',   actionIcon:'bi-check2-circle', action:'Revisada: sin demoras',     kind:'fn', fn:`cicloNaveRevision('${idOp}', 5)` },
+            { selector: '.hover-nave-revision3', label: 'Revisión de la nave', icon: 'bi-binoculars',   actionIcon:'bi-check2-circle', action:'Revisada: sin demoras',     kind:'fn', fn:`cicloNaveRevision('${idOp}', 3)` },
+            { selector: '.hover-nave-arribo',    label: 'Arribo a destino',  icon: 'bi-geo-alt-fill',   actionIcon:'bi-pencil-square', action:'Registrar Arribo Efectivo', kind:'fn', fn:`cicloNaveDesdeAlerta('${idOp}', 'arribo')` }
         ];
 
-        let html = `<div class="mb-3 pb-2 border-bottom"><span class="mod-label">Booking</span><h5 class="fw-bold text-dark m-0">${booking}</h5></div>`;
-        let hayAlertas = false;
+        function prioridad(html) {
+            const h = (html || '').toLowerCase();
+            if (h.includes('border-danger') || h.includes('text-danger') || h.includes('bg-danger')) return 0;
+            if (h.includes('border-warning') || h.includes('#d97706') || h.includes('text-warning')) return 1;
+            return 2;
+        }
+        function clasePrioridad(p) { return p === 0 ? 'critical' : p === 1 ? 'warning' : 'info'; }
 
-                config.forEach(cfg => {
-            let item = dataSource.querySelector(cfg.selector);
-            if (item && item.style.display !== 'none' && item.innerHTML.trim() !== '') {
-                hayAlertas = true;
-                html += `
-                    <div class="mb-3">
-                        ${item.innerHTML}
-                        <button type="button" class="btn btn-sm btn-dark fw-bold w-100 mt-1" onclick="abrirDesdeAlerta('${idOp}', '${cfg.tab}')">
-                            <i class="bi ${cfg.icon} me-1"></i> Ir a Solucionar — ${cfg.label}
-                        </button>
-                    </div>`;
-            }
+        const activas = [];
+        config.forEach(cfg => {
+            const item = dataSource.querySelector(cfg.selector);
+            if (!item || item.style.display === 'none' || !item.innerHTML.trim()) return;
+            activas.push({ cfg, html:item.innerHTML, priority:prioridad(item.innerHTML) });
         });
+        activas.sort((a,b) => a.priority - b.priority);
 
-                let itemTrans = dataSource.querySelector('.hover-transbordo');
-        if (itemTrans && itemTrans.style.display !== 'none' && itemTrans.innerHTML.trim() !== '') {
-            hayAlertas = true;
-            html += `
-                <div class="mb-3">
-                    ${itemTrans.innerHTML}
-                    <a href="/Operaciones/Detalle/${idOp}" class="btn btn-sm btn-dark fw-bold w-100 mt-1">
-                        <i class="bi bi-arrow-left-right me-1"></i> Ir a Gestionar Transbordo
-                    </a>
-                </div>`;
-        }
+        let html = `
+            <div class="ops-alert-summary">
+                <div>
+                    <span class="ops-alert-kicker">Booking</span>
+                    <strong>${typeof escapeHtmlAtilson === 'function' ? escapeHtmlAtilson(booking) : booking}</strong>
+                </div>
+                <span class="ops-alert-count"><i class="bi bi-bell"></i> ${activas.length} ${activas.length === 1 ? 'alerta activa' : 'alertas activas'}</span>
+            </div>`;
 
-                let itemArribo = dataSource.querySelector('.hover-arribo');
-        if (itemArribo && itemArribo.style.display !== 'none' && itemArribo.innerHTML.trim() !== '') {
-            hayAlertas = true;
-            html += `
-                <div class="mb-3">
-                    ${itemArribo.innerHTML}
-                    <a href="/Operaciones/Detalle/${idOp}" class="btn btn-sm btn-dark fw-bold w-100 mt-1">
-                        <i class="bi bi-box-seam me-1"></i> Ir a Gestionar Retiro
-                    </a>
-                </div>`;
-        }
+        if (!activas.length) {
+            html += `<div class="ops-alert-empty"><i class="bi bi-check-circle-fill"></i><strong>Sin alertas activas</strong><span>Esta operación no requiere una gestión inmediata.</span></div>`;
+        } else {
+            activas.forEach(a => {
+                const cfg = a.cfg;
+                const action = cfg.kind === 'detail'
+                    ? `<a href="/Operaciones/Detalle/${idOp}" class="ops-alert-action"><i class="bi ${cfg.actionIcon}"></i>${cfg.action}</a>`
+                    : cfg.kind === 'fn'
+                        ? `<button type="button" class="ops-alert-action" onclick="${cfg.fn}"><i class="bi ${cfg.actionIcon}"></i>${cfg.action}</button>`
+                        : `<button type="button" class="ops-alert-action" onclick="abrirDesdeAlerta('${idOp}', '${cfg.target}')"><i class="bi ${cfg.actionIcon}"></i>${cfg.action}</button>`;
 
-        let itemDevolucion = dataSource.querySelector('.hover-devolucion');
-        if (itemDevolucion && itemDevolucion.style.display !== 'none' && itemDevolucion.innerHTML.trim() !== '') {
-            hayAlertas = true;
-            html += `
-                <div class="mb-3">
-                    ${itemDevolucion.innerHTML}
-                    <a href="/Operaciones/Detalle/${idOp}" class="btn btn-sm btn-dark fw-bold w-100 mt-1">
-                        <i class="bi bi-arrow-return-left me-1"></i> Ir a Confirmar Devolución
-                    </a>
-                </div>`;
-        }
-
-        let dinamica = dataSource.querySelector('.dynamic-matriz-alert');
-        if (dinamica && dinamica.innerHTML.trim() !== '') {
-            hayAlertas = true;
-            html += `
-                <div class="mb-3">
-                    ${dinamica.innerHTML}
-                    <button type="button" class="btn btn-sm btn-dark fw-bold w-100 mt-1" onclick="abrirDesdeAlerta('${idOp}', 'quick-matriz-${idOp}')">
-                        <i class="bi bi-file-earmark-text me-1"></i> Ir a Solucionar — Matriz Documental
-                    </button>
-                </div>`;
-        }
-
-        if (!hayAlertas) {
-            html += `<div class="text-center text-muted py-4"><i class="bi bi-check-circle fs-1 opacity-50"></i><p class="mt-2 mb-0" style="font-size:12px;">No hay alertas activas para esta operación.</p></div>`;
+                html += `
+                    <section class="ops-alert-card ${clasePrioridad(a.priority)}">
+                        <div class="ops-alert-card-head"><span><i class="bi ${cfg.icon}"></i>${cfg.label}</span></div>
+                        <div class="ops-alert-card-body">${a.html}</div>
+                        ${action}
+                    </section>`;
+            });
         }
 
         alertBody.innerHTML = html;
-        let modalAlertObj = bootstrap.Modal.getOrCreateInstance(document.getElementById('modalAlertas'));
-        modalAlertObj.show();
+        bootstrap.Modal.getOrCreateInstance(document.getElementById('modalAlertas')).show();
     };
 
         window.abrirDesdeNotificacionRoleo = function(idOp, tabTargetId) {
@@ -652,65 +685,227 @@
 
    
 
-    // Modal de PDF Booking Cliente
+    // Reserva: PDF y correo realmente enviado se previsualizan juntos.
+    // Backend y vista previa comparten la misma plantilla y validan versión en SQL.
+    async function actualizarCorreoBookingIndex(inicial) {
+        const botonEnviar = document.getElementById('btnEnviarAlClienteIndex');
+        const id = botonEnviar?.getAttribute('data-id');
+        const asunto = document.getElementById('emailAsuntoBookingPreview');
+        const nota = document.getElementById('emailMensajeBookingPreview');
+        const intro = document.getElementById('emailIntroBookingPreview');
+        const aviso = document.getElementById('emailEstadoSmtpBooking');
+        const frame = document.getElementById('iframeCorreoBookingPreview');
+        const versionBadge = document.getElementById('indicadorEnvioIndex');
+        const token = document.querySelector('input[name="__RequestVerificationToken"]')?.value || '';
+        if (!id || !token) throw new Error('No se pudo validar la sesión o la operación.');
+        aviso.textContent = 'Preparando la vista previa del mensaje...';
+        botonEnviar.disabled = true;
+        try {
+            const data = new FormData();
+            data.append('id', id);
+            data.append('mensajePersonalizado', nota.value);
+            data.append('introduccion', intro.value);
+            data.append('__RequestVerificationToken', token);
+            const res = await fetch('?handler=PrevisualizarCorreoReserva', {
+                method: 'POST', body: data, credentials: 'same-origin',
+                headers: { 'RequestVerificationToken': token }
+            });
+            const json = await res.json();
+            if (!res.ok || !json.success) throw new Error(json.message || 'No se pudo preparar el mensaje.');
+            frame.srcdoc = json.html;
+            const actual = asunto.value.trim();
+            const ultimoDefault = asunto.dataset.default || '';
+            if (inicial || !actual || actual === ultimoDefault) asunto.value = json.asunto;
+            asunto.dataset.default = json.asunto;
+            botonEnviar.dataset.nuevaVersion = String(json.version);
+            botonEnviar.dataset.huellaVistaPrevia = json.huella || '';
+            if (inicial && !intro.value.trim()) intro.value = json.introduccionDefault || '';
+            intro.dataset.previsualizado = intro.value;
+            nota.dataset.previsualizado = nota.value;
+            const esReenvio = !!json.enviadoAlgunaVez;
+            versionBadge.style.display = 'inline-block';
+            versionBadge.style.background = esReenvio ? '#dbeafe' : '#fef3c7';
+            versionBadge.style.color = esReenvio ? '#1d4ed8' : '#a16207';
+            versionBadge.textContent = esReenvio
+                ? 'Reenvío: actualización V' + json.version
+                : 'Primer envío: V1';
+            const destino = document.getElementById('modalCorreoDestino');
+            if (inicial && !destino.value.trim()) destino.value = json.correo || '';
+            aviso.textContent = json.smtpConfigurado
+                ? 'Vista previa generada. Revisa destinatario, asunto y contenido antes de enviar. ' + (json.smtpMensaje || '')
+                : (json.smtpMensaje || 'SMTP no configurado: el correo no podrá enviarse.');
+            aviso.className = json.smtpConfigurado ? 'small text-success mb-2' : 'small text-danger mb-2';
+            botonEnviar.disabled = !json.smtpConfigurado;
+        } catch (error) {
+            botonEnviar.dataset.nuevaVersion = '';
+            botonEnviar.dataset.huellaVistaPrevia = '';
+            aviso.textContent = error.message || 'No se pudo preparar el correo.';
+            aviso.className = 'small text-danger mb-2';
+            botonEnviar.disabled = true;
+        }
+    }
+
+    // Abre la vista previa editable del correo de booking. Se usa desde el menú
+    // de cada fila y desde Detalle (/Operaciones/Index?correoBooking={id}).
+    function abrirCorreoBookingIndex(idOp, correoCliente) {
+        const iframe = document.getElementById('iframePdfIndex');
+        const spinner = document.getElementById('pdfLoadingSpinnerIndex');
+        const inputCorreo = document.getElementById('modalCorreoDestino');
+        const btnEnviar = document.getElementById('btnEnviarAlClienteIndex');
+        const asunto = document.getElementById('emailAsuntoBookingPreview');
+        const nota = document.getElementById('emailMensajeBookingPreview');
+        const intro = document.getElementById('emailIntroBookingPreview');
+        inputCorreo.value = correoCliente;
+        asunto.value = '';
+        asunto.dataset.default = '';
+        nota.value = '';
+        nota.dataset.previsualizado = '';
+        intro.value = '';
+        intro.dataset.previsualizado = '';
+        btnEnviar.dataset.id = idOp;
+        btnEnviar.dataset.nuevaVersion = '';
+        btnEnviar.dataset.huellaVistaPrevia = '';
+        btnEnviar.disabled = true;
+        if (iframe && spinner) {
+            iframe.style.display = 'none';
+            spinner.style.display = 'flex';
+            iframe.onload = function() { spinner.style.display = 'none'; iframe.style.display = 'block'; };
+            iframe.src = '/Operaciones/ReservaPdf/' + encodeURIComponent(idOp);
+        }
+        bootstrap.Modal.getOrCreateInstance(document.getElementById('modalPdfPreviewIndex')).show();
+        actualizarCorreoBookingIndex(true);
+    }
+    window.abrirCorreoBookingIndex = abrirCorreoBookingIndex;
+
     document.addEventListener('click', function(e) {
         const btn = e.target.closest('.btn-enviar-correo');
         if (!btn) return;
         e.preventDefault();
-
-        const idOp = btn.getAttribute('data-id');
-        const versionActual = parseInt(btn.getAttribute('data-version')) || 1;
-        const fueEnviadoAlgunaVez = btn.getAttribute('data-fue-enviado') === 'true';
-        const correoCliente = btn.getAttribute('data-correo') || '';
-        const nuevaVersion = fueEnviadoAlgunaVez ? versionActual + 1 : versionActual;
-
-        const iframe = document.getElementById('iframePdfIndex');
-        const spinner = document.getElementById('pdfLoadingSpinnerIndex');
-        const inputCorreo = document.getElementById('modalCorreoDestino');
-        const indicador = document.getElementById('indicadorEnvioIndex');
-        const subtitle = document.getElementById('pdfPreviewSubtitle');
-        const btnEnviar = document.getElementById('btnEnviarAlClienteIndex');
-
-        if (inputCorreo) inputCorreo.value = correoCliente;
-        if (subtitle) subtitle.innerText = fueEnviadoAlgunaVez ? `Reenvío — se generará la versión V${nuevaVersion}` : 'Primer envío al cliente';
-
-        if (indicador) {
-            indicador.style.display = 'inline-block';
-            if (fueEnviadoAlgunaVez) { indicador.style.background = '#dbeafe'; indicador.style.color = '#1d4ed8'; indicador.innerText = `Actualización V${nuevaVersion}`; } 
-            else { indicador.style.background = '#fef3c7'; indicador.style.color = '#d97706'; indicador.innerText = 'Primer Envío'; }
-        }
-
-        if (iframe && spinner) {
-            iframe.style.display = 'none'; spinner.style.display = 'flex'; iframe.src = `/Operaciones/ReservaPdf/${idOp}`;
-            iframe.onload = function() { spinner.style.display = 'none'; iframe.style.display = 'block'; };
-        }
-
-        if (btnEnviar) { btnEnviar.setAttribute('data-id', idOp); btnEnviar.setAttribute('data-nueva-version', nuevaVersion); }
-        let modalObj = bootstrap.Modal.getOrCreateInstance(document.getElementById('modalPdfPreviewIndex'));
-        modalObj.show();
+        abrirCorreoBookingIndex(btn.getAttribute('data-id'), btn.getAttribute('data-correo') || '');
     }, true);
 
-    document.getElementById('btnEnviarAlClienteIndex')?.addEventListener('click', function() {
-        const idOp = this.getAttribute('data-id');
-        const nuevaVersion = this.getAttribute('data-nueva-version');
-        const correo = document.getElementById('modalCorreoDestino').value.trim();
-        const token = document.querySelector('input[name="__RequestVerificationToken"]').value;
+    // Llegada desde Detalle con ?correoBooking={id}: abre la vista previa y limpia la URL.
+    (function () {
+        const params = new URLSearchParams(window.location.search);
+        const idDesdeUrl = params.get('correoBooking');
+        if (!idDesdeUrl || !/^\d+$/.test(idDesdeUrl)) return;
+        const abrir = () => {
+            const btnFila = document.querySelector(`.btn-enviar-correo[data-id="${idDesdeUrl}"]`);
+            abrirCorreoBookingIndex(idDesdeUrl, btnFila?.getAttribute('data-correo') || '');
+            params.delete('correoBooking');
+            const qs = params.toString();
+            history.replaceState(null, '', window.location.pathname + (qs ? '?' + qs : ''));
+        };
+        if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', abrir);
+        else abrir();
+    })();
 
-        if (!correo || !correo.includes('@')) { Swal.fire('Correo inválido', 'Ingresa un correo válido para el cliente.', 'warning'); return; }
-
-        const originalHtml = this.innerHTML; this.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span> Enviando...'; this.disabled = true; const btnRef = this;
-        let formData = new FormData(); formData.append('id', idOp); formData.append('correoDestino', correo); formData.append('nuevaVersion', nuevaVersion);
-
-        fetch('?handler=EnviarCorreoReserva', { method: 'POST', headers: { 'RequestVerificationToken': token }, body: formData })
-        .then(res => res.json()).then(data => {
-            btnRef.innerHTML = originalHtml; btnRef.disabled = false;
-            if (data.success) {
-                Swal.fire({ icon: 'success', title: '¡Enviado!', text: `Booking enviado correctamente (V${nuevaVersion}).`, confirmButtonColor: '#10b981' })
-                .then(() => { let modalObj = bootstrap.Modal.getInstance(document.getElementById('modalPdfPreviewIndex')); if (modalObj) modalObj.hide(); location.reload(); });
-            } else { Swal.fire('Error', data.message || 'No se pudo enviar el correo.', 'error'); }
-        }).catch(() => { btnRef.innerHTML = originalHtml; btnRef.disabled = false; Swal.fire('Error', 'Fallo de conexión al enviar el correo.', 'error'); });
+    document.getElementById('btnActualizarCorreoBookingPreview')?.addEventListener('click', function() {
+        actualizarCorreoBookingIndex(false);
     });
 
+    document.getElementById('btnPruebaSmtpBooking')?.addEventListener('click', async function() {
+        const confirmacion = await Swal.fire({
+            title: 'Prueba de correo real',
+            text: 'Se enviará un mensaje únicamente al correo de tu cuenta administrativa. No cambia ningún booking.',
+            icon: 'question',
+            showCancelButton: true,
+            confirmButtonText: 'Enviar prueba',
+            cancelButtonText: 'Cancelar',
+            confirmButtonColor: '#443094'
+        });
+        if (!confirmacion.isConfirmed) return;
+        const token = document.querySelector('input[name="__RequestVerificationToken"]')?.value || '';
+        if (!token) {
+            Swal.fire('Sesión no validada', 'Actualiza la página para intentarlo.', 'warning');
+            return;
+        }
+        const boton = this;
+        const previo = boton.innerHTML;
+        boton.disabled = true;
+        boton.textContent = 'Comprobando envío...';
+        try {
+            const fd = new FormData();
+            fd.append('__RequestVerificationToken', token);
+            const res = await fetch('?handler=ProbarCorreoSmtp', {
+                method: 'POST', body: fd, credentials: 'same-origin',
+                headers: { 'RequestVerificationToken': token }
+            });
+            const data = await res.json();
+            await Swal.fire({
+                icon: res.ok && data.success ? 'success' : 'error',
+                title: res.ok && data.success ? 'SMTP aceptó la prueba' : 'Prueba SMTP fallida',
+                text: data.message || 'No se obtuvo respuesta del servidor.'
+            });
+        } catch (_) {
+            Swal.fire('Sin respuesta', 'No fue posible contactar al servidor. Revisa la conexión.', 'error');
+        } finally {
+            boton.disabled = false;
+            boton.innerHTML = previo;
+        }
+    });
+
+
+
+    document.getElementById('btnEnviarAlClienteIndex')?.addEventListener('click', async function() {
+        const id = this.dataset.id;
+        const nuevaVersion = this.dataset.nuevaVersion;
+        const destino = document.getElementById('modalCorreoDestino');
+        const asunto = document.getElementById('emailAsuntoBookingPreview');
+        const nota = document.getElementById('emailMensajeBookingPreview');
+        const intro = document.getElementById('emailIntroBookingPreview');
+        const token = document.querySelector('input[name="__RequestVerificationToken"]')?.value || '';
+        if (!id || !nuevaVersion || !this.dataset.huellaVistaPrevia) {
+            Swal.fire('Vista previa incompleta', 'Primero actualiza y revisa la vista previa del correo.', 'warning');
+            return;
+        }
+        if (!destino.value.trim() || !destino.checkValidity() || !asunto.value.trim() || !asunto.checkValidity()) {
+            Swal.fire('Revisa el correo', 'Completa destinatario y asunto correctamente.', 'warning');
+            return;
+        }
+        if (nota.value !== nota.dataset.previsualizado || intro.value !== intro.dataset.previsualizado) {
+            Swal.fire('Actualiza la vista previa', 'Modificaste el mensaje o la introducción. Pulsa «Actualizar vista previa» antes de enviarlo.', 'warning');
+            return;
+        }
+        const old = this.innerHTML;
+        this.disabled = true;
+        this.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span> Enviando...';
+        try {
+            const fd = new FormData();
+            fd.append('id', id);
+            fd.append('correoDestino', destino.value.trim());
+            fd.append('nuevaVersion', nuevaVersion);
+            fd.append('asunto', asunto.value.trim());
+            fd.append('mensajePersonalizado', nota.value);
+            fd.append('introduccion', intro.value);
+            fd.append('huellaVistaPrevia', this.dataset.huellaVistaPrevia);
+            fd.append('__RequestVerificationToken', token);
+            const res = await fetch('?handler=EnviarCorreoReserva', {
+                method: 'POST', body: fd, credentials: 'same-origin',
+                headers: { 'RequestVerificationToken': token }
+            });
+            const data = await res.json();
+            if (!res.ok || !data.success) {
+                if (data.enviado) {
+                    await Swal.fire('Revisar estado de envío', data.message, 'warning');
+                    return;
+                }
+                throw new Error(data.message || 'No se pudo enviar el correo.');
+            }
+            await Swal.fire({
+                icon: 'success', title: 'Booking enviado',
+                text: 'El servidor SMTP aceptó el correo V' + data.version + ' y se actualizó su estado.',
+                confirmButtonColor: '#10b981'
+            });
+            bootstrap.Modal.getInstance(document.getElementById('modalPdfPreviewIndex'))?.hide();
+            location.reload();
+        } catch (error) {
+            Swal.fire('Error al enviar', error.message || 'Comprueba el SMTP y vuelve a revisar.', 'error');
+        } finally {
+            this.innerHTML = old;
+            this.disabled = false;
+        }
+    });
 
 // ===========================================================
 // Funciones movidas desde un <script> inline adicional en Index.cshtml
@@ -958,4 +1153,162 @@ window.eliminarOperacion = function (idOp, ev) {
         var ul = cont ? cont.querySelector('ul[data-estado-menu]') : null;
         if (ul) armarMenu(ul);
     });
+})();
+
+
+/* ==========================================================
+   MAIN BOARD — scrollbar superior sincronizado + botones
+   ========================================================== */
+(function () {
+    function iniciarScrollOperaciones() {
+        const real = document.getElementById('opsTableScroll');
+        const top = document.getElementById('opsTopScroll');
+        const inner = document.getElementById('opsTopScrollInner');
+        const left = document.getElementById('opsScrollLeft');
+        const right = document.getElementById('opsScrollRight');
+        if (!real || !top || !inner) return;
+
+        let sincronizando = false;
+        function dimensionar() {
+            inner.style.width = Math.max(real.scrollWidth, real.clientWidth) + 'px';
+            actualizarBotones();
+        }
+        function actualizarBotones() {
+            const max = Math.max(0, real.scrollWidth - real.clientWidth);
+            if (left) left.disabled = real.scrollLeft <= 2;
+            if (right) right.disabled = real.scrollLeft >= max - 2;
+        }
+
+        top.addEventListener('scroll', function () {
+            if (sincronizando) return;
+            sincronizando = true;
+            real.scrollLeft = top.scrollLeft;
+            sincronizando = false;
+            actualizarBotones();
+        }, { passive:true });
+
+        real.addEventListener('scroll', function () {
+            if (sincronizando) return;
+            sincronizando = true;
+            top.scrollLeft = real.scrollLeft;
+            sincronizando = false;
+            actualizarBotones();
+        }, { passive:true });
+
+        left?.addEventListener('click', () => real.scrollBy({ left:-520, behavior:'smooth' }));
+        right?.addEventListener('click', () => real.scrollBy({ left:520, behavior:'smooth' }));
+
+        // Shift + rueda también desplaza horizontalmente para mouse tradicional.
+        real.addEventListener('wheel', function (e) {
+            if (!e.shiftKey || Math.abs(e.deltaY) < Math.abs(e.deltaX)) return;
+            e.preventDefault();
+            real.scrollLeft += e.deltaY;
+        }, { passive:false });
+
+        if (window.ResizeObserver) new ResizeObserver(dimensionar).observe(real);
+        window.addEventListener('resize', dimensionar);
+        dimensionar();
+    }
+
+    if (document.readyState === 'loading')
+        document.addEventListener('DOMContentLoaded', iniciarScrollOperaciones);
+    else
+        iniciarScrollOperaciones();
+})();
+
+// ==========================================
+// AVISO SERVICIO FINALIZADO (bandera verde por contenedor en el Main Board)
+// Restaurado nov-2026: la función se perdió al mover el JS inline de
+// Index.cshtml a este archivo (oct-2026) y la bandera no hacía nada.
+// Abre #modalFinalizarServicio y calcula en vivo sobreestadías y Late Arrival
+// solo como referencia visual: el cálculo que vale es el del servidor
+// (OnPostFinalizarServicioAsync).
+// ==========================================
+(function () {
+    function horasEntre(a, b) {
+        if (!a || !b) return null;
+        const ini = new Date(a), fin = new Date(b);
+        if (isNaN(ini.getTime()) || isNaN(fin.getTime())) return null;
+        return (fin.getTime() - ini.getTime()) / 3600000;
+    }
+    function formatoHoras(h) {
+        if (h === null || h < 0) return '0h 0m';
+        const total = Math.round(h * 60);
+        return `${Math.floor(total / 60)}h ${total % 60}m`;
+    }
+    function pintarCaja(boxId, txtId, horas, libres) {
+        const box = document.getElementById(boxId), txt = document.getElementById(txtId);
+        if (!box || !txt) return;
+        const exceso = horas === null ? 0 : Math.max(0, horas - (parseFloat(libres) || 0));
+        txt.textContent = formatoHoras(exceso);
+        box.style.background = exceso > 0 ? '#fef2f2' : 'var(--bg-soft)';
+        box.style.borderColor = exceso > 0 ? '#fca5a5' : '';
+        txt.style.color = exceso > 0 ? '#b91c1c' : '';
+    }
+    function recalcularFinalizar() {
+        const v = id => (document.getElementById(id) || {}).value || '';
+        pintarCaja('fsSobreestadiaBox', 'fsSobreestadiaTxt', horasEntre(v('fsLlegadaPlanta'), v('fsSalidaPlanta')), v('fsHorasLibresPlanta'));
+        pintarCaja('fsSobreestadiaPuertoBox', 'fsSobreestadiaPuertoTxt', horasEntre(v('fsLlegadaPuerto'), v('fsSalidaPuerto')), v('fsHorasLibresPuerto'));
+        const lar = document.getElementById('fsLarContainer');
+        if (lar) {
+            const cut = v('finCutOff'), llegada = v('fsLlegadaPuerto');
+            const hayLar = cut && llegada && new Date(llegada) > new Date(cut);
+            lar.classList.toggle('d-none', !hayLar);
+        }
+    }
+
+    window.abrirModalFinalizar = function (idOp, booking, reqTerrestre, cutOff, idUnidadTecnica, containerLabel, llegadaPlanta, salidaPlanta, llegadaPuerto, salidaPuerto, event) {
+        if (event) { event.preventDefault(); event.stopPropagation(); }
+        const modalEl = document.getElementById('modalFinalizarServicio');
+        if (!modalEl || !window.bootstrap) return;
+
+        const set = (id, val) => { const el = document.getElementById(id); if (el) el.value = val || ''; };
+        set('finOpId', idOp);
+        set('finCutOff', cutOff);
+        set('finIdUnidadTecnica', idUnidadTecnica);
+        const titulo = document.getElementById('finBookingTitle');
+        if (titulo) titulo.textContent = booking || '';
+
+        const labelWrap = document.getElementById('finContainerLabelWrap');
+        const labelSpan = document.getElementById('finContainerLabel');
+        if (labelWrap && labelSpan) {
+            const tieneLabel = containerLabel && String(containerLabel).trim() !== '';
+            labelSpan.textContent = tieneLabel ? containerLabel : '';
+            labelWrap.classList.toggle('d-none', !tieneLabel);
+        }
+
+        set('fsCorreoCliente', '');
+        set('fsLlegadaPlanta', llegadaPlanta);
+        set('fsSalidaPlanta', salidaPlanta);
+        set('fsLlegadaPuerto', llegadaPuerto);
+        set('fsSalidaPuerto', salidaPuerto);
+
+        const chkEscaner = document.getElementById('fsSorteoEscaner');
+        if (chkEscaner) chkEscaner.checked = false;
+        const divEscaner = document.getElementById('fsSorteoEscanerFileDiv');
+        if (divEscaner) divEscaner.style.display = 'none';
+
+        const secTerrestre = document.getElementById('fs-sec-terrestre');
+        if (secTerrestre) secTerrestre.classList.toggle('d-none', !reqTerrestre);
+
+        recalcularFinalizar();
+        bootstrap.Modal.getOrCreateInstance(modalEl).show();
+    };
+
+    function iniciarModalFinalizar() {
+        const modalEl = document.getElementById('modalFinalizarServicio');
+        if (!modalEl) return;
+        modalEl.querySelectorAll('.fs-calc-planta, .fs-calc-puerto, #fsHorasLibresPlanta, #fsHorasLibresPuerto')
+            .forEach(el => { el.addEventListener('input', recalcularFinalizar); el.addEventListener('change', recalcularFinalizar); });
+        const chkEscaner = document.getElementById('fsSorteoEscaner');
+        const divEscaner = document.getElementById('fsSorteoEscanerFileDiv');
+        if (chkEscaner && divEscaner) {
+            chkEscaner.addEventListener('change', () => { divEscaner.style.display = chkEscaner.checked ? '' : 'none'; });
+        }
+    }
+
+    if (document.readyState === 'loading')
+        document.addEventListener('DOMContentLoaded', iniciarModalFinalizar);
+    else
+        iniciarModalFinalizar();
 })();

@@ -97,7 +97,8 @@ namespace AtilsonCargoSpa.Helpers
             return ms.ToArray();
         }
 
-        public static Resultado Leer(Stream archivo, IReadOnlyList<Cliente> clientes, IReadOnlyList<Naviera> navieras, IReadOnlyList<Deposito> depositos, string usuario)
+        public static Resultado Leer(Stream archivo, IReadOnlyList<Cliente> clientes, IReadOnlyList<Naviera> navieras, IReadOnlyList<Deposito> depositos, string usuario,
+            IReadOnlyDictionary<string, string>? paisPorPuerto = null)
         {
             var tarifas = new List<TarifasCliente>();
             var errores = new List<string>();
@@ -171,6 +172,9 @@ namespace AtilsonCargoSpa.Helpers
                 {
                     case "MARITIMO":
                         if (origen == "" || destino == "") { errores.Add($"{fila}: Marítimo requiere Origen/POL y Destino/POD."); continue; }
+                        if (paisPorPuerto != null && paisPorPuerto.TryGetValue(PuertosHelper.ClaveTexto(origen), out var paisPol) && paisPol != ""
+                            && paisPorPuerto.TryGetValue(PuertosHelper.ClaveTexto(destino), out var paisPod) && paisPod == paisPol)
+                        { errores.Add($"{fila}: Origen/POL \"{origen}\" y Destino/POD \"{destino}\" son de {paisPol} (el destino debe ser de otro país)."); continue; }
                         var m = Base("Marítimo", "FLETE MARÍTIMO");
                         m.Pol = origen; m.Pod = destino; m.TipoContenedor = contenedor == "" ? "ALL" : contenedor;
                         tarifas.Add(m);
@@ -240,15 +244,8 @@ namespace AtilsonCargoSpa.Helpers
         {
             valor = 0m;
             if (celda.DataType == XLDataType.Number) { valor = (decimal)celda.GetDouble(); return true; }
-            var t = celda.GetFormattedString().Trim().Replace("$", "").Replace(" ", "");
-            if (t == "") return false;
-            if (t.Contains(',') && t.Contains('.'))
-                t = t.LastIndexOf(',') > t.LastIndexOf('.') ? t.Replace(".", "").Replace(",", ".") : t.Replace(",", "");
-            else if (t.Contains(','))
-                t = t.Replace(",", ".");
-            else if (t.Count(ch => ch == '.') > 1)
-                t = t.Replace(".", "");
-            return decimal.TryParse(t, NumberStyles.Number, CultureInfo.InvariantCulture, out valor);
+            // Misma regla que los formularios de Comercial ("450.000" = 450 mil).
+            return MontoHelper.TryParse(celda.GetFormattedString(), out valor);
         }
 
         private static DateTime? LeerFecha(IXLCell celda)

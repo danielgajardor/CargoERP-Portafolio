@@ -55,7 +55,6 @@ namespace AtilsonCargoSpa.Pages.PortalCliente
         public List<SelectListItem> Zonas { get; set; } = new();
 
         /// <summary>Qué formulario abrir: "planta" o "deposito".</summary>
-        /// <summary> Cu
         public string? FormularioAbierto { get; set; }
 
         private int? IdCliente()
@@ -183,10 +182,7 @@ namespace AtilsonCargoSpa.Pages.PortalCliente
         /// <summary>
         /// La página tiene dos formularios (planta y depósito); al enviar uno, el otro llega
         /// vacío y el binder lo valida sin prefijo. Solo cuentan los campos del formulario enviado.
-        /// Ultimoas vistas a la página diferenciar los servicios (marítimo, terrestre y documentoa
-        /// Configurar credenciales.
-        /// Chatbot automatizado landing page
-      
+        /// </summary>
         private void SoloValidar(string prefijo)
         {
             foreach (var k in ModelState.Keys.Where(k => !k.StartsWith(prefijo + ".")).ToList()) ModelState.Remove(k);

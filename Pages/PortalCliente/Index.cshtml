@@ -2,6 +2,7 @@
 @model AtilsonCargoSpa.Pages.PortalCliente.IndexModel
 @using AtilsonCargoSpa.Models
 @using System.Globalization
+@inject AtilsonCargoSpa.Services.NotificacionesClienteService AvisosPortal
 @functions {
     // Normaliza fechas (soporta DateTime? y DateOnly? según cómo esté scaffoldeado el modelo)
     private static DateTime? AFecha(DateTime? d) => d;
@@ -251,6 +252,40 @@
     }
 
     <!-- =====================================================
+         3b. NOVEDADES (avisos del portal, 15-nov-2026)
+         ===================================================== -->
+    @{
+        int idClienteNov = int.TryParse(User.FindFirst("IdCliente")?.Value, out var icn) ? icn : 0;
+        var novedades = idClienteNov > 0 ? await AvisosPortal.ListarAsync(idClienteNov, 4) : new List<NotificacionCliente>();
+    }
+    @if (novedades.Any())
+    {
+        <section class="pc-reveal pc-novedades" id="pcNovedades">
+            <div class="pc-section-head">
+                <div>
+                    <span class="pc-eyebrow">Avisos</span>
+                    <h2 class="pc-section-title">Novedades de tus operaciones @if (novedades.Any(n => n.FechaLeida == null)) { <span class="count">@(novedades.Count(n => n.FechaLeida == null)) sin leer</span> }</h2>
+                </div>
+                <a href="/PortalCliente/Notificaciones" class="pc-btn pc-btn-light pc-resumen-all">Ver todos los avisos <i class="bi bi-arrow-right"></i></a>
+            </div>
+            <div class="pc-novedades-list">
+                @foreach (var n in novedades)
+                {
+                    var tn = AtilsonCargoSpa.Services.NotificacionesClienteService.Tipo(n.Tipo);
+                    <a class="pc-novedad @(n.FechaLeida == null ? "is-nueva" : "")" href="/PortalCliente/Notificaciones?handler=Abrir&id=@n.Id">
+                        <span class="av-ico" style="--c:@tn.Color"><i class="bi @tn.Icono"></i></span>
+                        <span class="pc-novedad-txt">
+                            <b>@n.Titulo</b>
+                            @if (!string.IsNullOrWhiteSpace(n.Mensaje)) { <span>@n.Mensaje</span> }
+                        </span>
+                        <span class="pc-novedad-hace">@AtilsonCargoSpa.Services.NotificacionesClienteService.Hace(n.Fecha, ahora)</span>
+                    </a>
+                }
+            </div>
+        </section>
+    }
+
+    <!-- =====================================================
          4. EN CURSO (resumen; la lista completa está en Mis operaciones)
          ===================================================== -->
     @{
@@ -393,8 +428,8 @@
                     <a href="/PortalCliente/Documentos">
                         <span class="pc-quick-ico" style="background:#ecfdf5; color:#059669;"><i class="bi bi-file-earmark-spreadsheet"></i></span>
                         <span>
-                            <span class="pc-quick-main">Descargar matriz en blanco</span>
-                            <span class="pc-quick-sub">Formato Excel para llenado masivo</span>
+                            <span class="pc-quick-main">Matriz y documentos</span>
+                            <span class="pc-quick-sub">Consulta los archivos reales de tus embarques</span>
                         </span>
                         <i class="bi bi-chevron-right go"></i>
                     </a>

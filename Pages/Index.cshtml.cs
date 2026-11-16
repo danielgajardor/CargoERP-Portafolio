@@ -176,10 +176,13 @@ namespace AtilsonCargoSpa.Pages
             if (!string.IsNullOrWhiteSpace(estado) && estado.Length <= 4000)
                 try { memoria = JsonSerializer.Deserialize<AsistenteWebService.EstadoAsistente>(estado); } catch (JsonException) { }
 
-            // Máximo 80 mensajes por hora desde la misma conexión.
+            // Máximo 80 mensajes por hora desde la misma conexión. Desde el mismo servidor
+            // (localhost) no hay límite: lo usa Herramientas/exportar_sitio_estatico.py para
+            // guardar las respuestas del asistente en la copia estática del sitio.
             string ip = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "?";
             string clave = "asistente:" + ip;
-            int usados = _cache.TryGetValue(clave, out int u) ? u : 0;
+            bool local = HttpContext.Connection.RemoteIpAddress is { } dirIp && IPAddress.IsLoopback(dirIp);
+            int usados = local ? 0 : (_cache.TryGetValue(clave, out int u) ? u : 0);
             if (usados >= 80 && idioma == "en")
                 return new JsonResult(new { texto = $"We've reached the message limit for now. Email us at {CorreoContacto} or leave your details in the form and we'll reply.", acciones = new[] { new { texto = "Leave my details", url = "/#contacto", icono = "bi-envelope" } } });
             if (usados >= 80)

@@ -20,7 +20,7 @@
 
     body {
     background-color: #f1f5f9;
-    font-family: 'Inter', system-ui, sans-serif;
+    font-family: var(--font-sans);
     }
 
     /* NAVEGACIÓN Y FILTROS */
@@ -367,6 +367,7 @@
         <a asp-page="./Maritimo" class="ws-btn active"><i class="bi bi-water"></i> Marítimo</a>
         <a asp-page="./Transporte" class="ws-btn"><i class="bi bi-truck"></i> Transporte</a>
         <a asp-page="./Documental" class="ws-btn"><i class="bi bi-file-earmark-check"></i> Documental</a>
+    <a asp-page="./Historicos" class="ws-btn"><i class="bi bi-clock-history"></i> Históricos</a>
     </div>
 
     <div class="filter-panel">
@@ -606,6 +607,26 @@
             </tbody>
         </table>
     </div>
+
+    @if (Model.TotalPaginas > 1)
+    {
+        <div class="d-flex justify-content-between align-items-center mt-3 px-1 flex-wrap gap-2">
+            <span class="text-muted" style="font-size:10.5px;font-weight:700;">
+                @Model.TotalOperaciones operaciones · página @Model.Pagina de @Model.TotalPaginas
+            </span>
+            <nav aria-label="Paginación Marítimo">
+                <ul class="pagination pagination-sm mb-0">
+                    <li class="page-item @(Model.Pagina <= 1 ? "disabled" : "")">
+                        <a class="page-link" asp-page="./Maritimo" asp-route-Pagina="@(Model.Pagina - 1)" asp-route-SearchString="@Model.SearchString"><i class="bi bi-chevron-left"></i></a>
+                    </li>
+                    <li class="page-item disabled"><span class="page-link">@Model.Pagina / @Model.TotalPaginas</span></li>
+                    <li class="page-item @(Model.Pagina >= Model.TotalPaginas ? "disabled" : "")">
+                        <a class="page-link" asp-page="./Maritimo" asp-route-Pagina="@(Model.Pagina + 1)" asp-route-SearchString="@Model.SearchString"><i class="bi bi-chevron-right"></i></a>
+                    </li>
+                </ul>
+            </nav>
+        </div>
+    }
 </div>
 
 <!-- EL NUEVO MODAL UNIFICADO PARA MARÍTIMO -->
@@ -732,8 +753,8 @@
         <option value="AUTORIZADO ELAR" ${d.lar === 'AUTORIZADO ELAR' ? 'selected' : ''}>Autorizado ELAR</option>
         </select>
         </div>
-        <div class="col-md-6 mt-3 div-fecha-lar-mod" style="display: ${d.lar && d.lar.includes('AUTORIZADO') ? 'block' : 'none'};">
-        <label class="erp-label text-success">Nuevo Stacking Out (LAR)</label>
+        <div class="col-md-6 mt-3 div-fecha-lar-mod">
+        <label class="erp-label text-success lbl-stk-out">${d.lar && d.lar.includes('AUTORIZADO') ? 'Nuevo Stacking Out (LAR)' : 'Stacking Out (Cierre)'}</label>
         <input type="datetime-local" name="ModLateArrival" class="form-control erp-input border-success py-1" value="${d.lardate}" />
         </div>
         <div class="col-md-12 mt-4 pt-3 border-top">
@@ -772,13 +793,10 @@
         }
         }
 
+        // El cierre del stacking (Stacking Out) siempre se puede editar; con LAR autorizado es el nuevo cierre.
         window.toggleLar = function(sel) {
-        const div = sel.closest('.row').querySelector('.div-fecha-lar-mod');
-        if (sel.value.includes("AUTORIZADO")) {
-        div.style.display = 'block';
-        } else {
-        div.style.display = 'none';
-        }
+        const lbl = sel.closest('.row').querySelector('.lbl-stk-out');
+        if (lbl) lbl.textContent = sel.value.includes("AUTORIZADO") ? 'Nuevo Stacking Out (LAR)' : 'Stacking Out (Cierre)';
         }
     </script>
 }

@@ -1,0 +1,105 @@
+@page
+@model AtilsonCargoSpa.Pages.Integraciones.IndexModel
+@{
+    ViewData["Title"] = "Integraciones";
+}
+<style>
+    .int-shell{max-width:1180px}
+    .int-hero{background:#0f172a;color:#fff;border-radius:16px;padding:24px 26px;display:flex;align-items:center;justify-content:space-between;gap:20px;box-shadow:0 12px 30px rgba(15,23,42,.12)}
+    .int-brand{display:flex;align-items:center;gap:16px}
+    .int-logo{width:54px;height:54px;border-radius:12px;background:#fff;display:grid;place-items:center;color:#0f172a;font-size:24px;font-weight:900}
+    .int-title{font-size:22px;font-weight:900;margin:0}
+    .int-sub{font-size:11px;color:#cbd5e1;margin-top:5px;max-width:680px}
+    .int-status{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:6px 10px;font-size:9px;font-weight:850;white-space:nowrap}
+    .int-status.ok{background:#dcfce7;color:#166534;border:1px solid #86efac}
+    .int-status.warn{background:#fff7ed;color:#9a3412;border:1px solid #fed7aa}
+    .int-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin-top:18px}
+    .int-card{background:#fff;border:1px solid #e2e8f0;border-radius:13px;padding:18px;box-shadow:0 3px 12px rgba(15,23,42,.04)}
+    .int-card-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:14px}
+    .int-card-icon{width:38px;height:38px;border-radius:9px;background:#f1f5f9;color:#334155;display:grid;place-items:center;font-size:17px}
+    .int-card h3{font-size:13px;font-weight:900;margin:0;color:#0f172a}
+    .int-version{font-size:8.5px;font-weight:850;padding:3px 7px;border-radius:999px;background:#eef2ff;color:#4338ca;border:1px solid #c7d2fe}
+    .int-card p{font-size:10.5px;line-height:1.55;color:#64748b;min-height:50px;margin:0 0 14px}
+    .int-config{background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:14px;margin-top:18px}
+    .int-config h4{font-size:11px;font-weight:900;color:#334155;margin:0 0 8px}
+    .int-config p{font-size:10px;color:#64748b;margin:0;line-height:1.55}
+    .int-config code{font-size:9.5px;color:#334155}
+    @@media(max-width:900px){.int-grid{grid-template-columns:1fr}.int-hero{align-items:flex-start;flex-direction:column}}
+</style>
+
+<div class="container-fluid px-4 py-4 int-shell">
+    <div class="page-header">
+        <div class="page-header__title-row">
+            <div class="page-header__icon"><i class="bi bi-plug-fill"></i></div>
+            <div>
+                <h1>Integraciones</h1>
+                <p class="page-header__subtitle">Conectores externos del ERP. Primera integración: Hapag-Lloyd.</p>
+            </div>
+        </div>
+    </div>
+
+    <section class="int-hero">
+        <div class="int-brand">
+            <div class="int-logo">HL</div>
+            <div>
+                <h2 class="int-title">Hapag-Lloyd</h2>
+                <div class="int-sub">Arquitectura preparada para consumir APIs de itinerarios, ofertas y seguimiento sin acoplar Comercial u Operaciones al proveedor.</div>
+            </div>
+        </div>
+        <span class="int-status @(Model.CredencialesConfiguradas ? "ok" : "warn")">
+            <i class="bi @(Model.CredencialesConfiguradas ? "bi-shield-check" : "bi-shield-exclamation")"></i>
+            @(Model.CredencialesConfiguradas ? "Credenciales configuradas" : "Configurar credenciales en servidor")
+        </span>
+    </section>
+
+    <div class="int-grid">
+        @foreach(var api in Model.Apis)
+        {
+            <article class="int-card">
+                <div class="int-card-head">
+                    <div class="d-flex align-items-center gap-2">
+                        <div class="int-card-icon"><i class="bi @api.Icono"></i></div>
+                        <h3>@api.Nombre</h3>
+                    </div>
+                    <span class="int-version">@api.Version</span>
+                </div>
+                <p>@api.Descripcion</p>
+                <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
+                    <span class="int-status @(api.EndpointConfigurado ? "ok" : "warn")">
+                        <i class="bi @(api.EndpointConfigurado ? "bi-check-circle-fill" : "bi-gear")"></i>
+                        @(api.EndpointConfigurado ? "Endpoint configurado" : "Pendiente de configuración")
+                    </span>
+                    @if (api.Nombre == "Commercial Schedule")
+                    {
+                        <a asp-page="/App/Integraciones/HapagLloyd" class="btn btn-sm btn-outline-primary">
+                            <i class="bi bi-calendar-week me-1"></i> Consultar rutas
+                        </a>
+                    }
+                    else if (api.Nombre == "Track & Trace")
+                    {
+                        <a asp-page="/App/Integraciones/TrackAndTrace" class="btn btn-sm btn-outline-primary">
+                            <i class="bi bi-box-seam me-1"></i> Seguir embarque
+                        </a>
+                    }
+                    else
+                    {
+                        <a class="btn btn-sm btn-outline-secondary" href="https://api-portal.hlag.com/" target="_blank" rel="noopener noreferrer"
+                           title="Consultar contrato y ruta de Offers v4 en el portal de desarrolladores">
+                            API Developer Portal <i class="bi bi-box-arrow-up-right ms-1"></i>
+                        </a>
+                    }
+                </div>
+            </article>
+        }
+    </div>
+
+    <div class="int-config">
+        <h4><i class="bi bi-lock-fill me-1"></i> Configuración segura</h4>
+        <p>
+            Para producción, es recomendable trasladar Client ID y Client Secret a secretos/variables de entorno,
+            incluso si se inicializaron mediante la configuración del servidor. Las opciones son:
+            <code>HapagLloyd__ClientId</code>, <code>HapagLloyd__ClientSecret</code>,
+            <code>HapagLloyd__CommercialScheduleUrl</code>, <code>HapagLloyd__OffersUrl</code> y <code>HapagLloyd__TrackAndTraceUrl</code>.
+        </p>
+    </div>
+</div>

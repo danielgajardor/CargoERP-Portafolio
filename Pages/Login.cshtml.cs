@@ -122,6 +122,9 @@ namespace AtilsonCargoSpa.Pages
                     new Claim(ClaimTypes.Role, usuario.Rol ?? "Usuario"),
                     new Claim("IdCliente", usuario.IdCliente?.ToString() ?? "0")
                 };
+                // Permiso por persona (13-nov-2026): tarifas de costo de transportistas en Comercial.
+                if (usuario.PermisoTarifasTransporte)
+                    claims.Add(new Claim(AtilsonCargoSpa.Helpers.PermisosEquipo.ClaimPermiso, AtilsonCargoSpa.Helpers.PermisosEquipo.PermisoTarifasTransporte));
 
                 var claimsIdentity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
 
@@ -157,7 +160,7 @@ namespace AtilsonCargoSpa.Pages
                 if (solicitud != null && usuario == null)
                 {
                     ErrorMessage = solicitud.Estado == SolicitudRegistroCliente.EstadoPendiente
-                        ? "Tu registro está en revisión. Te avisaremos por correo cuando Atilson apruebe tu cuenta."
+                        ? "Tu registro está en revisión. Te avisaremos por correo cuando Atilson lo revise y te indicaremos cómo acceder al portal."
                         : $"Tu solicitud de registro no fue aprobada: {solicitud.MotivoRechazo}. Contacta a tu ejecutivo(a) de Atilson.";
                     return Page();
                 }
